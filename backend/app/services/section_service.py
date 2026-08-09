@@ -3,13 +3,81 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 from app.models.section import Section, SectionMember
 from app.models.user import User
-from app.schemas.section import SectionCreate, SectionUpdate, SectionMemberUpdate
+from app.schemas.section import SectionCreate, SectionUpdate
 from fastapi import HTTPException, status
 from typing import List, Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 class SectionService:
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    # ============================================
+    # HELPER METHODS
+    # ============================================
+    
+    async def _get_section(self, section_id: str) -> Section:
+        """Get a section by ID"""
+        result = await self.db.execute(
+            select(Section).where(Section.id == section_id)
+        )
+        section = result.scalar_one_or_none()
+        if not section:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Section not found"
+            )
+        return section
+
+    async def _get_member(self, section_id: str, user_id: str) -> Optional[SectionMember]:
+        """Get a member by section and user ID"""
+        result = await self.db.execute(
+            select(SectionMember).where(
+                SectionMember.section_id == section_id,
+                SectionMember.user_id == user_id
+            )
+        )
+        return result.scalar_one_or_none()
+
+    # ✅ ADD THIS METHOD - Permission check for section management
+    async def _check_section_permission(self, section_id: str, user_id: str):
+        """Check if user has permission to manage the section"""
+        section = await self._get_section(section_id)
+        
+        user = await self.db.execute(
+            select(User).where(User.id == user_id)
+        )
+        user = user.scalar_one_or_none()
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        # ✅ Allow admin
+        if user.role == "admin":
+            logger.info(f"✅ Admin {user_id} has permission")
+            return True
+        
+        # ✅ Allow section advisor (professor)
+        if str(section.advisor_id) == user_id:
+            logger.info(f"✅ Advisor {user_id} has permission")
+            return True
+        
+        # ✅ Allow mayor or officer
+        member = await self._get_member(section_id, user_id)
+        if member and (member.is_mayor or member.is_officer):
+            logger.info(f"✅ {'Mayor' if member.is_mayor else 'Officer'} {user_id} has permission")
+            return True
+        
+        logger.warning(f"❌ User {user_id} does not have permission to manage section {section_id}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to manage this section"
+        )
 
     # ============================================
     # SECTION CRUD
@@ -44,7 +112,6 @@ class SectionService:
 
     async def get_sections(self, user_id: str, skip: int = 0, limit: int = 100):
         """Get all sections for a user"""
-        # Get user role
         user = await self.db.execute(
             select(User).where(User.id == user_id)
         )
@@ -56,7 +123,6 @@ class SectionService:
                 detail="User not found"
             )
         
-        # If admin, get all sections
         if user.role == "admin":
             result = await self.db.execute(
                 select(Section).offset(skip).limit(limit)
@@ -82,11 +148,31 @@ class SectionService:
         
         response = []
         for section in sections:
-            # Get member count
             count_result = await self.db.execute(
                 select(func.count()).where(SectionMember.section_id == section.id)
             )
             member_count = count_result.scalar()
+            
+            # Get members for this section
+            members_result = await self.db.execute(
+                select(SectionMember, User)
+                .join(User, SectionMember.user_id == User.id)
+                .where(SectionMember.section_id == section.id)
+            )
+            
+            members = []
+            for member, user_obj in members_result:
+                members.append({
+                    "id": str(member.id),
+                    "section_id": str(member.section_id),
+                    "user_id": str(member.user_id),
+                    "role": member.role,
+                    "is_officer": member.is_officer,
+                    "is_mayor": member.is_mayor,
+                    "joined_at": member.joined_at,
+                    "user_email": user_obj.email,
+                    "user_username": user_obj.username
+                })
             
             response.append({
                 "id": str(section.id),
@@ -98,7 +184,8 @@ class SectionService:
                 "description": section.description,
                 "created_at": section.created_at,
                 "updated_at": section.updated_at,
-                "member_count": member_count or 0
+                "member_count": member_count or 0,
+                "members": members
             })
         
         return response
@@ -115,7 +202,7 @@ class SectionService:
         )
         
         members = []
-        for member, user in members_result:
+        for member, user_obj in members_result:
             members.append({
                 "id": str(member.id),
                 "section_id": str(member.section_id),
@@ -124,8 +211,8 @@ class SectionService:
                 "is_officer": member.is_officer,
                 "is_mayor": member.is_mayor,
                 "joined_at": member.joined_at,
-                "user_email": user.email,
-                "user_username": user.username
+                "user_email": user_obj.email,
+                "user_username": user_obj.username
             })
         
         return {
@@ -146,7 +233,6 @@ class SectionService:
         """Update a section"""
         section = await self._get_section(section_id)
         
-        # Check if user is advisor or admin
         user = await self.db.execute(
             select(User).where(User.id == user_id)
         )
@@ -181,7 +267,6 @@ class SectionService:
         """Delete a section"""
         section = await self._get_section(section_id)
         
-        # Check if user is advisor or admin
         user = await self.db.execute(
             select(User).where(User.id == user_id)
         )
@@ -203,10 +288,14 @@ class SectionService:
     
     async def add_member(self, section_id: str, user_id: str, current_user_id: str):
         """Add a member to a section"""
-        section = await self._get_section(section_id)
+        logger.info(f"📝 Adding member {user_id} to section {section_id}")
         
-        # Check permission
+        section = await self._get_section(section_id)
+        logger.info(f"📝 Section found: {section.name}")
+        
+        # ✅ Check permission using the helper method
         await self._check_section_permission(section_id, current_user_id)
+        logger.info(f"✅ Permission granted for user {current_user_id}")
         
         # Check if user exists
         user = await self.db.execute(
@@ -218,6 +307,7 @@ class SectionService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
+        logger.info(f"👤 User found: {user.username}")
         
         # Check if already a member
         result = await self.db.execute(
@@ -232,6 +322,7 @@ class SectionService:
                 detail="User is already a member of this section"
             )
         
+        # Create member
         member = SectionMember(
             section_id=section_id,
             user_id=user_id,
@@ -240,6 +331,7 @@ class SectionService:
         self.db.add(member)
         await self.db.commit()
         await self.db.refresh(member)
+        logger.info(f"✅ Member added with ID: {member.id}")
         
         return {
             "id": str(member.id),
@@ -345,11 +437,9 @@ class SectionService:
         existing = existing_mayor.scalar_one_or_none()
         
         if existing:
-            # Demote current mayor
             existing.is_mayor = False
             existing.is_officer = False
         
-        # Promote to mayor (also becomes officer)
         member.is_mayor = True
         member.is_officer = True
         
@@ -379,62 +469,3 @@ class SectionService:
         await self.db.commit()
         
         return {"message": "Mayor demoted to Student successfully"}
-
-    # ============================================
-    # HELPER METHODS
-    # ============================================
-    
-    async def _get_section(self, section_id: str):
-        """Get a section by ID"""
-        result = await self.db.execute(
-            select(Section).where(Section.id == section_id)
-        )
-        section = result.scalar_one_or_none()
-        if not section:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Section not found"
-            )
-        return section
-
-    async def _get_member(self, section_id: str, user_id: str):
-        """Get a member by section and user ID"""
-        result = await self.db.execute(
-            select(SectionMember).where(
-                SectionMember.section_id == section_id,
-                SectionMember.user_id == user_id
-            )
-        )
-        return result.scalar_one_or_none()
-
-    async def _check_section_permission(self, section_id: str, user_id: str):
-        """Check if user has permission to manage the section"""
-        section = await self._get_section(section_id)
-        
-        user = await self.db.execute(
-            select(User).where(User.id == user_id)
-        )
-        user = user.scalar_one_or_none()
-        
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found"
-            )
-        
-        # Allow admin or section advisor or mayor/officer
-        if user.role == "admin":
-            return True
-        
-        if str(section.advisor_id) == user_id:
-            return True
-        
-        # Check if user is mayor or officer
-        member = await self._get_member(section_id, user_id)
-        if member and (member.is_mayor or member.is_officer):
-            return True
-        
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have permission to manage this section"
-        )

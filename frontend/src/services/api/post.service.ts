@@ -7,8 +7,8 @@ export interface Post {
   username: string;
   user_role: string;
   content: string;
-  type: 'text' | 'image' | 'video' | 'link';
-  visibility: 'public' | 'friends' | 'section' | 'private';
+  type: string;
+  visibility: string;
   media_urls: string[];
   likes_count: number;
   comments_count: number;
@@ -19,35 +19,43 @@ export interface Post {
   is_owned_by_current_user: boolean;
 }
 
+export interface PostCreate {
+  content: string;
+  media_urls?: string[];
+  type?: string;
+  visibility?: string;
+}
+
 export interface FeedResponse {
+  items: Post[];
   total: number;
   page: number;
   limit: number;
-  items: Post[];
+  total_pages: number;
 }
 
 export const postService = {
-  createPost: async (content: string, visibility: string = 'public') => {
-    const response = await api.post('/posts', { content, visibility });
-    return response.data;
-  },
+  // Get feed with pagination
+  getFeed: (page: number = 1, limit: number = 20) =>
+    api.get<FeedResponse>(`/posts/feed?page=${page}&limit=${limit}`),
 
-  getFeed: async (page: number = 1, limit: number = 20) => {
-    const response = await api.get<FeedResponse>(`/posts/feed?page=${page}&limit=${limit}`);
-    return response.data;
-  },
+  // Get single post
+  getPost: (postId: string) =>
+    api.get<Post>(`/posts/${postId}`),
 
-  likePost: async (postId: string) => {
-    const response = await api.post(`/posts/${postId}/like`);
-    return response.data;
-  },
+  // ✅ Create post with media support
+  createPost: (data: PostCreate) =>
+    api.post<Post>('/posts/', data),
 
-  deletePost: async (postId: string) => {
-    await api.delete(`/posts/${postId}`);
-  },
+  // Update post
+  updatePost: (postId: string, content: string) =>
+    api.put<Post>(`/posts/${postId}`, { content }),
 
-  updatePost: async (postId: string, content: string) => {
-    const response = await api.put(`/posts/${postId}`, { content });
-    return response.data;
-  },
+  // Delete post
+  deletePost: (postId: string) =>
+    api.delete(`/posts/${postId}`),
+
+  // Toggle like
+  likePost: (postId: string) =>
+    api.post(`/posts/${postId}/like`),
 };

@@ -1,5 +1,5 @@
 ﻿# backend/app/schemas/post.py
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import Optional, List
 from datetime import datetime
 from enum import Enum
@@ -37,7 +37,11 @@ class PostBase(BaseModel):
 # ============================================
 
 class PostCreate(PostBase):
-    content: str = Field(..., min_length=1, description="Post content is required for text posts")
+    @model_validator(mode="after")
+    def require_content_or_media(self):
+        if not (self.content and self.content.strip()) and not self.media_urls:
+            raise ValueError("Post must include content or at least one media file")
+        return self
 
 # ============================================
 # UPDATE SCHEMA

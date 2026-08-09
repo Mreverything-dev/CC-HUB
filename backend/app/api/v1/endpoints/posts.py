@@ -1,10 +1,14 @@
 ﻿# backend/app/api/v1/endpoints/posts.py
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_
+from sqlalchemy.orm import selectinload
 from typing import Optional
 from app.core.database import get_db
 from app.dependencies.auth import get_current_user
 from app.models.user import User
+from app.models.post import Post
+from app.models.like import Like
 from app.services.post_service import PostService
 from app.schemas.post import PostCreate, PostUpdate, PostResponse, FeedResponse
 
@@ -28,13 +32,14 @@ async def create_post(
         "id": str(post.id),
         "user_id": str(post.user_id),
         "username": current_user.username,
+        "user_role": current_user.role,
         "content": post.content,
         "type": post.type,
         "visibility": post.visibility,
-        "media_urls": post.media_urls,
-        "likes_count": post.likes_count,
-        "comments_count": post.comments_count,
-        "shares_count": post.shares_count,
+        "media_urls": post.media_urls or [],
+        "likes_count": post.likes_count or 0,
+        "comments_count": post.comments_count or 0,
+        "shares_count": post.shares_count or 0,
         "created_at": post.created_at,
         "updated_at": post.updated_at,
         "is_liked_by_current_user": False,
@@ -57,7 +62,7 @@ async def get_feed(
     return await service.get_feed(str(current_user.id), page, limit)
 
 # ============================================
-# GET SINGLE POST
+# GET SINGLE POST (✅ FIXED for polymorphic likes)
 # ============================================
 
 @router.get("/{post_id}", response_model=PostResponse)
@@ -67,8 +72,49 @@ async def get_post(
     db: AsyncSession = Depends(get_db)
 ):
     """Get a single post by ID"""
-    service = PostService(db)
-    return await service.get_post(post_id, str(current_user.id))
+    # Eager load user relationship
+    result = await db.execute(
+        select(Post)
+        .options(selectinload(Post.user))
+        .where(Post.id == post_id)
+    )
+    post = result.scalar_one_or_none()
+    
+    if not post:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Post not found"
+        )
+    
+    # ✅ Check if current user liked the post (polymorphic like)
+    is_liked_result = await db.execute(
+        select(Like).where(
+            and_(
+                Like.target_id == post_id,
+                Like.target_type == 'post',
+                Like.user_id == current_user.id
+            )
+        )
+    )
+    is_liked = is_liked_result.scalar_one_or_none() is not None
+    
+    return {
+        "id": str(post.id),
+        "user_id": str(post.user_id),
+        "username": post.user.username if post.user else "Unknown",
+        "user_role": post.user.role if post.user else "student",
+        "content": post.content,
+        "type": post.type,
+        "visibility": post.visibility,
+        "media_urls": post.media_urls or [],
+        "likes_count": post.likes_count or 0,
+        "comments_count": post.comments_count or 0,
+        "shares_count": post.shares_count or 0,
+        "created_at": post.created_at,
+        "updated_at": post.updated_at,
+        "is_liked_by_current_user": is_liked,
+        "is_owned_by_current_user": str(post.user_id) == str(current_user.id)
+    }
 
 # ============================================
 # UPDATE POST
@@ -85,17 +131,24 @@ async def update_post(
     service = PostService(db)
     post = await service.update_post(post_id, str(current_user.id), data)
     
+    # Get user for response
+    user_result = await db.execute(
+        select(User).where(User.id == post.user_id)
+    )
+    user = user_result.scalar_one_or_none()
+    
     return {
         "id": str(post.id),
         "user_id": str(post.user_id),
-        "username": current_user.username,
+        "username": user.username if user else "Unknown",
+        "user_role": user.role if user else "student",
         "content": post.content,
         "type": post.type,
         "visibility": post.visibility,
-        "media_urls": post.media_urls,
-        "likes_count": post.likes_count,
-        "comments_count": post.comments_count,
-        "shares_count": post.shares_count,
+        "media_urls": post.media_urls or [],
+        "likes_count": post.likes_count or 0,
+        "comments_count": post.comments_count or 0,
+        "shares_count": post.shares_count or 0,
         "created_at": post.created_at,
         "updated_at": post.updated_at,
         "is_liked_by_current_user": False,
@@ -118,7 +171,7 @@ async def delete_post(
     return None
 
 # ============================================
-# LIKE / UNLIKE POST
+# LIKE / UNLIKE POST (✅ FIXED for polymorphic likes)
 # ============================================
 
 @router.post("/{post_id}/like")

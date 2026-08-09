@@ -1,5 +1,5 @@
 # backend/app/models/section.py
-from sqlalchemy import Boolean, Column, String, Integer, ForeignKey, DateTime, Table
+from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Boolean, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -14,10 +14,14 @@ class Section(Base):
     course = Column(String(100))
     year_level = Column(Integer)
     academic_year = Column(String(20))
-    description = Column(String(500))
     advisor_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
+    description = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # ✅ Relationships
+    advisor = relationship("User", foreign_keys=[advisor_id])
+    members = relationship("SectionMember", back_populates="section", cascade="all, delete-orphan")
 
 class SectionMember(Base):
     __tablename__ = "section_members"
@@ -26,6 +30,10 @@ class SectionMember(Base):
     section_id = Column(UUID(as_uuid=True), ForeignKey("sections.id", ondelete="CASCADE"))
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
     role = Column(String(50), default="student")
-    is_officer = Column(Boolean, default=False)   # ✅ SQLAlchemy Column
-    is_mayor = Column(Boolean, default=False)     # ✅ SQLAlchemy Column
+    is_officer = Column(Boolean, default=False)
+    is_mayor = Column(Boolean, default=False)
     joined_at = Column(DateTime, default=datetime.utcnow)
+    
+    # ✅ Relationships
+    section = relationship("Section", back_populates="members")
+    user = relationship("User")

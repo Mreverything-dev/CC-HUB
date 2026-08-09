@@ -6,12 +6,17 @@ import { PlusIcon } from '@heroicons/react/24/outline';
 import SectionCard from './SectionCard';
 import CreateSectionModal from './CreateSectionModal';
 
+
 export default function SectionManager() {
   const { user } = useAuthStore();
   const { sections, isLoading, refetch } = useSections();
   const [showCreateModal, setShowCreateModal] = useState(false);
 
+  // ✅ Professors and Admins can create sections
   const canCreate = user?.role === 'professor' || user?.role === 'admin';
+
+  // ✅ Students can see sections they are members of
+  const visibleSections = sections || [];
 
   if (isLoading && sections.length === 0) {
     return (
@@ -25,7 +30,9 @@ export default function SectionManager() {
     <div className="max-w-4xl mx-auto p-4">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">My Sections</h2>
+        <h2 className="text-2xl font-bold text-gray-900">
+          {user?.role === 'student' ? 'My Sections' : 'My Sections'}
+        </h2>
         {canCreate && (
           <button
             onClick={() => setShowCreateModal(true)}
@@ -38,9 +45,13 @@ export default function SectionManager() {
       </div>
 
       {/* Sections Grid */}
-      {sections.length === 0 ? (
+      {visibleSections.length === 0 ? (
         <div className="text-center py-12 bg-gray-50 rounded-lg">
-          <p className="text-gray-500">No sections yet.</p>
+          <p className="text-gray-500">
+            {user?.role === 'student' 
+              ? 'You are not enrolled in any sections yet.'
+              : 'No sections yet.'}
+          </p>
           {canCreate && (
             <button
               onClick={() => setShowCreateModal(true)}
@@ -52,7 +63,7 @@ export default function SectionManager() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {sections.map((section) => (
+          {visibleSections.map((section) => (
             <SectionCard
               key={section.id}
               section={section}

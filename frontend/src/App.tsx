@@ -5,7 +5,7 @@ import { Register } from './features/auth/pages/Register';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import AnnouncementFeed from './features/announcements/components/AnnouncementFeed';
 import { QueryProvider } from './app/providers/QueryProvider';
-
+import PostsPage from './features/dashboard/pages/PostsPage';
 // Import role-specific dashboards from the correct paths
 import AdminDashboard from './features/dashboard/pages/AdminDashboard';
 import ProfessorDashboard from './features/dashboard/pages/ProfessorDashboard';
@@ -60,6 +60,14 @@ function App() {
               </ProtectedRoute>
             } 
           />
+          <Route 
+  path="/posts" 
+  element={
+    <ProtectedRoute>
+      <PostsPage />
+    </ProtectedRoute>
+  } 
+/>
           
           {/* Fallback - redirect to student dashboard */}
           <Route path="/dashboard" element={<Navigate to="/student/dashboard" replace />} />

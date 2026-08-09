@@ -1,5 +1,5 @@
 ﻿# backend/app/core/config.py
-from typing import List
+from typing import List, Optional
 
 from pydantic_settings import BaseSettings
 
@@ -23,13 +23,13 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
     
-    # MinIO
     MINIO_ENDPOINT: str = "localhost:9000"
     MINIO_ACCESS_KEY: str = "minioadmin"
     MINIO_SECRET_KEY: str = "minioadmin"
     MINIO_BUCKET: str = "ccs-hub"
     MINIO_SECURE: bool = False
-    
+    MINIO_PUBLIC_URL: Optional[str] = None  # For CDN/nginx proxy
+    MINIO_PUBLIC_URL: Optional[str] = "http://localhost:9000"
     # App
     DEBUG: str = "True"
     LOG_LEVEL: str = "INFO"

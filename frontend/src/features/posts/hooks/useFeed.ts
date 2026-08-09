@@ -19,13 +19,14 @@ export function useFeed() {
     setIsLoading(true);
     try {
       const response = await postService.getFeed(pageNum, 20);
+      const { items, total: feedTotal } = response.data;
       if (pageNum === 1) {
-        setPosts(response.items);
+        setPosts(items);
       } else {
-        setPosts((prev) => [...prev, ...response.items]);
+        setPosts((prev) => [...prev, ...items]);
       }
-      setTotal(response.total);
-      setHasMore(response.items.length === 20 && response.items.length < response.total);
+      setTotal(feedTotal);
+      setHasMore(items.length === 20 && items.length < feedTotal);
     } catch (error) {
       console.error('Error fetching feed:', error);
       toast.error('Failed to load feed');
@@ -34,10 +35,16 @@ export function useFeed() {
     }
   }, [isAuthenticated]);
 
-  const createPost = async (content: string) => {
+  // ✅ Updated: Accept object with content and media_urls
+  const createPost = async (data: { content: string; media_urls?: string[] }) => {
     setIsPosting(true);
     try {
-      await postService.createPost(content);
+      await postService.createPost({
+        content: data.content,
+        media_urls: data.media_urls || [],
+        type: data.media_urls && data.media_urls.length > 0 ? 'image' : 'text',
+        visibility: 'public'
+      });
       toast.success('Post created successfully!');
       await fetchFeed(1);
     } catch (error) {
@@ -114,7 +121,7 @@ export function useFeed() {
     isPosting,
     hasMore,
     total,
-    createPost,
+    createPost,  // ✅ Now accepts { content, media_urls }
     toggleLike,
     deletePost,
     editPost,

@@ -30,8 +30,7 @@ export interface RegisterRequest {
   password: string;
   confirm_password: string;
   role: 'student' | 'professor' | 'admin';
-  first_name?: string;
-  last_name?: string;
+  invitation_code?: string;
 }
 
 export interface AuthResponse {
@@ -39,6 +38,10 @@ export interface AuthResponse {
   refresh_token: string;
   token_type: string;
   user: User;
+}
+
+export interface RefreshTokenRequest {
+  refresh_token: string;
 }
 
 export interface ChangePasswordRequest {
