@@ -1,0 +1,48 @@
+﻿// frontend/src/features/auth/types/auth.types.ts
+export interface User {
+  id: string;
+  email: string;
+  username: string;
+  role: 'student' | 'professor' | 'admin';
+  is_active: boolean;
+  is_verified: boolean;
+  created_at: string;
+  first_name?: string;
+  last_name?: string;
+}
+
+export interface AuthState {
+  user: User | null;
+  token: string | null;
+  refreshToken: string | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface RegisterRequest {
+  email: string;
+  username: string;
+  password: string;
+  confirm_password: string;
+  role: 'student' | 'professor' | 'admin';
+  first_name?: string;
+  last_name?: string;
+}
+
+export interface AuthResponse {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  user: User;
+}
+
+export interface ChangePasswordRequest {
+  current_password: string;
+  new_password: string;
+  confirm_password: string;
+}

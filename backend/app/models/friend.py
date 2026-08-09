@@ -1,0 +1,35 @@
+# backend/app/models/friend.py
+from sqlalchemy import Column, String, Text, ForeignKey, DateTime, Enum
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
+from app.core.database import Base
+import uuid
+from datetime import datetime
+
+class Friend(Base):
+    __tablename__ = "friends"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
+    friend_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    user = relationship("User", foreign_keys=[user_id], back_populates="friends")
+    friend = relationship("User", foreign_keys=[friend_id])
+
+class FriendRequest(Base):
+    __tablename__ = "friend_requests"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    sender_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
+    receiver_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
+    status = Column(Enum('pending', 'accepted', 'rejected', 'cancelled', name='friend_request_status'), default='pending')
+    message = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    sender = relationship("User", foreign_keys=[sender_id], back_populates="sent_requests")
+    receiver = relationship("User", foreign_keys=[receiver_id], back_populates="received_requests")

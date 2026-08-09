@@ -1,0 +1,74 @@
+/* frontend/src/styles/globals.css */
+/* stylelint-disable at-rule-no-unknown */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-gray-200;
+  }
+  
+  body {
+    @apply bg-gray-50 text-gray-900;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: linear-gradient(135deg, #f8f8f8 0%, #f0f0f0 100%);
+    min-height: 100vh;
+  }
+}
+
+@layer components {
+  /* Glassmorphism */
+  .glass {
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.08);
+  }
+
+  .glass-dark {
+    background: rgba(47, 47, 47, 0.15);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.12);
+  }
+
+  /* Typography */
+  .heading-1 {
+    @apply text-4xl font-bold text-gray-800;
+  }
+  
+  .heading-2 {
+    @apply text-2xl font-semibold text-gray-800;
+  }
+  
+  .heading-3 {
+    @apply text-xl font-semibold text-gray-800;
+  }
+  
+  .body-text {
+    @apply text-base text-gray-600;
+  }
+  
+  .caption {
+    @apply text-sm text-gray-400;
+  }
+
+  /* Cards */
+  .card-solid {
+    @apply bg-white shadow-sm border border-gray-100 rounded-xl p-6;
+  }
+  
+  .card-glass {
+    @apply glass rounded-xl p-6;
+  }
+
+  /* Dividers */
+  .divider {
+    @apply border-t border-gray-200/30 my-4;
+  }
+}

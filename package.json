@@ -1,0 +1,33 @@
+{
+  "name": "ccs_hub",
+  "version": "1.0.0",
+  "description": "- Frontend: React 19, TypeScript, Vite, Tailwind CSS\r - Backend: FastAPI, PostgreSQL, SQLAlchemy 2.0\r - Real-time: Socket.IO\r - Tasks: Celery + Redis\r - Storage: MinIO\r - Container: Docker",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.7.1",
+    "axios": "^1.19.0",
+    "framer-motion": "^13.0.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-hook-form": "^7.84.0",
+    "react-hot-toast": "^2.6.0",
+    "react-router-dom": "^7.11.0",
+    "zod": "^3.25.76",
+    "zustand": "^5.0.14"
+  }
+}
