@@ -1,17 +1,22 @@
 // frontend/src/features/posts/components/PostCard.tsx
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
-import { Card } from '@/components/ui/Card/Card';
+import { XMarkIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import { Button } from '@/components/ui/Button/Button';
 import { Badge } from '@/components/ui/Badge/Badge';
 import { useAuthStore } from '@/features/auth/store/auth.store';
+import { postService } from '@/services/api/post.service';
+import toast from 'react-hot-toast';
 import PostDetailModal from './PostDetailModal';
+import { RoleBadge } from '@/features/dashboard/components/RoleBadge';
 
 interface PostCardProps {
   id: string;
   user_id: string;
   username: string;
   user_role: string;
+  avatar_url?: string | null;
   content: string;
   type: string;
   visibility: string;
@@ -21,16 +26,21 @@ interface PostCardProps {
   shares_count: number;
   created_at: string;
   is_liked_by_current_user: boolean;
+  is_shared_by_current_user: boolean;
   is_owned_by_current_user: boolean;
   onLike: (postId: string) => void;
   onDelete: (postId: string) => void;
   onEdit: (postId: string, content: string) => void;
+  /** Charcoal/cyan theme for the redesigned dashboard. Defaults to the original light theme. */
+  dark?: boolean;
 }
 
 export function PostCard({
   id,
+  user_id,
   username,
   user_role,
+  avatar_url,
   content,
   visibility,
   media_urls = [],  // ✅ Default empty array
@@ -39,19 +49,31 @@ export function PostCard({
   shares_count,
   created_at,
   is_liked_by_current_user,
+  is_shared_by_current_user,
   is_owned_by_current_user,
   onLike,
   onDelete,
   onEdit,
+  dark = false,
 }: PostCardProps) {
   const [isLiked, setIsLiked] = useState(is_liked_by_current_user);
   const [likeCount, setLikeCount] = useState(likes_count);
+  const [shareCount, setShareCount] = useState(shares_count);
+  const [isShared, setIsShared] = useState(is_shared_by_current_user);
+  const [isSharing, setIsSharing] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(content);
   const [showDetail, setShowDetail] = useState(false);
   const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const { user } = useAuthStore();
+  const navigate = useNavigate();
+
+  const goToAuthorProfile = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigate(`/profile/${user_id}`);
+  };
 
   const roleColors = {
     admin: 'bg-purple-500 text-white',
@@ -73,6 +95,26 @@ export function PostCard({
       setLikeCount(isLiked ? likeCount - 1 : likeCount + 1);
     } catch (error) {
       console.error('Error toggling like:', error);
+    }
+  };
+
+  const handleShare = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isShared) {
+      toast('You already shared this post');
+      return;
+    }
+    setIsSharing(true);
+    try {
+      const response = await postService.sharePost(id);
+      setShareCount(response.data.shares_count);
+      setIsShared(true);
+      toast.success('Post shared!');
+    } catch (error) {
+      console.error('Error sharing post:', error);
+      toast.error('Failed to share post');
+    } finally {
+      setIsSharing(false);
     }
   };
 
@@ -123,29 +165,51 @@ export function PostCard({
     return 'col-span-1';
   };
 
+  const cardClassName = dark
+    ? 'rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a]/60 backdrop-blur-xl p-6 hover:border-[#00d4ff]/30 transition-all'
+    : 'glass rounded-xl p-6 transition-all duration-200 hover:shadow-lg hover:border-cyan-500/30';
+
   return (
     <>
-      <div 
+      <div
         className="cursor-pointer hover:shadow-lg transition-shadow"
         onClick={handleCardClick}
       >
-        <Card variant="glass" className="hover:border-cyan-500/30 transition-all">
+        <div className={cardClassName}>
           {/* Header */}
           <div className="flex items-start justify-between mb-3">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
-                <span className="text-gray-600 font-semibold">
-                  {username?.charAt(0).toUpperCase() || 'U'}
-                </span>
+              <div
+                onClick={goToAuthorProfile}
+                className={`w-10 h-10 rounded-full flex items-center justify-center hover:opacity-80 transition cursor-pointer overflow-hidden ${
+                  dark ? 'bg-gradient-to-br from-[#00d4ff] to-[#0099cc]' : 'bg-gray-200'
+                }`}
+              >
+                {avatar_url ? (
+                  <img src={avatar_url} alt={username} className="w-full h-full object-cover" />
+                ) : (
+                  <span className={`font-semibold ${dark ? 'text-[#0a0a0a]' : 'text-gray-600'}`}>
+                    {username?.charAt(0).toUpperCase() || 'U'}
+                  </span>
+                )}
               </div>
               <div>
                 <div className="flex items-center space-x-2">
-                  <p className="font-medium text-gray-800">{username}</p>
-                  <Badge size="sm" className={roleColors[user_role as keyof typeof roleColors]}>
-                    {user_role?.charAt(0).toUpperCase() + user_role?.slice(1)}
-                  </Badge>
+                  <p
+                    onClick={goToAuthorProfile}
+                    className={`font-medium hover:underline cursor-pointer ${dark ? 'text-white' : 'text-gray-800'}`}
+                  >
+                    {username}
+                  </p>
+                  {dark ? (
+                    <RoleBadge role={user_role} />
+                  ) : (
+                    <Badge size="sm" className={roleColors[user_role as keyof typeof roleColors]}>
+                      {user_role?.charAt(0).toUpperCase() + user_role?.slice(1)}
+                    </Badge>
+                  )}
                 </div>
-                <div className="flex items-center space-x-2 text-xs text-gray-400">
+                <div className={`flex items-center space-x-2 text-xs ${dark ? 'text-[#6b6b6b]' : 'text-gray-400'}`}>
                   <span>{formatDistanceToNow(new Date(created_at), { addSuffix: true })}</span>
                   <span>•</span>
                   <span>{visibilityLabels[visibility as keyof typeof visibilityLabels]}</span>
@@ -157,19 +221,25 @@ export function PostCard({
               <div className="relative" onClick={(e) => e.stopPropagation()}>
                 <button
                   onClick={() => setShowMenu(!showMenu)}
-                  className="p-1 hover:bg-gray-100 rounded-full transition"
+                  className={`p-1 rounded-full transition ${dark ? 'hover:bg-white/10' : 'hover:bg-gray-100'}`}
                 >
-                  <span className="block w-5 text-center text-gray-400 leading-none">⋮</span>
+                  <span className={`block w-5 text-center leading-none ${dark ? 'text-[#6b6b6b]' : 'text-gray-400'}`}>⋮</span>
                 </button>
                 {showMenu && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-100 py-1 z-10">
+                  <div
+                    className={`absolute right-0 mt-2 w-48 rounded-lg shadow-lg py-1 z-10 ${
+                      dark ? 'bg-[#1a1a1a] border border-[#2a2a2a]' : 'bg-white border border-gray-100'
+                    }`}
+                  >
                     {is_owned_by_current_user && (
                       <button
                         onClick={() => {
                           setIsEditing(true);
                           setShowMenu(false);
                         }}
-                        className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition"
+                        className={`flex items-center space-x-2 w-full px-4 py-2 text-sm transition ${
+                          dark ? 'text-[#a0a0a0] hover:bg-white/5 hover:text-white' : 'text-gray-700 hover:bg-gray-50'
+                        }`}
                       >
                         <span className="w-4 text-center leading-none">✎</span>
                         <span>Edit</span>
@@ -178,7 +248,9 @@ export function PostCard({
                     {(is_owned_by_current_user || user?.role === 'admin') && (
                       <button
                         onClick={handleDelete}
-                        className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition"
+                        className={`flex items-center space-x-2 w-full px-4 py-2 text-sm transition ${
+                          dark ? 'text-red-400 hover:bg-red-500/10' : 'text-red-600 hover:bg-red-50'
+                        }`}
                       >
                         <span className="w-4 text-center leading-none">🗑</span>
                         <span>Delete</span>
@@ -196,7 +268,11 @@ export function PostCard({
               <textarea
                 value={editContent}
                 onChange={(e) => setEditContent(e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                className={
+                  dark
+                    ? 'w-full p-3 rounded-xl border border-[#2a2a2a] bg-[#0f0f0f] text-white focus:ring-1 focus:ring-[#00d4ff] focus:border-[#00d4ff] focus:outline-none'
+                    : 'w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent'
+                }
                 rows={3}
               />
               <div className="flex space-x-2">
@@ -206,9 +282,9 @@ export function PostCard({
             </div>
           ) : (
             <>
-              <p className="text-gray-700 whitespace-pre-wrap line-clamp-3">{content}</p>
+              <p className={`whitespace-pre-wrap line-clamp-3 ${dark ? 'text-[#d0d0d0]' : 'text-gray-700'}`}>{content}</p>
               {content.length > 150 && (
-                <p className="text-sm text-cyan-600 hover:text-cyan-700 mt-1">
+                <p className="text-sm text-cyan-500 hover:text-cyan-400 mt-1">
                   Click to read more →
                 </p>
               )}
@@ -224,16 +300,21 @@ export function PostCard({
 
                 if (hasError) {
                   return (
-                    <div key={index} className={`${getItemSpan(index, media_urls.length)} bg-gray-100 rounded-lg flex items-center justify-center p-8 text-gray-400 text-sm`}>
+                    <div
+                      key={index}
+                      className={`${getItemSpan(index, media_urls.length)} rounded-lg flex items-center justify-center p-8 text-sm ${
+                        dark ? 'bg-[#0f0f0f] text-[#6b6b6b]' : 'bg-gray-100 text-gray-400'
+                      }`}
+                    >
                       🖼️ Media unavailable
                     </div>
                   );
                 }
 
                 return (
-                  <div 
-                    key={index} 
-                    className={`${getItemSpan(index, media_urls.length)} relative overflow-hidden rounded-lg bg-gray-100`}
+                  <div
+                    key={index}
+                    className={`${getItemSpan(index, media_urls.length)} relative overflow-hidden rounded-lg ${dark ? 'bg-[#0f0f0f]' : 'bg-gray-100'}`}
                     onClick={(e) => e.stopPropagation()}
                   >
                     {isVideoFile ? (
@@ -247,9 +328,13 @@ export function PostCard({
                       <img
                         src={url}
                         alt={`Post media ${index + 1}`}
-                        className="w-full max-h-[400px] object-cover"
+                        className="w-full max-h-[400px] object-cover cursor-zoom-in"
                         loading="lazy"
                         onError={() => handleImageError(url)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setLightboxIndex(index);
+                        }}
                       />
                     )}
                     {media_urls.length > 1 && (
@@ -264,41 +349,139 @@ export function PostCard({
           )}
 
           {/* Actions */}
-          <div 
-            className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100/50"
+          <div
+            className={`flex items-center justify-between mt-4 pt-4 border-t ${dark ? 'border-[#2a2a2a]' : 'border-gray-100/50'}`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center space-x-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleLike}
-                className={`flex items-center space-x-1 ${
-                  isLiked ? 'text-red-500' : 'text-gray-500 hover:text-red-500'
-                }`}
-              >
-                <span className={`w-4 text-center leading-none ${isLiked ? 'text-red-500' : ''}`}>
-                  {isLiked ? '♥' : '♡'}
-                </span>
-                <span>{likeCount}</span>
-              </Button>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="flex items-center space-x-1 text-gray-500"
-                onClick={() => setShowDetail(true)}
-              >
-                <span className="w-4 text-center leading-none">◌</span>
-                <span>{comments_count}</span>
-              </Button>
-              <Button variant="ghost" size="sm" className="flex items-center space-x-1 text-gray-500">
-                <span className="w-4 text-center leading-none">↗</span>
-                <span>{shares_count}</span>
-              </Button>
+              {dark ? (
+                <button
+                  onClick={handleLike}
+                  className={`flex items-center space-x-1 px-2 py-1 rounded-lg transition ${
+                    isLiked ? 'text-red-400' : 'text-[#a0a0a0] hover:text-red-400 hover:bg-white/5'
+                  }`}
+                >
+                  <span className="w-4 text-center leading-none">{isLiked ? '♥' : '♡'}</span>
+                  <span className="text-sm">{likeCount}</span>
+                </button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleLike}
+                  className={`flex items-center space-x-1 ${
+                    isLiked ? 'text-red-500' : 'text-gray-500 hover:text-red-500'
+                  }`}
+                >
+                  <span className={`w-4 text-center leading-none ${isLiked ? 'text-red-500' : ''}`}>
+                    {isLiked ? '♥' : '♡'}
+                  </span>
+                  <span>{likeCount}</span>
+                </Button>
+              )}
+              {dark ? (
+                <button
+                  onClick={() => setShowDetail(true)}
+                  className="flex items-center space-x-1 px-2 py-1 rounded-lg text-[#a0a0a0] hover:text-white hover:bg-white/5 transition"
+                >
+                  <span className="w-4 text-center leading-none">◌</span>
+                  <span className="text-sm">{comments_count}</span>
+                </button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="flex items-center space-x-1 text-gray-500"
+                  onClick={() => setShowDetail(true)}
+                >
+                  <span className="w-4 text-center leading-none">◌</span>
+                  <span>{comments_count}</span>
+                </Button>
+              )}
+              {dark ? (
+                <button
+                  onClick={handleShare}
+                  disabled={isSharing}
+                  title={isShared ? 'You already shared this post' : 'Share'}
+                  className={`flex items-center space-x-1 px-2 py-1 rounded-lg transition disabled:opacity-50 ${
+                    isShared ? 'text-emerald-400' : 'text-[#a0a0a0] hover:text-emerald-400 hover:bg-white/5'
+                  }`}
+                >
+                  <span className="w-4 text-center leading-none">↗</span>
+                  <span className="text-sm">{shareCount}</span>
+                </button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleShare}
+                  disabled={isSharing}
+                  title={isShared ? 'You already shared this post' : 'Share'}
+                  className={`flex items-center space-x-1 disabled:opacity-50 ${
+                    isShared ? 'text-green-500' : 'text-gray-500 hover:text-green-500'
+                  }`}
+                >
+                  <span className="w-4 text-center leading-none">↗</span>
+                  <span>{shareCount}</span>
+                </Button>
+              )}
             </div>
           </div>
-        </Card>
+        </div>
       </div>
+
+      {lightboxIndex !== null && media_urls[lightboxIndex] && (
+        <div
+          className="fixed inset-0 z-[70] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setLightboxIndex(null)}
+        >
+          <button
+            onClick={() => setLightboxIndex(null)}
+            title="Close"
+            className="absolute top-4 right-4 p-2 text-white/80 hover:text-white rounded-full hover:bg-white/10 transition"
+          >
+            <XMarkIcon className="h-6 w-6" />
+          </button>
+
+          {media_urls.length > 1 && (
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightboxIndex((i) => ((i ?? 0) - 1 + media_urls.length) % media_urls.length);
+                }}
+                title="Previous"
+                className="absolute left-4 top-1/2 -translate-y-1/2 p-2 text-white/80 hover:text-white rounded-full hover:bg-white/10 transition"
+              >
+                <ChevronLeftIcon className="h-6 w-6" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightboxIndex((i) => ((i ?? 0) + 1) % media_urls.length);
+                }}
+                title="Next"
+                className="absolute right-4 top-1/2 -translate-y-1/2 p-2 text-white/80 hover:text-white rounded-full hover:bg-white/10 transition"
+              >
+                <ChevronRightIcon className="h-6 w-6" />
+              </button>
+            </>
+          )}
+
+          <img
+            src={media_urls[lightboxIndex]}
+            alt={`Post media ${lightboxIndex + 1}`}
+            className="max-w-full max-h-[90vh] object-contain rounded-lg"
+            onClick={(e) => e.stopPropagation()}
+          />
+
+          {media_urls.length > 1 && (
+            <span className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 text-white text-xs px-3 py-1 rounded-full">
+              {lightboxIndex + 1} / {media_urls.length}
+            </span>
+          )}
+        </div>
+      )}
 
       {showDetail && (
         <PostDetailModal

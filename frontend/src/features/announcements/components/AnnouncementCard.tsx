@@ -2,6 +2,7 @@
 import { Announcement } from '@/types/announcement.types';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { formatDate } from '@/lib/formatters';
+import { CATEGORY_META } from '../constants';
 
 interface AnnouncementCardProps {
   announcement: Announcement;
@@ -10,99 +11,100 @@ interface AnnouncementCardProps {
   onTogglePublish?: (id: string, isPublished: boolean) => void;
 }
 
-export function AnnouncementCard({ 
-  announcement, 
-  onEdit, 
+export function AnnouncementCard({
+  announcement,
+  onEdit,
   onDelete,
-  onTogglePublish 
+  onTogglePublish
 }: AnnouncementCardProps) {
   const { user } = useAuthStore();
   const isOwner = user?.id === announcement.user_id || user?.role === 'admin';
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'urgent': return 'bg-red-100 text-red-800 border-red-300';
-      case 'high': return 'bg-orange-100 text-orange-800 border-orange-300';
-      case 'normal': return 'bg-blue-100 text-blue-800 border-blue-300';
-      default: return 'bg-gray-100 text-gray-800 border-gray-300';
-    }
-  };
+  const meta = CATEGORY_META[announcement.type] ?? CATEGORY_META.general;
+  const Icon = meta.icon;
+  const isImportant = announcement.priority === 'urgent';
 
-  const getTypeColor = (type: string) => {
-    switch (type) {
-      case 'emergency': return 'bg-red-200 text-red-900';
-      case 'academic': return 'bg-yellow-100 text-yellow-800';
-      case 'event': return 'bg-purple-100 text-purple-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
+  const badge = isImportant
+    ? { label: 'Important', color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/30' }
+    : { label: meta.label, color: meta.color, bg: meta.bg, border: meta.border };
+
+  const authorName =
+    announcement.created_by_username ||
+    (announcement.created_by_role === 'admin' ? 'Admin' : 'Professor');
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6 border border-gray-200 hover:shadow-lg transition-shadow">
-      {/* Header */}
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-lg font-semibold text-gray-900">
-              {announcement.title}
-            </h3>
-            <span className={`text-xs px-2 py-1 rounded-full font-medium ${getPriorityColor(announcement.priority)}`}>
-              {announcement.priority.toUpperCase()}
-            </span>
-            <span className={`text-xs px-2 py-1 rounded-full font-medium ${getTypeColor(announcement.type)}`}>
-              {announcement.type}
-            </span>
-            {!announcement.is_published && (
-              <span className="text-xs px-2 py-1 bg-gray-300 text-gray-700 rounded-full font-medium">
-                DRAFT
-              </span>
-            )}
-          </div>
-          <div className="text-sm text-gray-500 mt-1">
-            By {announcement.created_by_role} • {formatDate(announcement.created_at)}
-          </div>
+    <div className="rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a]/60 backdrop-blur-xl p-5 hover:border-[#00d4ff]/30 transition-all">
+      <div className="flex items-start gap-3">
+        <div className={`flex-shrink-0 h-10 w-10 rounded-xl flex items-center justify-center border ${meta.border} ${meta.bg}`}>
+          <Icon className={`h-5 w-5 ${meta.color}`} />
         </div>
-        
-        {/* Actions - Only for owner/admin */}
-        {isOwner && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => onTogglePublish?.(announcement.id, !announcement.is_published)}
-              className={`text-sm px-3 py-1 rounded transition ${
-                announcement.is_published 
-                  ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' 
-                  : 'bg-green-100 text-green-700 hover:bg-green-200'
-              }`}
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-base font-semibold text-white truncate">
+                  {announcement.title}
+                </h3>
+                {!announcement.is_published && (
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-[#a0a0a0] bg-white/5 border border-[#2a2a2a] rounded-full px-2 py-0.5">
+                    Draft
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-[#6b6b6b] mt-0.5">
+                {formatDate(announcement.created_at)} · {authorName}
+              </p>
+            </div>
+
+            <span
+              className={`flex-shrink-0 text-[11px] font-medium px-2.5 py-1 rounded-full border ${badge.color} ${badge.bg} ${badge.border}`}
             >
-              {announcement.is_published ? 'Unpublish' : 'Publish'}
-            </button>
-            <button
-              onClick={() => onEdit?.(announcement.id)}
-              className="text-sm px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition"
-            >
-              Edit
-            </button>
-            <button
-              onClick={() => onDelete?.(announcement.id)}
-              className="text-sm px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 transition"
-            >
-              Delete
-            </button>
+              {badge.label}
+            </span>
           </div>
-        )}
-      </div>
 
-      {/* Content */}
-      <div className="text-gray-700 whitespace-pre-wrap mb-3">
-        {announcement.content}
-      </div>
+          <p className="text-sm text-[#d0d0d0] whitespace-pre-wrap mt-2">
+            {announcement.content}
+          </p>
 
-      {/* Footer */}
-      <div className="flex items-center justify-between text-sm text-gray-500 border-t pt-3">
-        <span>Published: {formatDate(announcement.published_at)}</span>
-        {announcement.expires_at && (
-          <span>Expires: {formatDate(announcement.expires_at)}</span>
-        )}
+          {(isOwner || announcement.expires_at) && (
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-[#2a2a2a]">
+              <span className="text-xs text-[#6b6b6b]">
+                {announcement.expires_at ? `Expires ${formatDate(announcement.expires_at)}` : ''}
+              </span>
+
+              {isOwner && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => onTogglePublish?.(announcement.id, !announcement.is_published)}
+                    className={`text-xs font-medium px-3 py-1 rounded-lg transition ${
+                      announcement.is_published
+                        ? 'text-amber-400 hover:bg-amber-500/10'
+                        : 'text-emerald-400 hover:bg-emerald-500/10'
+                    }`}
+                  >
+                    {announcement.is_published ? 'Unpublish' : 'Publish'}
+                  </button>
+                  {onEdit && (
+                    <button
+                      onClick={() => onEdit(announcement.id)}
+                      className="text-xs font-medium px-3 py-1 rounded-lg text-[#00d4ff] hover:bg-[#00d4ff]/10 transition"
+                    >
+                      Edit
+                    </button>
+                  )}
+                  <button
+                    onClick={() => onDelete?.(announcement.id)}
+                    className="text-xs font-medium px-3 py-1 rounded-lg text-red-400 hover:bg-red-500/10 transition"
+                  >
+                    Delete
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

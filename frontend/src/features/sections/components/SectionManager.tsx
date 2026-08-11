@@ -4,6 +4,7 @@ import { useSections } from '../hooks/useSections';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { PlusIcon } from '@heroicons/react/24/outline';
 import SectionCard from './SectionCard';
+import { SectionCardSkeleton } from './SectionCardSkeleton';
 import CreateSectionModal from './CreateSectionModal';
 
 
@@ -18,44 +19,40 @@ export default function SectionManager() {
   // ✅ Students can see sections they are members of
   const visibleSections = sections || [];
 
-  if (isLoading && sections.length === 0) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-4xl mx-auto p-4">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">
-          {user?.role === 'student' ? 'My Sections' : 'My Sections'}
-        </h2>
+        <h2 className="text-lg font-semibold text-[#F1F5F9]">My Sections</h2>
         {canCreate && (
           <button
             onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-gradient-to-br from-[#00C8FF] to-[#0090CC] text-[#060B12] rounded-xl hover:opacity-90 transition"
           >
-            <PlusIcon className="h-5 w-5" />
+            <PlusIcon className="h-4 w-4" />
             New Section
           </button>
         )}
       </div>
 
       {/* Sections Grid */}
-      {visibleSections.length === 0 ? (
-        <div className="text-center py-12 bg-gray-50 rounded-lg">
-          <p className="text-gray-500">
-            {user?.role === 'student' 
+      {isLoading && sections.length === 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[0, 1, 2, 3].map((i) => (
+            <SectionCardSkeleton key={i} />
+          ))}
+        </div>
+      ) : visibleSections.length === 0 ? (
+        <div className="text-center py-12 rounded-2xl border border-[#1E3447] bg-[#0D1722]/70 backdrop-blur-xl">
+          <p className="text-[#94A3B8]">
+            {user?.role === 'student'
               ? 'You are not enrolled in any sections yet.'
               : 'No sections yet.'}
           </p>
           {canCreate && (
             <button
               onClick={() => setShowCreateModal(true)}
-              className="mt-4 text-blue-600 hover:text-blue-700 font-medium"
+              className="mt-4 text-sm text-[#00C8FF] hover:underline font-medium"
             >
               Create your first section
             </button>

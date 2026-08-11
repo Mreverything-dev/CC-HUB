@@ -1,0 +1,27 @@
+// frontend/src/services/api/chat.service.ts
+import { api } from '@/lib/axios';
+import { Conversation, Message, ConversationCreate, MessageCreate } from '@/types/chat.types';
+
+export const chatApi = {
+  // Conversations
+  getConversations: () => 
+    api.get<{ conversations: Conversation[]; total: number }>('/chat/conversations'),
+  
+  getOrCreateDirectConversation: (userId: string) => 
+    api.post<Conversation>(`/chat/conversations/direct/${userId}`),
+  
+  createGroupConversation: (data: ConversationCreate) => 
+    api.post<Conversation>('/chat/conversations/group', data),
+  
+  // Messages
+  getMessages: (conversationId: string, limit: number = 50, before?: string) => 
+    api.get<Message[]>(`/chat/conversations/${conversationId}/messages`, {
+      params: { limit, before }
+    }),
+  
+  sendMessage: (data: MessageCreate) => 
+    api.post<Message>('/chat/messages', data),
+  
+  markMessageRead: (messageId: string) => 
+    api.post(`/chat/messages/${messageId}/read`),
+};

@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 from app.models.section import Section, SectionMember
 from app.models.user import User
+from app.models.profile import StudentProfile, ProfessorProfile, AdminProfile
 from app.schemas.section import SectionCreate, SectionUpdate
 from fastapi import HTTPException, status
 from typing import List, Optional
@@ -17,7 +18,21 @@ class SectionService:
     # ============================================
     # HELPER METHODS
     # ============================================
-    
+
+    async def _get_avatar_url(self, user_id: str, role: str) -> Optional[str]:
+        """Get a user's avatar URL from their role-specific profile"""
+        model = {
+            "student": StudentProfile,
+            "professor": ProfessorProfile,
+            "admin": AdminProfile,
+        }.get(role)
+        if not model:
+            return None
+        result = await self.db.execute(
+            select(model.avatar_url).where(model.user_id == user_id)
+        )
+        return result.scalar_one_or_none()
+
     async def _get_section(self, section_id: str) -> Section:
         """Get a section by ID"""
         result = await self.db.execute(
@@ -171,9 +186,10 @@ class SectionService:
                     "is_mayor": member.is_mayor,
                     "joined_at": member.joined_at,
                     "user_email": user_obj.email,
-                    "user_username": user_obj.username
+                    "user_username": user_obj.username,
+                    "user_avatar": await self._get_avatar_url(str(user_obj.id), user_obj.role)
                 })
-            
+
             response.append({
                 "id": str(section.id),
                 "name": section.name,
@@ -212,9 +228,10 @@ class SectionService:
                 "is_mayor": member.is_mayor,
                 "joined_at": member.joined_at,
                 "user_email": user_obj.email,
-                "user_username": user_obj.username
+                "user_username": user_obj.username,
+                "user_avatar": await self._get_avatar_url(str(user_obj.id), user_obj.role)
             })
-        
+
         return {
             "id": str(section.id),
             "name": section.name,
@@ -342,7 +359,8 @@ class SectionService:
             "is_mayor": member.is_mayor,
             "joined_at": member.joined_at,
             "user_email": user.email,
-            "user_username": user.username
+            "user_username": user.username,
+            "user_avatar": await self._get_avatar_url(str(user.id), user.role)
         }
 
     async def remove_member(self, section_id: str, user_id: str, current_user_id: str):

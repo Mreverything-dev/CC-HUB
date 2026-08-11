@@ -80,6 +80,7 @@ class AnnouncementResponse(BaseModel):
     type: str
     priority: str
     created_by_role: str
+    created_by_username: Optional[str] = None
     is_published: bool
     published_at: datetime
     expires_at: Optional[datetime] = None

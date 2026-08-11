@@ -22,6 +22,11 @@ class AnnouncementService:
     # GET USER HELPER METHODS
     # ============================================
     
+    def _attach_author_username(self, announcement: Announcement) -> Announcement:
+        """Attach the author's username - required by AnnouncementResponse but not a real column"""
+        announcement.created_by_username = announcement.user.username if announcement.user else None
+        return announcement
+
     async def get_user(self, user_id: str) -> User:
         """Get user by ID"""
         result = await self.db.execute(
@@ -85,7 +90,7 @@ class AnnouncementService:
         # Get all admin announcements (visible to everyone)
         admin_result = await self.db.execute(
             select(Announcement)
-            .options(selectinload(Announcement.targets))
+            .options(selectinload(Announcement.targets), selectinload(Announcement.user))
             .where(
                 Announcement.created_by_role == "admin",
                 Announcement.is_published == True
@@ -105,7 +110,7 @@ class AnnouncementService:
             if student_sections:
                 prof_result = await self.db.execute(
                     select(Announcement)
-                    .options(selectinload(Announcement.targets))
+                    .options(selectinload(Announcement.targets), selectinload(Announcement.user))
                     .outerjoin(AnnouncementTarget, AnnouncementTarget.announcement_id == Announcement.id)
                     .where(
                         Announcement.created_by_role == "professor",
@@ -139,7 +144,7 @@ class AnnouncementService:
             # Professors and admins can see all professor announcements
             prof_result = await self.db.execute(
                 select(Announcement)
-                .options(selectinload(Announcement.targets))
+                .options(selectinload(Announcement.targets), selectinload(Announcement.user))
                 .where(
                     Announcement.created_by_role == "professor",
                     Announcement.is_published == True
@@ -162,7 +167,10 @@ class AnnouncementService:
         
         # Sort by created_at (newest first)
         unique_announcements.sort(key=lambda x: x.created_at, reverse=True)
-        
+
+        for ann in unique_announcements:
+            self._attach_author_username(ann)
+
         logger.info(f"📢 Total unique announcements: {len(unique_announcements)}")
         return unique_announcements
 
@@ -267,19 +275,19 @@ class AnnouncementService:
         
         result = await self.db.execute(
             select(Announcement)
-            .options(selectinload(Announcement.targets))
+            .options(selectinload(Announcement.targets), selectinload(Announcement.user))
             .where(Announcement.id == announcement.id)
         )
         announcement = result.scalar_one()
-        
+
         logger.info(f"📝 Announcement created with {len(announcement.targets) if announcement.targets else 0} targets")
-        return announcement
+        return self._attach_author_username(announcement)
 
     async def get_announcement(self, announcement_id: str) -> Announcement:
         """Get a single announcement by ID"""
         result = await self.db.execute(
             select(Announcement)
-            .options(selectinload(Announcement.targets))
+            .options(selectinload(Announcement.targets), selectinload(Announcement.user))
             .where(Announcement.id == announcement_id)
         )
         announcement = result.scalar_one_or_none()
@@ -288,7 +296,7 @@ class AnnouncementService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Announcement not found"
             )
-        return announcement
+        return self._attach_author_username(announcement)
 
     async def update_announcement(
         self, 
@@ -341,12 +349,12 @@ class AnnouncementService:
         # Eagerly load targets
         result = await self.db.execute(
             select(Announcement)
-            .options(selectinload(Announcement.targets))
+            .options(selectinload(Announcement.targets), selectinload(Announcement.user))
             .where(Announcement.id == announcement.id)
         )
         announcement = result.scalar_one()
-        
-        return announcement
+
+        return self._attach_author_username(announcement)
 
     async def delete_announcement(self, announcement_id: str, user_id: str) -> dict:
         """Delete an announcement"""

@@ -6,76 +6,132 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import AnnouncementFeed from './features/announcements/components/AnnouncementFeed';
 import { QueryProvider } from './app/providers/QueryProvider';
 import PostsPage from './features/dashboard/pages/PostsPage';
-// Import role-specific dashboards from the correct paths
+import ProfilePage from '@/features/profile/pages/ProfilePage';
+import ChatPage from '@/features/chat/components/ChatPage';
+// Import role-specific dashboards
 import AdminDashboard from './features/dashboard/pages/AdminDashboard';
 import ProfessorDashboard from './features/dashboard/pages/ProfessorDashboard';
 import StudentDashboard from './features/dashboard/pages/StudentDashboard';
+import FriendsPage from './features/friends/components/FriendsPage';
+import { ChatWidget } from './features/chat/components/ChatWidget';
+// Import SocketProvider for WebSocket
+import { SocketProvider } from './app/providers/SocketProvider';
 
 function App() {
   return (
     <QueryProvider>
-      <BrowserRouter>
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          
-          {/* Admin Routes */}
-          <Route 
-            path="/admin/dashboard" 
-            element={
-              <ProtectedRoute allowedRoles={['admin']}>
-                <AdminDashboard />
-              </ProtectedRoute>
-            } 
-          />
-          
-          {/* Professor Routes */}
-          <Route 
-            path="/professor/dashboard" 
-            element={
-              <ProtectedRoute allowedRoles={['professor', 'admin']}>
-                <ProfessorDashboard />
-              </ProtectedRoute>
-            } 
-          />
-          
-          {/* Student Routes */}
-          <Route 
-            path="/student/dashboard" 
-            element={
-              <ProtectedRoute allowedRoles={['student', 'professor', 'admin']}>
-                <StudentDashboard />
-              </ProtectedRoute>
-            } 
-          />
-          
-          {/* Announcements Route - accessible to all authenticated users */}
-          <Route 
-            path="/announcements" 
-            element={
-              <ProtectedRoute>
-                <AnnouncementFeed />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-  path="/posts" 
-  element={
-    <ProtectedRoute>
-      <PostsPage />
-    </ProtectedRoute>
-  } 
-/>
-          
-          {/* Fallback - redirect to student dashboard */}
-          <Route path="/dashboard" element={<Navigate to="/student/dashboard" replace />} />
-          
-          {/* Catch all - redirect to login */}
-          <Route path="*" element={<Navigate to="/login" replace />} />
-        </Routes>
-      </BrowserRouter>
+      <SocketProvider>
+        <BrowserRouter>
+          <Routes>
+            {/* ============================================
+                PUBLIC ROUTES
+                ============================================ */}
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+
+            {/* ============================================
+                PROFILE ROUTES
+                ============================================ */}
+            <Route
+              path="/profile"
+              element={
+                <ProtectedRoute>
+                  <ProfilePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/profile/:userId"
+              element={
+                <ProtectedRoute>
+                  <ProfilePage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* ============================================
+                ADMIN ROUTES
+                ============================================ */}
+            <Route
+              path="/admin/dashboard"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* ============================================
+                PROFESSOR ROUTES
+                ============================================ */}
+            <Route
+              path="/professor/dashboard"
+              element={
+                <ProtectedRoute allowedRoles={['professor', 'admin']}>
+                  <ProfessorDashboard />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* ============================================
+                STUDENT ROUTES
+                ============================================ */}
+            <Route
+              path="/student/dashboard"
+              element={
+                <ProtectedRoute allowedRoles={['student', 'professor', 'admin']}>
+                  <StudentDashboard />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* ============================================
+                FEATURE ROUTES
+                ============================================ */}
+            <Route
+              path="/announcements"
+              element={
+                <ProtectedRoute>
+                  <AnnouncementFeed />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/posts"
+              element={
+                <ProtectedRoute>
+                  <PostsPage />
+                </ProtectedRoute>
+              }
+            />
+            {/* ✅ Chat Route */}
+            <Route
+              path="/chat"
+              element={
+                <ProtectedRoute>
+                  <ChatPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/friends"
+              element={
+                <ProtectedRoute>
+                  <FriendsPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* ============================================
+                FALLBACK ROUTES
+                ============================================ */}
+            <Route path="/dashboard" element={<Navigate to="/student/dashboard" replace />} />
+            <Route path="*" element={<Navigate to="/login" replace />} />
+          </Routes>
+          <ChatWidget />
+        </BrowserRouter>
+      </SocketProvider>
     </QueryProvider>
   );
 }

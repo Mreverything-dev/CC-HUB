@@ -64,9 +64,10 @@ class SectionMemberResponse(BaseModel):
     joined_at: datetime
     user_email: Optional[str] = None
     user_username: Optional[str] = None
-    
+    user_avatar: Optional[str] = None
+
     model_config = ConfigDict(from_attributes=True)
-    
+
     @field_validator('id', 'section_id', 'user_id', mode='before')
     @classmethod
     def convert_uuid_to_str(cls, v):

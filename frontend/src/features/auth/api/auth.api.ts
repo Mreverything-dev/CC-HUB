@@ -24,6 +24,9 @@ export const authApi = {
   getMe: () => 
     api.get<User>('/auth/me'),
   
-  changePassword: (data: ChangePasswordRequest) => 
+  changePassword: (data: ChangePasswordRequest) =>
     api.post('/auth/change-password', data),
+
+  updateUsername: (username: string) =>
+    api.put<{ message: string; username: string }>('/auth/update-username', { username }),
 };

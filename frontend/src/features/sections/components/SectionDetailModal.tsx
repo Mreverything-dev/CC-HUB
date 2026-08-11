@@ -1,9 +1,19 @@
 // frontend/src/features/sections/components/SectionDetailModal.tsx
 import { useState, useEffect } from 'react';
-import { Section } from '@/types/section.types';
+import { useNavigate } from 'react-router-dom';
+import { Section, SectionMember } from '@/types/section.types';
 import { useSections } from '../hooks/useSections';
 import { useAuthStore } from '@/features/auth/store/auth.store';
-import { XMarkIcon, UserPlusIcon, UserMinusIcon, UserGroupIcon, ShieldCheckIcon } from '@heroicons/react/24/outline';
+import {
+  XMarkIcon,
+  UserPlusIcon,
+  UserMinusIcon,
+  UserGroupIcon,
+  ShieldCheckIcon,
+  ExclamationTriangleIcon,
+} from '@heroicons/react/24/outline';
+import { Avatar } from '@/features/dashboard/components/Avatar';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import AddStudentModal from '../components/AddStudentModal';
 
 interface SectionDetailModalProps {
@@ -14,25 +24,28 @@ interface SectionDetailModalProps {
 
 export default function SectionDetailModal({ section: initialSection, onClose, onRefresh }: SectionDetailModalProps) {
   const { user } = useAuthStore();
-  const { 
-    promoteToOfficer, 
-    demoteOfficer, 
-    promoteToMayor, 
+  const navigate = useNavigate();
+  const {
+    promoteToOfficer,
+    demoteOfficer,
+    promoteToMayor,
     demoteMayor,
     removeMember,
     getSection,
   } = useSections();
-  
+
   const [section, setSection] = useState<Section>(initialSection);
   const [showAddStudent, setShowAddStudent] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<SectionMember | null>(null);
 
   // ✅ Check if user can manage this section
-  const canManage = user?.role === 'admin' || 
+  const canManage = user?.role === 'admin' ||
                     user?.id === section.advisor_id ||
                     // ✅ Check if user is a member with officer/mayor role
-                    section.members?.some(m => 
+                    section.members?.some(m =>
                       m.user_id === user?.id && (m.is_officer || m.is_mayor)
                     );
 
@@ -48,11 +61,13 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
   useEffect(() => {
     const fetchSectionDetails = async () => {
       setLoading(true);
+      setError(null);
       try {
         const fullSection = await getSection(initialSection.id);
         setSection(fullSection);
-      } catch (error) {
-        console.error('Failed to fetch section details:', error);
+      } catch (err) {
+        console.error('Failed to fetch section details:', err);
+        setError('Failed to load section details. Please try again.');
       } finally {
         setLoading(false);
       }
@@ -73,8 +88,8 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
   };
 
   // ✅ Check if user can promote/demote (only mayor, professor, admin can promote/demote)
-  const canPromote = user?.role === 'admin' || 
-                     user?.id === section.advisor_id || 
+  const canPromote = user?.role === 'admin' ||
+                     user?.id === section.advisor_id ||
                      isMayor;
 
   const handlePromoteOfficer = async (userId: string) => {
@@ -125,12 +140,13 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
     }
   };
 
-  const handleRemoveMember = async (userId: string) => {
-    if (!confirm('Are you sure you want to remove this student from the section?')) return;
+  const handleRemoveMember = async () => {
+    if (!removeTarget) return;
     setActionLoading(true);
     try {
-      await removeMember({ sectionId: section.id, userId });
+      await removeMember({ sectionId: section.id, userId: removeTarget.user_id });
       await refreshSection();
+      setRemoveTarget(null);
     } catch (error) {
       console.error('Failed to remove member:', error);
     } finally {
@@ -140,34 +156,27 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
 
   const members = section.members || [];
 
-  // ✅ Debug: Log permissions
-  console.log('🔍 SectionDetailModal - canManage:', canManage);
-  console.log('🔍 SectionDetailModal - canPromote:', canPromote);
-  console.log('🔍 SectionDetailModal - user role:', user?.role);
-  console.log('🔍 SectionDetailModal - isOfficer:', isOfficer);
-  console.log('🔍 SectionDetailModal - isMayor:', isMayor);
-
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-0 sm:p-4 z-50">
+      <div className="bg-[#111E2B]/95 backdrop-blur-xl border border-[#1E3447] shadow-[0_0_40px_rgba(0,200,255,0.06)] rounded-none sm:rounded-2xl max-w-4xl w-full h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto themed-scrollbar">
         {/* Header */}
-        <div className="sticky top-0 bg-white border-b p-4 flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">{section.name}</h2>
-            <p className="text-sm text-gray-600">
+        <div className="sticky top-0 bg-[#111E2B]/95 backdrop-blur-xl border-b border-[#1E3447] p-4 sm:p-5 flex items-start justify-between gap-3 z-10">
+          <div className="min-w-0">
+            <h2 className="text-lg sm:text-xl font-bold text-[#F1F5F9] truncate">{section.name}</h2>
+            <p className="text-sm text-[#94A3B8] truncate">
               {section.course} • Year {section.year_level} • {section.academic_year}
             </p>
             {/* ✅ Show user's role in section */}
             {isMember && (
-              <div className="mt-1 flex items-center gap-2">
+              <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                 {isMayor && (
-                  <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+                  <span className="text-xs bg-[#F59E0B]/10 text-[#F59E0B] border border-[#F59E0B]/30 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
                     <ShieldCheckIcon className="h-3 w-3" />
                     Class Mayor
                   </span>
                 )}
                 {isOfficer && !isMayor && (
-                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+                  <span className="text-xs bg-[#00C8FF]/10 text-[#00C8FF] border border-[#00C8FF]/30 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
                     <ShieldCheckIcon className="h-3 w-3" />
                     Officer
                   </span>
@@ -177,32 +186,54 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
+            className="flex-shrink-0 p-1.5 text-[#64748B] hover:text-[#F1F5F9] hover:bg-white/5 rounded-full transition"
           >
-            <XMarkIcon className="h-6 w-6" />
+            <XMarkIcon className="h-5 w-5" />
           </button>
         </div>
 
         {/* Description */}
         {section.description && (
-          <div className="p-4 bg-gray-50 border-b">
-            <p className="text-sm text-gray-600">{section.description}</p>
+          <div className="p-4 bg-[#0A111A] border-b border-[#1E3447]">
+            <p className="text-sm text-[#94A3B8]">{section.description}</p>
+          </div>
+        )}
+
+        {/* Error State */}
+        {error && !loading && (
+          <div className="m-4 p-4 rounded-xl border border-[#EF4444]/30 bg-[#EF4444]/10 flex items-start gap-3">
+            <ExclamationTriangleIcon className="h-5 w-5 text-[#EF4444] flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm text-[#F1F5F9]">{error}</p>
+              <button
+                onClick={() => {
+                  setSection(initialSection);
+                  setError(null);
+                  getSection(initialSection.id).then(setSection).catch(() => setError('Failed to load section details. Please try again.'));
+                }}
+                className="text-xs font-medium text-[#EF4444] hover:underline mt-1"
+              >
+                Retry
+              </button>
+            </div>
           </div>
         )}
 
         {/* Loading State */}
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <div className="p-4 space-y-2">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="h-16 rounded-xl bg-[#162534]/60 animate-pulse" />
+            ))}
           </div>
-        ) : (
+        ) : !error && (
           <>
             {/* Actions - Show for users with manage permission */}
             {canManage && (
-              <div className="p-4 border-b flex items-center gap-2">
+              <div className="p-4 border-b border-[#1E3447] flex items-center gap-2">
                 <button
                   onClick={() => setShowAddStudent(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-gradient-to-br from-[#00C8FF] to-[#0090CC] text-[#060B12] rounded-xl hover:opacity-90 transition"
                 >
                   <UserPlusIcon className="h-5 w-5" />
                   Add Student
@@ -212,51 +243,72 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
 
             {/* Members List */}
             <div className="p-4">
-              <h3 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                <UserGroupIcon className="h-5 w-5" />
+              <h3 className="font-semibold text-[#F1F5F9] mb-3 flex items-center gap-2">
+                <UserGroupIcon className="h-5 w-5 text-[#00C8FF]" />
                 Students ({members.length})
               </h3>
 
               {members.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">No students in this section yet.</p>
+                <div className="text-center py-10 rounded-xl border border-[#1E3447] bg-[#0A111A]">
+                  <p className="text-[#94A3B8]">No students in this section yet.</p>
+                  {canManage && (
+                    <button
+                      onClick={() => setShowAddStudent(true)}
+                      className="mt-3 text-sm text-[#00C8FF] hover:underline font-medium"
+                    >
+                      Add your first student
+                    </button>
+                  )}
+                </div>
               ) : (
                 <div className="space-y-2">
                   {members.map((member) => {
                     // ✅ Check if current user can manage this specific member
                     const canManageMember = canManage && member.user_id !== user?.id;
-                    
+
                     return (
                       <div
                         key={member.id}
-                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition"
+                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 bg-[#162534]/60 hover:bg-[#162534] border border-transparent hover:border-[#1E3447] rounded-xl transition"
                       >
-                        <div className="flex items-center gap-3">
-                          <div>
-                            <p className="font-medium text-gray-900">
-                              {member.user_username}
+                        <div className="flex items-center gap-3 min-w-0">
+                          <Avatar src={member.user_avatar} name={member.user_username || undefined} size="sm" />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p
+                                onClick={() => navigate(`/profile/${member.user_id}`)}
+                                className="font-medium text-[#F1F5F9] hover:underline cursor-pointer truncate"
+                              >
+                                {member.user_username}
+                              </p>
                               {member.is_mayor && (
-                                <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full font-medium">
+                                <span className="text-xs bg-[#F59E0B]/10 text-[#F59E0B] border border-[#F59E0B]/30 px-2 py-0.5 rounded-full font-medium flex-shrink-0">
                                   Mayor
                                 </span>
                               )}
                               {member.is_officer && !member.is_mayor && (
-                                <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-medium">
+                                <span className="text-xs bg-[#00C8FF]/10 text-[#00C8FF] border border-[#00C8FF]/30 px-2 py-0.5 rounded-full font-medium flex-shrink-0">
                                   Officer
                                 </span>
                               )}
+                              {!member.is_mayor && !member.is_officer && (
+                                <span className="text-xs bg-white/5 text-[#94A3B8] border border-[#1E3447] px-2 py-0.5 rounded-full font-medium flex-shrink-0">
+                                  Student
+                                </span>
+                              )}
                               {member.user_id === user?.id && (
-                                <span className="ml-2 text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full font-medium">
+                                <span className="text-xs bg-[#8B5CF6]/10 text-[#8B5CF6] border border-[#8B5CF6]/30 px-2 py-0.5 rounded-full font-medium flex-shrink-0">
                                   You
                                 </span>
                               )}
-                            </p>
-                            <p className="text-sm text-gray-500">{member.user_email}</p>
+                            </div>
+                            <p className="text-sm text-[#64748B] truncate">{member.user_email}</p>
                           </div>
                         </div>
 
                         {/* Actions - Show for users with promote permission (Mayor/Advisor/Admin) */}
                         {canPromote && canManageMember && (
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap sm:flex-shrink-0 sm:justify-end">
                             {/* Mayor Actions - Only Advisor/Admin can manage Mayor */}
                             {(user?.role === 'admin' || user?.id === section.advisor_id) && (
                               <>
@@ -264,7 +316,7 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
                                   <button
                                     onClick={() => handleDemoteMayor(member.user_id)}
                                     disabled={actionLoading}
-                                    className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 transition disabled:opacity-50"
+                                    className="px-3 py-1.5 text-xs font-medium bg-[#EF4444]/10 text-[#EF4444] rounded-lg hover:bg-[#EF4444]/20 transition disabled:opacity-50"
                                   >
                                     Demote Mayor
                                   </button>
@@ -272,7 +324,7 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
                                   <button
                                     onClick={() => handlePromoteMayor(member.user_id)}
                                     disabled={actionLoading}
-                                    className="px-3 py-1 text-sm bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 transition disabled:opacity-50"
+                                    className="px-3 py-1.5 text-xs font-medium bg-[#F59E0B]/10 text-[#F59E0B] rounded-lg hover:bg-[#F59E0B]/20 transition disabled:opacity-50"
                                   >
                                     Make Mayor
                                   </button>
@@ -285,7 +337,7 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
                               <button
                                 onClick={() => handleDemoteOfficer(member.user_id)}
                                 disabled={actionLoading}
-                                className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 transition disabled:opacity-50"
+                                className="px-3 py-1.5 text-xs font-medium bg-[#EF4444]/10 text-[#EF4444] rounded-lg hover:bg-[#EF4444]/20 transition disabled:opacity-50"
                               >
                                 Demote Officer
                               </button>
@@ -293,7 +345,7 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
                               <button
                                 onClick={() => handlePromoteOfficer(member.user_id)}
                                 disabled={actionLoading}
-                                className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition disabled:opacity-50"
+                                className="px-3 py-1.5 text-xs font-medium bg-[#00C8FF]/10 text-[#00C8FF] rounded-lg hover:bg-[#00C8FF]/20 transition disabled:opacity-50"
                               >
                                 Make Officer
                               </button>
@@ -301,11 +353,12 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
 
                             {/* Remove - Mayor/Advisor/Admin can remove members */}
                             <button
-                              onClick={() => handleRemoveMember(member.user_id)}
+                              onClick={() => setRemoveTarget(member)}
                               disabled={actionLoading}
-                              className="p-1 text-gray-400 hover:text-red-600 transition disabled:opacity-50"
+                              title="Remove from section"
+                              className="p-1.5 text-[#64748B] hover:text-[#EF4444] hover:bg-[#EF4444]/10 rounded-lg transition disabled:opacity-50"
                             >
-                              <UserMinusIcon className="h-5 w-5" />
+                              <UserMinusIcon className="h-[18px] w-[18px]" />
                             </button>
                           </div>
                         )}
@@ -325,6 +378,24 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
           sectionId={section.id}
           onClose={() => setShowAddStudent(false)}
           onSuccess={refreshSection}
+        />
+      )}
+
+      {/* Remove member confirmation */}
+      {removeTarget && (
+        <ConfirmDialog
+          title="Remove Student"
+          message={
+            <>
+              Remove <span className="font-semibold text-[#F1F5F9]">{removeTarget.user_username}</span>{' '}
+              from <span className="font-semibold text-[#F1F5F9]">"{section.name}"</span>? They will
+              lose access to this section's announcements and resources.
+            </>
+          }
+          confirmLabel="Remove"
+          isLoading={actionLoading}
+          onConfirm={handleRemoveMember}
+          onCancel={() => setRemoveTarget(null)}
         />
       )}
     </div>

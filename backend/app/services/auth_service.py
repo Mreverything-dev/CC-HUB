@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.user import User, Role
 from app.models.invitation_code import InvitationCode
+from app.models.profile import StudentProfile, ProfessorProfile, AdminProfile
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
 from app.core.security import verify_password, get_password_hash, create_access_token, create_refresh_token, decode_token
 from fastapi import HTTPException, status
@@ -99,6 +100,36 @@ class AuthService:
             await self.db.commit()
             await self.db.refresh(user)
             logger.info(f"✅ User created with ID: {user.id} and role: {user.role}")
+
+            # --- CREATE PROFILE ROW (so /profiles/{role} updates have something to update) ---
+            if request.role == "student":
+                self.db.add(StudentProfile(
+                    user_id=user.id,
+                    first_name=request.first_name,
+                    last_name=request.last_name,
+                    student_id=request.student_id,
+                    course=request.course,
+                    year_level=request.year_level,
+                    section_id=request.section_id,
+                ))
+            elif request.role == "professor":
+                self.db.add(ProfessorProfile(
+                    user_id=user.id,
+                    first_name=request.first_name,
+                    last_name=request.last_name,
+                    employee_id=request.employee_id,
+                    department=request.department,
+                    title=request.title,
+                ))
+            elif request.role == "admin":
+                self.db.add(AdminProfile(
+                    user_id=user.id,
+                    first_name=request.first_name,
+                    last_name=request.last_name,
+                    position=request.position,
+                ))
+            await self.db.commit()
+            logger.info(f"✅ Profile row created for user: {user.id}")
 
             # --- SKIP the separate role assignment to avoid the greenlet error ---
             # The user's role is already set in the 'role' column of the users table.

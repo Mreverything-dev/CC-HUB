@@ -7,6 +7,7 @@ export interface Announcement {
   type: 'general' | 'academic' | 'event' | 'emergency';
   priority: 'low' | 'normal' | 'high' | 'urgent';
   created_by_role: 'professor' | 'admin';
+  created_by_username?: string | null;
   is_published: boolean;
   published_at: string;
   expires_at: string | null;

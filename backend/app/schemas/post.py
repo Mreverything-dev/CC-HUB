@@ -59,14 +59,17 @@ class PostResponse(PostBase):
     id: str
     user_id: str
     username: str
+    user_role: str = "student"
+    avatar_url: Optional[str] = None
     likes_count: int
     comments_count: int
     shares_count: int
     created_at: datetime
     updated_at: datetime
     is_liked_by_current_user: bool = False
+    is_shared_by_current_user: bool = False
     is_owned_by_current_user: bool = False
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 # ============================================

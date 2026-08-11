@@ -71,4 +71,28 @@
   .divider {
     @apply border-t border-gray-200/30 my-4;
   }
+
+  /* Thin, dark themed scrollbar for the redesigned dashboard/chat panels */
+  .themed-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #2a2a2a transparent;
+  }
+
+  .themed-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .themed-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .themed-scrollbar::-webkit-scrollbar-thumb {
+    background-color: #2a2a2a;
+    border-radius: 9999px;
+  }
+
+  .themed-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: #3a3a3a;
+  }
 }

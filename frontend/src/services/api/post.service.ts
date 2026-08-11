@@ -6,6 +6,7 @@ export interface Post {
   user_id: string;
   username: string;
   user_role: string;
+  avatar_url?: string | null;
   content: string;
   type: string;
   visibility: string;
@@ -16,6 +17,7 @@ export interface Post {
   created_at: string;
   updated_at: string;
   is_liked_by_current_user: boolean;
+  is_shared_by_current_user: boolean;
   is_owned_by_current_user: boolean;
 }
 
@@ -39,6 +41,10 @@ export const postService = {
   getFeed: (page: number = 1, limit: number = 20) =>
     api.get<FeedResponse>(`/posts/feed?page=${page}&limit=${limit}`),
 
+  // Get another user's posts (for viewing their profile)
+  getUserPosts: (userId: string, page: number = 1, limit: number = 20) =>
+    api.get<FeedResponse>(`/posts/user/${userId}?page=${page}&limit=${limit}`),
+
   // Get single post
   getPost: (postId: string) =>
     api.get<Post>(`/posts/${postId}`),
@@ -58,4 +64,8 @@ export const postService = {
   // Toggle like
   likePost: (postId: string) =>
     api.post(`/posts/${postId}/like`),
+
+  // Record a share (one per user)
+  sharePost: (postId: string) =>
+    api.post<{ shares_count: number; already_shared: boolean }>(`/posts/${postId}/share`),
 };

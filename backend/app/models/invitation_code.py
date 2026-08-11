@@ -7,7 +7,7 @@ from datetime import datetime
 
 class InvitationCode(Base):
     __tablename__ = "invitation_codes"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     code = Column(String(50), unique=True, nullable=False)
     role = Column(String(50), nullable=False)  # 'professor' or 'admin'

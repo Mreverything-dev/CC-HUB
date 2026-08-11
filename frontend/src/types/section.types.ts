@@ -9,6 +9,7 @@ export interface SectionMember {
   joined_at: string;
   user_email?: string | null;
   user_username?: string | null;
+  user_avatar?: string | null;
 }
 
 export interface Section {
