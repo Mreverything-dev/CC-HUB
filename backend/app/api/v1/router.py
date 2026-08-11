@@ -1,6 +1,7 @@
 ﻿from fastapi import APIRouter
 from app.api.v1.endpoints import auth, users, posts, students, professors, profiles, sections, announcement, media, comments
 from app.api.v1.endpoints import chat, friends
+from app.api.v1.endpoints import livestream
 api_router = APIRouter()
 
 api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
@@ -15,3 +16,8 @@ api_router.include_router(media.router, prefix="/media", tags=["Media"])
 api_router.include_router(comments.router, prefix="/comments", tags=["Comments"])
 api_router.include_router(chat.router, prefix="/chat", tags=["Chat"])
 api_router.include_router(friends.router, prefix="/friends", tags=["Friends"])
+api_router.include_router(
+    livestream.router,
+    prefix="/livestream",
+    tags=["LiveStream"]
+)

@@ -303,6 +303,36 @@ class SocketService {
   markRead(conversationId: string) {
     this.emit('mark_read', { conversation_id: conversationId });
   }
+
+  // Livestream signaling - the server only relays these between the host and
+  // viewer sids involved; permission checks happen server-side.
+  announceStreamHost(streamId: string) {
+    this.emit('stream:host_start', { stream_id: streamId });
+  }
+
+  joinStreamAsViewer(streamId: string) {
+    this.emit('stream:viewer_join', { stream_id: streamId });
+  }
+
+  leaveStream(streamId: string) {
+    this.emit('stream:leave', { stream_id: streamId });
+  }
+
+  sendStreamOffer(streamId: string, targetSid: string, sdp: RTCSessionDescriptionInit) {
+    this.emit('stream:offer', { stream_id: streamId, target_sid: targetSid, sdp });
+  }
+
+  sendStreamAnswer(streamId: string, sdp: RTCSessionDescriptionInit) {
+    this.emit('stream:answer', { stream_id: streamId, sdp });
+  }
+
+  sendStreamIceCandidate(streamId: string, targetSid: string, candidate: RTCIceCandidateInit) {
+    this.emit('stream:ice_candidate', { stream_id: streamId, target_sid: targetSid, candidate });
+  }
+
+  sendStreamChatMessage(streamId: string, message: string) {
+    this.emit('stream:chat_message', { stream_id: streamId, message });
+  }
 }
 
 export const socketService = new SocketService();

@@ -35,7 +35,7 @@ class User(Base):
     last_login = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+    livestreams = relationship("Livestream", back_populates="host", cascade="all, delete-orphan")
     # Relationships
     roles = relationship("Role", secondary=user_roles, back_populates="users")
     comments = relationship("Comment", back_populates="user", cascade="all, delete-orphan")

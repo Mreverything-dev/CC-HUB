@@ -38,7 +38,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'announcements', label: 'Announcements', icon: MegaphoneIcon, section: 'announcements' },
   { id: 'sections', label: 'Sections', icon: UsersIcon, section: 'sections' },
   { id: 'classes', label: 'Classes', icon: AcademicCapIcon, comingSoon: true },
-  { id: 'live', label: 'Live Streams', icon: VideoCameraIcon, comingSoon: true },
+  { id: 'live', label: 'Live Streams', icon: VideoCameraIcon, href: '/livestreams' },
   { id: 'chat', label: 'Chat', icon: ChatBubbleLeftIcon, href: '/chat' },
   { id: 'events', label: 'Events', icon: CalendarIcon, comingSoon: true },
   { id: 'resources', label: 'Resources', icon: BookOpenIcon, comingSoon: true },

@@ -18,6 +18,11 @@ class SocketManager:
     def __init__(self):
         self.active_connections: Dict[str, Dict[str, Any]] = {}
         self.user_rooms: Dict[str, List[str]] = {}
+        # Livestream signaling state: which sid is broadcasting a given
+        # stream, and which sids are currently watching it. Kept in-memory
+        # since it only matters for the lifetime of the live connection.
+        self.stream_hosts: Dict[str, str] = {}  # stream_id -> host sid
+        self.stream_viewers: Dict[str, set] = {}  # stream_id -> {viewer sid, ...}
 
     async def connect(self, sid: str, token: str):
         """Handle user connection"""
@@ -52,6 +57,25 @@ class SocketManager:
             user_id = self.active_connections[sid]['user_id']
             logger.info(f"👋 User {user_id} disconnected")
             del self.active_connections[sid]
+
+        await self.cleanup_stream_connection(sid)
+
+    async def cleanup_stream_connection(self, sid: str):
+        """Tear down any livestream host/viewer state held by this sid"""
+        # If this sid was hosting a stream, tell every viewer the host is gone.
+        for stream_id, host_sid in list(self.stream_hosts.items()):
+            if host_sid == sid:
+                del self.stream_hosts[stream_id]
+                await self.send_to_room(f"stream_{stream_id}", 'stream:host_left', {'stream_id': stream_id})
+                logger.info(f"📡 Host disconnected from stream {stream_id}")
+
+        # If this sid was viewing any stream(s), remove it and tell the host.
+        for stream_id, viewers in list(self.stream_viewers.items()):
+            if sid in viewers:
+                viewers.discard(sid)
+                host_sid = self.stream_hosts.get(stream_id)
+                if host_sid:
+                    await sio.emit('stream:viewer_left', {'viewer_sid': sid}, room=host_sid)
 
     async def join_room(self, sid: str, room: str):
         """Join a room (conversation)"""
@@ -271,3 +295,194 @@ async def mark_read(sid, data):
             )
     except Exception as e:
         logger.error(f"❌ Error marking messages as read: {e}")
+
+# ============================================
+# LIVESTREAM SIGNALING (WebRTC offer/answer/ICE relay + live chat)
+# ============================================
+# The host opens one RTCPeerConnection per viewer. This server never touches
+# media itself - it only relays SDP/ICE payloads between the two socket ids
+# involved, and enforces (via LivestreamService, against the DB) that only
+# the actual host can broadcast and only authorized viewers can join/watch/
+# chat. Visibility/section checks always run here, never trusting the client.
+
+def _stream_room(stream_id: str) -> str:
+    return f"stream_{stream_id}"
+
+@sio.on('stream:host_start')
+async def stream_host_start(sid, data):
+    """Host announces it is broadcasting a stream - verified against the DB."""
+    if sid not in manager.active_connections:
+        return
+    user_id = manager.active_connections[sid]['user_id']
+    stream_id = data.get('stream_id')
+    if not stream_id:
+        return
+
+    try:
+        async with AsyncSessionLocal() as db:
+            from app.services.livestream_service import LivestreamService
+            from app.models.livestream import Livestream
+
+            result = await db.execute(select(Livestream).where(Livestream.id == stream_id))
+            stream = result.scalar_one_or_none()
+            if not stream or str(stream.host_id) != user_id:
+                await sio.emit('stream:error', {'message': 'You are not the host of this stream'}, room=sid)
+                return
+
+        manager.stream_hosts[stream_id] = sid
+        manager.stream_viewers.setdefault(stream_id, set())
+        await sio.enter_room(sid, _stream_room(stream_id))
+        logger.info(f"📡 Host {user_id} started broadcasting stream {stream_id}")
+
+        # Re-announce to any viewers who were already waiting (e.g. host
+        # briefly reconnected) so they can (re)request an offer.
+        for viewer_sid in manager.stream_viewers.get(stream_id, set()):
+            await sio.emit('stream:host_ready', {'stream_id': stream_id, 'viewer_sid': viewer_sid}, room=sid)
+    except Exception as e:
+        logger.error(f"❌ Error starting stream host: {e}")
+        await sio.emit('stream:error', {'message': str(e)}, room=sid)
+
+@sio.on('stream:viewer_join')
+async def stream_viewer_join(sid, data):
+    """Viewer requests to watch a stream - visibility/section access enforced here."""
+    if sid not in manager.active_connections:
+        await sio.emit('stream:error', {'message': 'Not authenticated'}, room=sid)
+        return
+
+    user_id = manager.active_connections[sid]['user_id']
+    stream_id = data.get('stream_id')
+    if not stream_id:
+        return
+
+    try:
+        async with AsyncSessionLocal() as db:
+            from app.services.livestream_service import LivestreamService
+            from app.models.user import User
+
+            service = LivestreamService(db)
+            allowed = await service.can_view_stream(user_id, stream_id)
+            if not allowed:
+                await sio.emit('stream:error', {'message': "You don't have permission to view this stream"}, room=sid)
+                return
+
+            user_result = await db.execute(select(User).where(User.id == user_id))
+            user = user_result.scalar_one_or_none()
+
+        manager.stream_viewers.setdefault(stream_id, set()).add(sid)
+        await sio.enter_room(sid, _stream_room(stream_id))
+        logger.info(f"👁️ Viewer {user_id} joined stream {stream_id}")
+
+        host_sid = manager.stream_hosts.get(stream_id)
+        if host_sid:
+            await sio.emit(
+                'stream:viewer_ready',
+                {
+                    'stream_id': stream_id,
+                    'viewer_sid': sid,
+                    'user_id': user_id,
+                    'username': user.username if user else 'Unknown',
+                },
+                room=host_sid,
+            )
+        else:
+            await sio.emit('stream:error', {'message': 'Host is not currently broadcasting'}, room=sid)
+    except Exception as e:
+        logger.error(f"❌ Error joining stream: {e}")
+        await sio.emit('stream:error', {'message': str(e)}, room=sid)
+
+@sio.on('stream:leave')
+async def stream_leave(sid, data):
+    """Viewer stops watching a stream"""
+    stream_id = data.get('stream_id')
+    if not stream_id:
+        return
+    manager.stream_viewers.get(stream_id, set()).discard(sid)
+    await sio.leave_room(sid, _stream_room(stream_id))
+    host_sid = manager.stream_hosts.get(stream_id)
+    if host_sid:
+        await sio.emit('stream:viewer_left', {'viewer_sid': sid}, room=host_sid)
+
+@sio.on('stream:offer')
+async def stream_offer(sid, data):
+    """Relay a host's SDP offer to one specific viewer"""
+    stream_id = data.get('stream_id')
+    target_sid = data.get('target_sid')
+    sdp = data.get('sdp')
+    if not stream_id or not target_sid or not sdp:
+        return
+    # Only the verified host of this stream may send offers.
+    if manager.stream_hosts.get(stream_id) != sid:
+        await sio.emit('stream:error', {'message': 'Not authorized to broadcast this stream'}, room=sid)
+        return
+    await sio.emit('stream:offer', {'stream_id': stream_id, 'host_sid': sid, 'sdp': sdp}, room=target_sid)
+
+@sio.on('stream:answer')
+async def stream_answer(sid, data):
+    """Relay a viewer's SDP answer back to the host"""
+    stream_id = data.get('stream_id')
+    sdp = data.get('sdp')
+    if not stream_id or not sdp:
+        return
+    # Only a verified, joined viewer of this stream may answer.
+    if sid not in manager.stream_viewers.get(stream_id, set()):
+        await sio.emit('stream:error', {'message': 'Not a recognized viewer of this stream'}, room=sid)
+        return
+    host_sid = manager.stream_hosts.get(stream_id)
+    if host_sid:
+        await sio.emit('stream:answer', {'stream_id': stream_id, 'viewer_sid': sid, 'sdp': sdp}, room=host_sid)
+
+@sio.on('stream:ice_candidate')
+async def stream_ice_candidate(sid, data):
+    """Relay an ICE candidate between host and viewer"""
+    stream_id = data.get('stream_id')
+    target_sid = data.get('target_sid')
+    candidate = data.get('candidate')
+    if not stream_id or not target_sid or not candidate:
+        return
+    is_host = manager.stream_hosts.get(stream_id) == sid
+    is_viewer = sid in manager.stream_viewers.get(stream_id, set())
+    if not is_host and not is_viewer:
+        return
+    await sio.emit('stream:ice_candidate', {'stream_id': stream_id, 'from_sid': sid, 'candidate': candidate}, room=target_sid)
+
+@sio.on('stream:chat_message')
+async def stream_chat_message(sid, data):
+    """Live chat message for a stream - broadcast to host + all viewers"""
+    if sid not in manager.active_connections:
+        return
+    user_id = manager.active_connections[sid]['user_id']
+    stream_id = data.get('stream_id')
+    message = data.get('message')
+    if not stream_id or not message:
+        return
+
+    is_host = manager.stream_hosts.get(stream_id) == sid
+    is_viewer = sid in manager.stream_viewers.get(stream_id, set())
+    if not is_host and not is_viewer:
+        await sio.emit('stream:error', {'message': 'Join the stream before chatting'}, room=sid)
+        return
+
+    try:
+        async with AsyncSessionLocal() as db:
+            from app.services.chat_service import ChatService
+            from app.models.user import User
+
+            user_result = await db.execute(select(User).where(User.id == user_id))
+            user = user_result.scalar_one_or_none()
+            service = ChatService(db)
+            avatar_url = await service._get_avatar_url(user_id, user.role) if user else None
+
+        await sio.emit(
+            'stream:chat_message',
+            {
+                'stream_id': stream_id,
+                'user_id': user_id,
+                'username': user.username if user else 'Unknown',
+                'avatar': avatar_url,
+                'message': message,
+                'timestamp': datetime.utcnow().isoformat(),
+            },
+            room=_stream_room(stream_id),
+        )
+    except Exception as e:
+        logger.error(f"❌ Error sending stream chat message: {e}")

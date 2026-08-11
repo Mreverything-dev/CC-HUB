@@ -17,6 +17,9 @@ import { ChatWidget } from './features/chat/components/ChatWidget';
 // Import SocketProvider for WebSocket
 import { SocketProvider } from './app/providers/SocketProvider';
 
+import LivestreamsPage from '@/features/livestream/components/pages/LivestreamsPage';
+import LivePage from '@/features/livestream/components/pages/LivePage';
+
 function App() {
   return (
     <QueryProvider>
@@ -49,6 +52,22 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route 
+              path="/livestreams" 
+              element={
+                <ProtectedRoute>
+                  <LivestreamsPage />
+                </ProtectedRoute>
+          } 
+          />
+          <Route 
+              path="/live/:streamId" 
+              element={
+                <ProtectedRoute>
+                  <LivePage />
+                </ProtectedRoute>
+            } 
+          />
 
             {/* ============================================
                 ADMIN ROUTES
