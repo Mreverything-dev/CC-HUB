@@ -1,6 +1,7 @@
 ﻿# backend/app/api/v1/endpoints/auth.py
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.services.auth_service import AuthService
@@ -11,6 +12,7 @@ from app.schemas.auth import (
 from app.dependencies.auth import get_current_user
 from app.models.user import User
 from typing import Any
+from app.schemas.auth import UpdateUsernameRequest
 
 router = APIRouter()
 
@@ -68,3 +70,31 @@ async def change_password(
     """Change user password"""
     service = AuthService(db)
     return await service.change_password(str(current_user.id), request)
+@router.put("/update-username")
+async def update_username(
+    request: UpdateUsernameRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update current user's username"""
+    # Check if username is taken
+    result = await db.execute(
+        select(User).where(
+            User.username == request.username,
+            User.id != current_user.id
+        )
+    )
+    if result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already taken"
+        )
+    
+    current_user.username = request.username
+    await db.commit()
+    await db.refresh(current_user)
+    
+    return {
+        "message": "Username updated successfully",
+        "username": current_user.username
+    }

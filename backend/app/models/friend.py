@@ -1,5 +1,5 @@
 # backend/app/models/friend.py
-from sqlalchemy import Column, String, Text, ForeignKey, DateTime, Enum
+from sqlalchemy import Column, String, Text, ForeignKey, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -25,7 +25,7 @@ class FriendRequest(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     sender_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
     receiver_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
-    status = Column(Enum('pending', 'accepted', 'rejected', 'cancelled', name='friend_request_status'), default='pending')
+    status = Column(String(20), default='pending')  # 'pending' | 'accepted' | 'rejected' | 'cancelled'
     message = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

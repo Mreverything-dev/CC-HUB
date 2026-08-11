@@ -1,6 +1,5 @@
 // frontend/src/features/posts/components/CreatePost.tsx
 import { useState, useRef } from 'react';
-import { Card } from '@/components/ui/Card/Card';
 import { Button } from '@/components/ui/Button/Button';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { PhotoIcon, XMarkIcon } from '@heroicons/react/24/outline';
@@ -8,6 +7,8 @@ import { mediaService } from '@/services/api/media.service';
 interface CreatePostProps {
   onCreatePost: (data: { content: string; media_urls?: string[] }) => void;
   isLoading?: boolean;
+  /** Charcoal/cyan theme for the redesigned dashboard. Defaults to the original light theme. */
+  dark?: boolean;
 }
 
 // Keep in sync with backend ALLOWED_TYPES in app/api/v1/endpoints/media.py
@@ -16,7 +17,7 @@ const ALLOWED_MEDIA_TYPES = [
   'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo',
 ];
 
-export function CreatePost({ onCreatePost, isLoading = false }: CreatePostProps) {
+export function CreatePost({ onCreatePost, isLoading = false, dark = false }: CreatePostProps) {
   const [content, setContent] = useState('');
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -108,13 +109,21 @@ export function CreatePost({ onCreatePost, isLoading = false }: CreatePostProps)
     return 'col-span-1';
   };
 
+  const wrapperClassName = dark
+    ? 'mb-6 rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a]/60 backdrop-blur-xl p-6'
+    : 'glass rounded-xl p-6 mb-6 transition-all duration-200 hover:shadow-lg';
+
   return (
-    <Card variant="glass" className="mb-6">
+    <div className={wrapperClassName}>
       <form onSubmit={handleSubmit}>
         <div className="flex items-start space-x-3">
           {/* Avatar */}
-          <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
-            <span className="text-gray-600 font-semibold">
+          <div
+            className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+              dark ? 'bg-gradient-to-br from-[#00d4ff] to-[#0099cc]' : 'bg-gray-200'
+            }`}
+          >
+            <span className={`font-semibold ${dark ? 'text-[#0a0a0a]' : 'text-gray-600'}`}>
               {user?.username?.charAt(0).toUpperCase() || 'U'}
             </span>
           </div>
@@ -123,7 +132,11 @@ export function CreatePost({ onCreatePost, isLoading = false }: CreatePostProps)
               value={content}
               onChange={(e) => setContent(e.target.value)}
               placeholder="What's on your mind?"
-              className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent resize-none"
+              className={
+                dark
+                  ? 'w-full p-3 rounded-xl border border-[#2a2a2a] bg-[#0f0f0f] text-white placeholder-[#6b6b6b] focus:ring-1 focus:ring-[#00d4ff] focus:border-[#00d4ff] focus:outline-none resize-none'
+                  : 'w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent resize-none'
+              }
               rows={3}
             />
 
@@ -224,6 +237,6 @@ export function CreatePost({ onCreatePost, isLoading = false }: CreatePostProps)
           </div>
         </div>
       </form>
-    </Card>
+    </div>
   );
 }

@@ -1,5 +1,17 @@
 // frontend/src/features/announcements/components/CreateAnnouncement.tsx
 import { useState, useEffect } from 'react';
+import {
+  XMarkIcon,
+  MegaphoneIcon,
+  AcademicCapIcon,
+  CalendarDaysIcon,
+  ExclamationTriangleIcon,
+  ArrowDownIcon,
+  MinusIcon,
+  ArrowUpIcon,
+  ExclamationCircleIcon,
+  CheckIcon,
+} from '@heroicons/react/24/outline';
 import { useAnnouncements } from '../hooks/useAnnouncements';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { useSections } from '@/features/sections/hooks/useSections';
@@ -8,6 +20,23 @@ import { AnnouncementCreate } from '@/types/announcement.types';
 interface CreateAnnouncementProps {
   onClose: () => void;
 }
+
+const TYPE_OPTIONS: { value: AnnouncementCreate['type']; label: string; icon: typeof MegaphoneIcon }[] = [
+  { value: 'general', label: 'General', icon: MegaphoneIcon },
+  { value: 'academic', label: 'Academic', icon: AcademicCapIcon },
+  { value: 'event', label: 'Event', icon: CalendarDaysIcon },
+  { value: 'emergency', label: 'Emergency', icon: ExclamationTriangleIcon },
+];
+
+const PRIORITY_OPTIONS: { value: AnnouncementCreate['priority']; label: string; icon: typeof ArrowDownIcon }[] = [
+  { value: 'low', label: 'Low', icon: ArrowDownIcon },
+  { value: 'normal', label: 'Normal', icon: MinusIcon },
+  { value: 'high', label: 'High', icon: ArrowUpIcon },
+  { value: 'urgent', label: 'Urgent', icon: ExclamationCircleIcon },
+];
+
+const inputClassName =
+  'w-full px-3 py-2 rounded-xl border border-[#2a2a2a] bg-[#0f0f0f] text-sm text-white placeholder-[#6b6b6b] focus:ring-1 focus:ring-[#00d4ff] focus:border-[#00d4ff] focus:outline-none transition';
 
 export function CreateAnnouncement({ onClose }: CreateAnnouncementProps) {
   const { createAnnouncement, isCreating } = useAnnouncements();
@@ -95,29 +124,35 @@ export function CreateAnnouncement({ onClose }: CreateAnnouncementProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold text-gray-900">Create Announcement</h2>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-[#2a2a2a] bg-[#141414] shadow-2xl themed-scrollbar">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-5 border-b border-[#2a2a2a]">
+          <div>
+            <h2 className="text-lg font-bold text-white">Create Announcement</h2>
+            <p className="text-xs text-[#6b6b6b] mt-0.5">
+              {user.role === 'admin' ? 'Share an update with everyone' : 'Share important updates with your students'}
+            </p>
+          </div>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 text-2xl"
+            className="p-1.5 text-[#a0a0a0] hover:text-white rounded-full hover:bg-white/5 transition"
           >
-            ×
+            <XMarkIcon className="h-5 w-5" />
           </button>
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-lg text-sm">
-            ❌ {error}
+          <div className="mx-6 mt-4 p-3 rounded-xl border border-red-500/30 bg-red-500/10 text-red-400 text-sm">
+            {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-5">
           {/* Title */}
           <div>
-            <label htmlFor="announcement-title" className="block text-sm font-medium text-gray-700 mb-1">
-              Title *
+            <label htmlFor="announcement-title" className="block text-sm font-medium text-[#a0a0a0] mb-1.5">
+              Title <span className="text-red-400">*</span>
             </label>
             <input
               id="announcement-title"
@@ -126,15 +161,15 @@ export function CreateAnnouncement({ onClose }: CreateAnnouncementProps) {
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
               required
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className={inputClassName}
               placeholder="Enter announcement title"
             />
           </div>
 
           {/* Content */}
           <div>
-            <label htmlFor="announcement-content" className="block text-sm font-medium text-gray-700 mb-1">
-              Content *
+            <label htmlFor="announcement-content" className="block text-sm font-medium text-[#a0a0a0] mb-1.5">
+              Content <span className="text-red-400">*</span>
             </label>
             <textarea
               id="announcement-content"
@@ -143,66 +178,75 @@ export function CreateAnnouncement({ onClose }: CreateAnnouncementProps) {
               onChange={(e) => setFormData({ ...formData, content: e.target.value })}
               required
               rows={6}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              placeholder="Enter announcement content"
+              className={`${inputClassName} resize-none`}
+              placeholder="Write your announcement content here..."
             />
           </div>
 
-          {/* Type & Priority */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="announcement-type" className="block text-sm font-medium text-gray-700 mb-1">
-                Type
-              </label>
-              <select
-                id="announcement-type"
-                name="type"
-                value={formData.type}
-                onChange={(e) => setFormData({ ...formData, type: e.target.value as AnnouncementCreate['type'] })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="general">General</option>
-                <option value="academic">Academic</option>
-                <option value="event">Event</option>
-                <option value="emergency">Emergency</option>
-              </select>
+          {/* Type */}
+          <div>
+            <label className="block text-sm font-medium text-[#a0a0a0] mb-1.5">Type</label>
+            <div className="grid grid-cols-4 gap-2">
+              {TYPE_OPTIONS.map(({ value, label, icon: Icon }) => {
+                const isActive = formData.type === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, type: value })}
+                    className={`flex flex-col items-center gap-1.5 rounded-xl border py-2.5 text-xs font-medium transition ${
+                      isActive
+                        ? 'border-[#00d4ff]/50 bg-[#00d4ff]/10 text-[#00d4ff]'
+                        : 'border-[#2a2a2a] bg-[#0f0f0f] text-[#a0a0a0] hover:border-[#3a3a3a] hover:text-white'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {label}
+                  </button>
+                );
+              })}
             </div>
+          </div>
 
-            <div>
-              <label htmlFor="announcement-priority" className="block text-sm font-medium text-gray-700 mb-1">
-                Priority
-              </label>
-              <select
-                id="announcement-priority"
-                name="priority"
-                value={formData.priority}
-                onChange={(e) => setFormData({ ...formData, priority: e.target.value as AnnouncementCreate['priority'] })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="low">Low</option>
-                <option value="normal">Normal</option>
-                <option value="high">High</option>
-                <option value="urgent">Urgent</option>
-              </select>
+          {/* Priority */}
+          <div>
+            <label className="block text-sm font-medium text-[#a0a0a0] mb-1.5">Priority</label>
+            <div className="grid grid-cols-4 gap-2">
+              {PRIORITY_OPTIONS.map(({ value, label, icon: Icon }) => {
+                const isActive = formData.priority === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, priority: value })}
+                    className={`flex flex-col items-center gap-1.5 rounded-xl border py-2.5 text-xs font-medium transition ${
+                      isActive
+                        ? 'border-[#00d4ff]/50 bg-[#00d4ff]/10 text-[#00d4ff]'
+                        : 'border-[#2a2a2a] bg-[#0f0f0f] text-[#a0a0a0] hover:border-[#3a3a3a] hover:text-white'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           {/* Publish & Expiry */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                <input
-                  type="checkbox"
-                  checked={formData.is_published}
-                  onChange={(e) => setFormData({ ...formData, is_published: e.target.checked })}
-                  className="mr-2"
-                />
-                Publish immediately
-              </label>
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <label className="flex items-center gap-2 text-sm font-medium text-[#a0a0a0] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.is_published}
+                onChange={(e) => setFormData({ ...formData, is_published: e.target.checked })}
+                className="h-4 w-4 rounded border-[#2a2a2a] bg-[#0f0f0f] text-[#00d4ff] focus:ring-[#00d4ff] focus:ring-offset-0"
+              />
+              Publish immediately
+            </label>
 
             <div>
-              <label htmlFor="announcement-expires-at" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="announcement-expires-at" className="block text-sm font-medium text-[#a0a0a0] mb-1.5">
                 Expires At (Optional)
               </label>
               <input
@@ -211,31 +255,31 @@ export function CreateAnnouncement({ onClose }: CreateAnnouncementProps) {
                 type="datetime-local"
                 value={formData.expires_at ?? ''}
                 onChange={(e) => setFormData({ ...formData, expires_at: e.target.value || null })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className={`${inputClassName} [color-scheme:dark]`}
               />
             </div>
           </div>
 
           {/* ✅ Section Selection for Professors */}
           {user.role === 'professor' && (
-            <div className="border rounded-lg p-4 bg-gray-50">
+            <div className="rounded-xl border border-[#2a2a2a] bg-[#0f0f0f]/60 p-4">
               <div className="flex items-center justify-between mb-3">
-                <label className="block text-sm font-medium text-gray-700">
+                <label className="block text-sm font-medium text-[#a0a0a0]">
                   Target Sections
                 </label>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 text-xs">
                   <button
                     type="button"
                     onClick={selectAllSections}
-                    className="text-xs text-blue-600 hover:text-blue-700"
+                    className="text-[#00d4ff] hover:text-white transition"
                   >
                     Select All
                   </button>
-                  <span className="text-gray-300">|</span>
+                  <span className="text-[#2a2a2a]">|</span>
                   <button
                     type="button"
                     onClick={deselectAllSections}
-                    className="text-xs text-gray-500 hover:text-gray-700"
+                    className="text-[#6b6b6b] hover:text-white transition"
                   >
                     Deselect All
                   </button>
@@ -243,36 +287,56 @@ export function CreateAnnouncement({ onClose }: CreateAnnouncementProps) {
               </div>
 
               {sectionsLoading ? (
-                <p className="text-sm text-gray-500">Loading sections...</p>
+                <p className="text-sm text-[#6b6b6b] py-2">Loading sections...</p>
               ) : professorSections.length === 0 ? (
-                <p className="text-sm text-yellow-600">
-                  ⚠️ You don't have any sections yet. Create a section first.
+                <p className="text-sm text-amber-400">
+                  You don't have any sections yet. Create a section first.
                 </p>
               ) : (
                 <div className="space-y-2">
-                  {professorSections.map((section) => (
-                    <label key={section.id} className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={(formData.target_sections || []).includes(section.id)}
-                        onChange={() => handleSectionToggle(section.id)}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className="text-gray-700">
-                        {section.name}
-                        {section.course && <span className="text-gray-400 ml-1">({section.course})</span>}
-                      </span>
-                      {section.member_count !== undefined && (
-                        <span className="text-gray-400 text-xs ml-auto">
-                          {section.member_count} students
-                        </span>
-                      )}
-                    </label>
-                  ))}
-                  <p className="text-xs text-gray-400 mt-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {professorSections.map((section) => {
+                      const isSelected = (formData.target_sections || []).includes(section.id);
+                      return (
+                        <button
+                          key={section.id}
+                          type="button"
+                          onClick={() => handleSectionToggle(section.id)}
+                          className={`flex items-center gap-3 rounded-xl border p-3 text-left transition ${
+                            isSelected
+                              ? 'border-[#00d4ff]/50 bg-[#00d4ff]/5'
+                              : 'border-[#2a2a2a] bg-[#0f0f0f] hover:border-[#3a3a3a]'
+                          }`}
+                        >
+                          <span className="h-9 w-9 flex-shrink-0 rounded-lg bg-gradient-to-br from-[#00d4ff] to-[#0099cc] flex items-center justify-center text-xs font-bold text-[#0a0a0a]">
+                            {section.name.slice(0, 2).toUpperCase()}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-white truncate">{section.name}</p>
+                            {section.course && (
+                              <p className="text-xs text-[#6b6b6b] truncate">{section.course}</p>
+                            )}
+                          </div>
+                          {section.member_count !== undefined && (
+                            <span className="flex-shrink-0 text-[10px] font-semibold text-[#a0a0a0] bg-white/5 border border-[#2a2a2a] rounded-full px-2 py-0.5">
+                              {section.member_count} students
+                            </span>
+                          )}
+                          <span
+                            className={`flex-shrink-0 h-4 w-4 rounded border flex items-center justify-center ${
+                              isSelected ? 'bg-[#00d4ff] border-[#00d4ff]' : 'border-[#3a3a3a]'
+                            }`}
+                          >
+                            {isSelected && <CheckIcon className="h-3 w-3 text-[#0a0a0a]" />}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-[#6b6b6b] mt-2">
                     {formData.target_sections?.length === 0 || !formData.target_sections?.length
-                      ? 'ℹ️ No sections selected - announcement will go to ALL your sections'
-                      : `✅ ${formData.target_sections.length} section(s) selected`}
+                      ? 'No sections selected - announcement will go to ALL your sections'
+                      : `${formData.target_sections.length} section(s) selected`}
                   </p>
                 </div>
               )}
@@ -281,24 +345,24 @@ export function CreateAnnouncement({ onClose }: CreateAnnouncementProps) {
 
           {/* Admin Note */}
           {user.role === 'admin' && (
-            <div className="text-sm text-gray-500 bg-blue-50 p-3 rounded-lg">
-              ℹ️ Admin announcements are visible to ALL users.
+            <div className="text-sm text-[#a0a0a0] bg-[#00d4ff]/5 border border-[#00d4ff]/20 p-3 rounded-xl">
+              Admin announcements are visible to ALL users.
             </div>
           )}
 
           {/* Buttons */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t">
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#2a2a2a]">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition"
+              className="px-4 py-2 text-sm font-medium text-[#a0a0a0] hover:text-white hover:bg-white/5 rounded-xl transition"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isCreating}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50"
+              className="px-6 py-2 text-sm font-semibold bg-gradient-to-br from-[#00d4ff] to-[#0099cc] text-[#0a0a0a] rounded-xl hover:opacity-90 transition disabled:opacity-50"
             >
               {isCreating ? 'Creating...' : 'Create Announcement'}
             </button>

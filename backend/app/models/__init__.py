@@ -6,10 +6,11 @@ from app.models.announcement import Announcement, AnnouncementTarget
 from app.models.post import Post, PostMedia
 from app.models.comment import Comment
 from app.models.like import Like
+from app.models.share import Share
 from app.models.friend import Friend, FriendRequest
+from app.models.conversation import Conversation, ConversationMember, Message
+from app.models.notification import Notification
 #from app.models.announcements import Announcement
-#from app.models.message import Message, Conversation, ConversationMember
-#from app.models.notification import Notification
 #from app.models.livestream import Livestream, StreamViewer
 #from app.models.report import Report
 from app.models.invitation_code import InvitationCode
@@ -27,6 +28,7 @@ __all__ = [
     "PostMedia",
     "Comment",
     "Like",
+    "Share",
     "Friend",
     "FriendRequest",
     "Announcement",

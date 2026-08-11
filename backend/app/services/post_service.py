@@ -9,9 +9,11 @@ import logging
 
 from app.models.post import Post, PostMedia
 from app.models.like import Like
+from app.models.share import Share
 from app.models.user import User
 from app.models.friend import Friend
 from app.models.section import SectionMember
+from app.models.profile import StudentProfile, ProfessorProfile, AdminProfile
 from app.schemas.post import PostCreate, PostUpdate
 
 logger = logging.getLogger(__name__)
@@ -135,16 +137,20 @@ class PostService:
         result = await self.db.execute(query)
         posts = result.scalars().all()
         
-        # Get user's liked posts
+        # Get user's liked/shared posts
         liked_post_ids = await self._get_liked_post_ids(user_id)
-        
+        shared_post_ids = await self._get_shared_post_ids(user_id)
+
         # Format response
         items = []
         for post in posts:
+            role = post.user.role if post.user else "student"
             post_dict = {
                 "id": str(post.id),
                 "user_id": str(post.user_id),
                 "username": post.user.username if post.user else "Unknown",
+                "user_role": role,
+                "avatar_url": await self._get_avatar_url(str(post.user_id), role),
                 "content": post.content,
                 "type": post.type,
                 "visibility": post.visibility,
@@ -155,6 +161,7 @@ class PostService:
                 "created_at": post.created_at,
                 "updated_at": post.updated_at,
                 "is_liked_by_current_user": str(post.id) in liked_post_ids,
+                "is_shared_by_current_user": str(post.id) in shared_post_ids,
                 "is_owned_by_current_user": str(post.user_id) == user_id
             }
             items.append(post_dict)
@@ -189,13 +196,17 @@ class PostService:
                 detail="You don't have permission to view this post"
             )
         
-        # Get user's liked posts
+        # Get user's liked/shared posts
         liked_post_ids = await self._get_liked_post_ids(user_id)
-        
+        shared_post_ids = await self._get_shared_post_ids(user_id)
+        role = post.user.role if post.user else "student"
+
         return {
             "id": str(post.id),
             "user_id": str(post.user_id),
             "username": post.user.username if post.user else "Unknown",
+            "user_role": role,
+            "avatar_url": await self._get_avatar_url(str(post.user_id), role),
             "content": post.content,
             "type": post.type,
             "visibility": post.visibility,
@@ -206,7 +217,72 @@ class PostService:
             "created_at": post.created_at,
             "updated_at": post.updated_at,
             "is_liked_by_current_user": str(post.id) in liked_post_ids,
+            "is_shared_by_current_user": str(post.id) in shared_post_ids,
             "is_owned_by_current_user": str(post.user_id) == user_id
+        }
+
+    # ============================================
+    # GET POSTS BY USER (for viewing another user's profile)
+    # ============================================
+
+    async def get_user_posts(
+        self,
+        target_user_id: str,
+        viewer_id: str,
+        page: int = 1,
+        limit: int = 20
+    ) -> Dict[str, Any]:
+        """Get a specific user's posts, filtered to what the viewer is allowed to see"""
+        offset = (page - 1) * limit
+
+        query = (
+            select(Post)
+            .where(Post.user_id == target_user_id)
+            .order_by(desc(Post.created_at))
+            .options(selectinload(Post.user))
+        )
+        result = await self.db.execute(query)
+        all_posts = result.scalars().all()
+
+        visible_posts = [
+            post for post in all_posts
+            if await self._can_view_post(post, viewer_id)
+        ]
+
+        total = len(visible_posts)
+        page_posts = visible_posts[offset:offset + limit]
+
+        liked_post_ids = await self._get_liked_post_ids(viewer_id)
+        shared_post_ids = await self._get_shared_post_ids(viewer_id)
+
+        items = []
+        for post in page_posts:
+            role = post.user.role if post.user else "student"
+            items.append({
+                "id": str(post.id),
+                "user_id": str(post.user_id),
+                "username": post.user.username if post.user else "Unknown",
+                "user_role": role,
+                "avatar_url": await self._get_avatar_url(str(post.user_id), role),
+                "content": post.content,
+                "type": post.type,
+                "visibility": post.visibility,
+                "media_urls": post.media_urls,
+                "likes_count": post.likes_count,
+                "comments_count": post.comments_count,
+                "shares_count": post.shares_count,
+                "created_at": post.created_at,
+                "updated_at": post.updated_at,
+                "is_liked_by_current_user": str(post.id) in liked_post_ids,
+                "is_shared_by_current_user": str(post.id) in shared_post_ids,
+                "is_owned_by_current_user": str(post.user_id) == viewer_id
+            })
+
+        return {
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "items": items
         }
 
     # ============================================
@@ -278,6 +354,39 @@ class PostService:
         return {"message": "Post deleted successfully"}
 
     # ============================================
+    # SHARE POST
+    # ============================================
+
+    async def share_post(self, post_id: str, user_id: str) -> dict:
+        """Record a share of a post - one share per user"""
+        result = await self.db.execute(
+            select(Post).where(Post.id == post_id)
+        )
+        post = result.scalar_one_or_none()
+        if not post:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Post not found"
+            )
+
+        existing_result = await self.db.execute(
+            select(Share).where(
+                Share.user_id == user_id,
+                Share.post_id == post_id
+            )
+        )
+        if existing_result.scalar_one_or_none():
+            # Already shared by this user - no-op, just report current state
+            return {"shares_count": post.shares_count or 0, "already_shared": True}
+
+        self.db.add(Share(user_id=user_id, post_id=post_id))
+        post.shares_count = (post.shares_count or 0) + 1
+        await self.db.commit()
+
+        logger.info(f"✅ Post {post_id} shared by user {user_id}")
+        return {"shares_count": post.shares_count, "already_shared": False}
+
+    # ============================================
     # LIKE / UNLIKE POST
     # ============================================
     
@@ -340,6 +449,20 @@ class PostService:
         )
         return [str(id) for id in result.scalars().all()]
 
+    async def _get_avatar_url(self, user_id: str, role: str) -> Optional[str]:
+        """Get a user's avatar URL from their role-specific profile"""
+        model = {
+            "student": StudentProfile,
+            "professor": ProfessorProfile,
+            "admin": AdminProfile,
+        }.get(role)
+        if not model:
+            return None
+        result = await self.db.execute(
+            select(model.avatar_url).where(model.user_id == user_id)
+        )
+        return result.scalar_one_or_none()
+
     async def _get_liked_post_ids(self, user_id: str) -> List[str]:
         """Get list of post IDs liked by a user"""
         result = await self.db.execute(
@@ -347,6 +470,13 @@ class PostService:
                 Like.user_id == user_id,
                 Like.target_type == "post"
             )
+        )
+        return [str(id) for id in result.scalars().all()]
+
+    async def _get_shared_post_ids(self, user_id: str) -> List[str]:
+        """Get list of post IDs already shared by a user"""
+        result = await self.db.execute(
+            select(Share.post_id).where(Share.user_id == user_id)
         )
         return [str(id) for id in result.scalars().all()]
 

@@ -1,5 +1,6 @@
 // frontend/src/features/dashboard/pages/AdminDashboard.tsx
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { CreatePost } from '@/features/posts/components/CreatePost';
 import { PostCard } from '@/features/posts/components/PostCard';
 import { useFeed } from '@/features/posts/hooks/useFeed';
@@ -8,10 +9,15 @@ import { AnnouncementCard } from '@/features/announcements/components/Announceme
 import { CreateAnnouncement } from '@/features/announcements/components/CreateAnnouncement';
 import { useAnnouncements } from '@/features/announcements/hooks/useAnnouncements';
 import { useAuthStore } from '@/features/auth/store/auth.store';
-import { MegaphoneIcon, PlusIcon, DocumentTextIcon, UserGroupIcon } from '@heroicons/react/24/outline';
+import { useChat } from '@/features/chat/hooks/useChat';
+import ProfileAvatar from '@/features/profile/components/ProfileAvatar';
+import NotificationBell from '@/features/friends/components/NotificationBell';
+import { MegaphoneIcon, PlusIcon, DocumentTextIcon, UserGroupIcon, ChatBubbleLeftIcon, UsersIcon } from '@heroicons/react/24/outline';
 
 export default function AdminDashboard() {
   const { user } = useAuthStore();
+  const navigate = useNavigate();
+  const { unreadCount, toggleWidget } = useChat();
   const [showCreateAnnouncement, setShowCreateAnnouncement] = useState(false);
   const [activeTab, setActiveTab] = useState<'posts' | 'announcements' | 'users'>('posts');
   
@@ -42,10 +48,35 @@ export default function AdminDashboard() {
 
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
-      {/* Welcome Section */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Admin Dashboard</h1>
-        <p className="text-gray-600">Manage the entire platform</p>
+      {/* Welcome Section with Profile Avatar */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">Admin Dashboard</h1>
+          <p className="text-gray-600">Manage the entire platform</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/friends')}
+            className="p-2 text-gray-600 hover:text-blue-600 transition rounded-full hover:bg-blue-50"
+            title="Friends"
+          >
+            <UsersIcon className="h-6 w-6" />
+          </button>
+          <button
+            onClick={toggleWidget}
+            className="relative p-2 text-gray-600 hover:text-blue-600 transition rounded-full hover:bg-blue-50"
+            title="Messages"
+          >
+            <ChatBubbleLeftIcon className="h-6 w-6" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </button>
+          <NotificationBell />
+          <ProfileAvatar />
+        </div>
       </div>
 
       {/* Stats */}

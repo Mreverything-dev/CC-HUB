@@ -1,15 +1,27 @@
-﻿import { ReactNode, createContext, useContext, useEffect } from 'react';
+﻿// frontend/src/app/providers/SocketProvider.tsx
+import { ReactNode, useEffect } from 'react';
 import { socketService } from '@/lib/socket';
-
-const SocketContext = createContext(null);
+import { useAuthStore } from '@/features/auth/store/auth.store';
 
 export function SocketProvider({ children }: { children: ReactNode }) {
-  useEffect(() => {
-    socketService.connect();
-    return () => socketService.disconnect();
-  }, []);
+  const { isAuthenticated } = useAuthStore();
 
-  return <SocketContext.Provider value={null}>{children}</SocketContext.Provider>;
+  useEffect(() => {
+    if (isAuthenticated) {
+      socketService.connect();
+    } else {
+      socketService.disconnect();
+    }
+
+    return () => {
+      socketService.disconnect();
+    };
+  }, [isAuthenticated]);
+
+  return <>{children}</>;
 }
 
-export const useSocket = () => useContext(SocketContext);
+// Access the shared socket service instance (connection lifecycle is owned by SocketProvider)
+export function useSocket() {
+  return socketService;
+}

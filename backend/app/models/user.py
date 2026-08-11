@@ -4,6 +4,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 import uuid
+from app.models.conversation import Message
 from datetime import datetime
 from app.models.friend import Friend, FriendRequest
 # Association Tables
@@ -39,17 +40,24 @@ class User(Base):
     roles = relationship("Role", secondary=user_roles, back_populates="users")
     comments = relationship("Comment", back_populates="user", cascade="all, delete-orphan")
     likes = relationship("Like", back_populates="user", cascade="all, delete-orphan")
+
+    # Friend relationships
+    friends = relationship("Friend", foreign_keys=[Friend.user_id], back_populates="user", cascade="all, delete-orphan")
+    friend_of = relationship("Friend", foreign_keys=[Friend.friend_id], back_populates="friend", cascade="all, delete-orphan")
+    sent_requests = relationship("FriendRequest", foreign_keys=[FriendRequest.sender_id], back_populates="sender", cascade="all, delete-orphan")
+    received_requests = relationship("FriendRequest", foreign_keys=[FriendRequest.receiver_id], back_populates="receiver", cascade="all, delete-orphan")
     
+    # Notifications
+    notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
+
+    # conversation Relationships
+    conversations = relationship("ConversationMember", back_populates="user", cascade="all, delete-orphan")
+    sent_messages = relationship("Message", foreign_keys=[Message.sender_id], back_populates="sender")
     # Profile relationships
     student_profile = relationship("StudentProfile", back_populates="user", uselist=False)
     professor_profile = relationship("ProfessorProfile", back_populates="user", uselist=False)
     admin_profile = relationship("AdminProfile", back_populates="user", uselist=False)
     posts = relationship("Post", back_populates="user", cascade="all, delete-orphan")
-    friends = relationship("Friend", foreign_keys=[Friend.user_id], back_populates="user", cascade="all, delete-orphan")
-    friend_of = relationship("Friend", foreign_keys=[Friend.friend_id], back_populates="friend", cascade="all, delete-orphan")
-    
-    sent_requests = relationship("FriendRequest", foreign_keys=[FriendRequest.sender_id], back_populates="sender", cascade="all, delete-orphan")
-    received_requests = relationship("FriendRequest", foreign_keys=[FriendRequest.receiver_id], back_populates="receiver", cascade="all, delete-orphan")
     announcements = relationship("Announcement", back_populates="user", cascade="all, delete-orphan")
     
     def __repr__(self):

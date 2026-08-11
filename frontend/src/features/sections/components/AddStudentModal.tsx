@@ -10,6 +10,9 @@ interface AddStudentModalProps {
   onSuccess: () => void;
 }
 
+const inputClassName =
+  'w-full px-3 py-2 rounded-xl border border-[#1E3447] bg-[#162534] text-sm text-[#F1F5F9] placeholder-[#64748B] focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] focus:outline-none transition';
+
 export default function AddStudentModal({ sectionId, onClose, onSuccess }: AddStudentModalProps) {
   const { addMember } = useSections();
   const { users, searchUsers } = useUsers();
@@ -29,7 +32,7 @@ export default function AddStudentModal({ sectionId, onClose, onSuccess }: AddSt
       setError('Please select a student');
       return;
     }
-    
+
     setLoading(true);
     setError('');
     try {
@@ -46,27 +49,27 @@ export default function AddStudentModal({ sectionId, onClose, onSuccess }: AddSt
   const studentList = users?.filter((u) => u.role === 'student') || [];
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg max-w-md w-full p-6">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
+      <div className="w-full max-w-md rounded-2xl border border-[#1E3447] bg-[#111E2B] shadow-[0_0_40px_rgba(0,200,255,0.06)] p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-gray-900">Add Student</h2>
+          <h2 className="text-lg font-bold text-[#F1F5F9]">Add Student</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
+            className="p-1.5 text-[#64748B] hover:text-[#F1F5F9] hover:bg-white/5 rounded-full transition"
           >
-            <XMarkIcon className="h-6 w-6" />
+            <XMarkIcon className="h-5 w-5" />
           </button>
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-50 text-red-600 rounded-lg text-sm">
+          <div className="mb-4 p-3 rounded-xl border border-[#EF4444]/30 bg-[#EF4444]/10 text-[#EF4444] text-sm">
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-[#94A3B8] mb-1.5">
               Search Student
             </label>
             <input
@@ -74,18 +77,18 @@ export default function AddStudentModal({ sectionId, onClose, onSuccess }: AddSt
               value={search}
               onChange={(e) => handleSearch(e.target.value)}
               placeholder="Search by email or username..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className={inputClassName}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-[#94A3B8] mb-1.5">
               Select Student
             </label>
             <select
               value={selectedUserId}
               onChange={(e) => setSelectedUserId(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className={inputClassName}
             >
               <option value="">Select a student...</option>
               {studentList.map((student) => (
@@ -96,18 +99,18 @@ export default function AddStudentModal({ sectionId, onClose, onSuccess }: AddSt
             </select>
           </div>
 
-          <div className="flex items-center justify-end gap-3 pt-4 border-t">
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#1E3447]">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition"
+              className="px-4 py-2 text-sm font-medium text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5 rounded-xl transition"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition disabled:opacity-50"
+              className="px-6 py-2 text-sm font-semibold bg-gradient-to-br from-[#00C8FF] to-[#0090CC] text-[#060B12] rounded-xl hover:opacity-90 transition disabled:opacity-50"
             >
               {loading ? 'Adding...' : 'Add Student'}
             </button>

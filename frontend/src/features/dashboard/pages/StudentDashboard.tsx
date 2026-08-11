@@ -1,22 +1,32 @@
 // frontend/src/features/dashboard/pages/StudentDashboard.tsx
 import { useState, useEffect } from 'react';
-
+import { CodeXml } from 'lucide-react';
 import { CreatePost } from '@/features/posts/components/CreatePost';
 import { PostCard } from '@/features/posts/components/PostCard';
 import { useFeed } from '@/features/posts/hooks/useFeed';
-import { Card } from '@/components/ui/Card/Card';
 import { AnnouncementCard } from '@/features/announcements/components/AnnouncementCard';
+import { AnnouncementFilterBar } from '@/features/announcements/components/AnnouncementFilterBar';
+import { AnnouncementCategory, matchesAnnouncementFilters } from '@/features/announcements/constants';
 import { useAnnouncements } from '@/features/announcements/hooks/useAnnouncements';
 import { useSections } from '@/features/sections/hooks/useSections';
 import SectionCard from '@/features/sections/components/SectionCard';
-import { MegaphoneIcon, DocumentTextIcon, UsersIcon } from '@heroicons/react/24/outline';
 import { useAuthStore } from '@/features/auth/store/auth.store';
+import { profileService } from '@/services/api/profile.service';
+import { Sidebar, SidebarSection } from '@/features/dashboard/components/Sidebar';
+import { Topbar } from '@/features/dashboard/components/Topbar';
+import { FeedTabs, FeedFilter } from '@/features/dashboard/components/FeedTabs';
+import { AnnouncementWidget } from '@/features/dashboard/components/AnnouncementWidget';
+import { SectionWidget } from '@/features/dashboard/components/SectionWidget';
+import { EventCardList } from '@/features/dashboard/components/EventCard';
 
 export default function StudentDashboard() {
   const { user } = useAuthStore();
-  
-  const [activeTab, setActiveTab] = useState<'posts' | 'announcements' | 'sections'>('posts');
-  
+  const [activeSection, setActiveSection] = useState<SidebarSection>('feed');
+  const [feedFilter, setFeedFilter] = useState<FeedFilter>('all');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [announcementSearch, setAnnouncementSearch] = useState('');
+  const [announcementCategory, setAnnouncementCategory] = useState<'all' | AnnouncementCategory>('all');
+
   // Posts
   const {
     posts = [],
@@ -41,161 +51,191 @@ export default function StudentDashboard() {
     refetch: refetchSections,
   } = useSections();
 
-  // ✅ Fetch sections on mount
   useEffect(() => {
     refetchSections();
+  }, []);
+
+  useEffect(() => {
+    profileService
+      .getMyProfile()
+      .then((res) => setAvatarUrl((res.data.profile as any)?.avatar_url || null))
+      .catch(() => setAvatarUrl(null));
   }, []);
 
   const postList = Array.isArray(posts) ? posts : [];
   const announcementList = Array.isArray(announcements) ? announcements : [];
   const sectionList = Array.isArray(sections) ? sections : [];
+  const mySection = sectionList[0] || null;
 
-  // ✅ Handle create post with media
   const handleCreatePost = async (data: { content: string; media_urls?: string[] }) => {
     await createPost(data);
   };
 
+  const emptyFeedMessage: Record<FeedFilter, string> = {
+    all: '',
+    following: "You're not following anyone yet.",
+    section: mySection ? 'Section-specific feeds are coming soon.' : 'Join a section to see section posts.',
+    saved: "You haven't saved any posts yet.",
+  };
+
   return (
-    <div className="max-w-3xl mx-auto py-8 px-4">
-      {/* Welcome Section */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">
-          Welcome, {user?.username || 'Student'}! 👋
-        </h1>
-        <p className="text-gray-600">Stay updated with your classes and announcements</p>
+    <div className="min-h-screen bg-[#0a0a0a] text-white flex">
+      {/* Subtle grid background */}
+      <div
+        className="pointer-events-none fixed inset-0 opacity-[0.15]"
+        style={{
+          backgroundImage:
+            'linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)',
+          backgroundSize: '44px 44px',
+        }}
+      />
+
+      <Sidebar activeSection={activeSection} onNavigate={setActiveSection} />
+
+      <div className="flex-1 min-w-0 flex flex-col">
+        <Topbar avatarUrl={avatarUrl} />
+
+        <main className="relative flex-1 max-w-6xl w-full mx-auto px-4 py-6 lg:px-8">
+          {activeSection === 'feed' && (
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+              {/* Center - Feed */}
+              <div className="xl:col-span-2 space-y-6 min-w-0">
+                {/* Greeting */}
+                <div className="rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a]/60 backdrop-blur-xl p-6 flex items-center justify-between">
+                  <div>
+                    <h1 className="text-xl font-semibold text-white">
+                      Good morning, <span className="text-[#00d4ff]">{user?.username || 'Student'}</span>! 👋
+                    </h1>
+                    <p className="text-sm text-[#a0a0a0] mt-1">
+                      Stay updated with your classes, peers, and announcements.
+                    </p>
+                  </div>
+                  <div className="hidden sm:flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-[#00d4ff]/30 bg-[#00d4ff]/10">
+                    <CodeXml className="h-5 w-5 text-[#00d4ff]" />
+                  </div>
+                </div>
+
+                <FeedTabs active={feedFilter} onChange={setFeedFilter} />
+
+                <CreatePost onCreatePost={handleCreatePost} isLoading={isPosting} dark />
+
+                <div className="space-y-4">
+                  {feedFilter !== 'all' ? (
+                    <div className="rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a]/60 backdrop-blur-xl p-10 text-center">
+                      <p className="text-sm text-[#6b6b6b]">{emptyFeedMessage[feedFilter]}</p>
+                    </div>
+                  ) : postsLoading && postList.length === 0 ? (
+                    <div className="space-y-4">
+                      {[0, 1, 2].map((i) => (
+                        <div
+                          key={i}
+                          className="rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a]/40 p-6 animate-pulse"
+                        >
+                          <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 rounded-full bg-[#2a2a2a]" />
+                            <div className="space-y-2">
+                              <div className="h-3 w-32 rounded bg-[#2a2a2a]" />
+                              <div className="h-2 w-20 rounded bg-[#2a2a2a]" />
+                            </div>
+                          </div>
+                          <div className="h-3 w-full rounded bg-[#2a2a2a] mb-2" />
+                          <div className="h-3 w-2/3 rounded bg-[#2a2a2a]" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : postList.length === 0 ? (
+                    <div className="rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a]/60 backdrop-blur-xl p-10 text-center">
+                      <p className="text-[#a0a0a0]">No posts yet. Check back later!</p>
+                    </div>
+                  ) : (
+                    postList.map((post) => (
+                      <PostCard
+                        key={post.id}
+                        {...post}
+                        onLike={toggleLike}
+                        onDelete={deletePost}
+                        onEdit={editPost}
+                        dark
+                      />
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Right sidebar */}
+              <div className="space-y-6 xl:sticky xl:top-24 xl:self-start xl:max-h-[calc(100vh-7rem)] xl:overflow-y-auto xl:pr-1 themed-scrollbar">
+                <AnnouncementWidget
+                  announcements={announcementList}
+                  isLoading={announcementsLoading}
+                  onViewAll={() => setActiveSection('announcements')}
+                />
+                <SectionWidget
+                  section={mySection}
+                  isLoading={sectionsLoading}
+                  onGoToSection={() => setActiveSection('sections')}
+                />
+                <EventCardList />
+              </div>
+            </div>
+          )}
+
+          {activeSection === 'announcements' && (
+            <div className="max-w-2xl mx-auto space-y-4">
+              <h2 className="text-lg font-semibold text-white mb-2">Announcements</h2>
+              <AnnouncementFilterBar
+                search={announcementSearch}
+                onSearchChange={setAnnouncementSearch}
+                category={announcementCategory}
+                onCategoryChange={setAnnouncementCategory}
+              />
+              {announcementsLoading ? (
+                <div className="rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a]/60 p-8 text-center text-[#6b6b6b]">
+                  Loading announcements...
+                </div>
+              ) : announcementList.length === 0 ? (
+                <div className="rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a]/60 p-8 text-center text-[#6b6b6b]">
+                  No announcements for your sections yet.
+                </div>
+              ) : (
+                (() => {
+                  const filtered = announcementList.filter((a) =>
+                    matchesAnnouncementFilters(a, announcementSearch, announcementCategory)
+                  );
+                  return filtered.length === 0 ? (
+                    <div className="rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a]/60 p-8 text-center text-[#6b6b6b]">
+                      No announcements match your filters.
+                    </div>
+                  ) : (
+                    filtered.map((announcement) => (
+                      <AnnouncementCard key={announcement.id} announcement={announcement} />
+                    ))
+                  );
+                })()
+              )}
+            </div>
+          )}
+
+          {activeSection === 'sections' && (
+            <div className="max-w-2xl mx-auto space-y-4">
+              <h2 className="text-lg font-semibold text-white mb-2">Sections</h2>
+              {sectionsLoading ? (
+                <div className="rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a]/60 p-8 text-center text-[#6b6b6b]">
+                  Loading your sections...
+                </div>
+              ) : sectionList.length === 0 ? (
+                <div className="rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a]/60 p-8 text-center">
+                  <p className="text-[#6b6b6b]">You are not enrolled in any sections yet.</p>
+                  <p className="text-sm text-[#4a4a4a] mt-2">Contact your professor to be added to a section.</p>
+                </div>
+              ) : (
+                sectionList.map((section) => (
+                  <SectionCard key={section.id} section={section} onRefresh={refetchSections} />
+                ))
+              )}
+            </div>
+          )}
+        </main>
       </div>
-
-      {/* Tabs */}
-      <div className="flex items-center gap-4 mb-6 border-b border-gray-200">
-        <button
-          onClick={() => setActiveTab('posts')}
-          className={`px-4 py-2 font-medium transition flex items-center gap-2 ${
-            activeTab === 'posts'
-              ? 'text-blue-600 border-b-2 border-blue-600'
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          <DocumentTextIcon className="h-5 w-5" />
-          Feed
-          {postList.length > 0 && (
-            <span className="bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full text-xs">
-              {postList.length}
-            </span>
-          )}
-        </button>
-        <button
-          onClick={() => setActiveTab('announcements')}
-          className={`px-4 py-2 font-medium transition flex items-center gap-2 ${
-            activeTab === 'announcements'
-              ? 'text-blue-600 border-b-2 border-blue-600'
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          <MegaphoneIcon className="h-5 w-5" />
-          Announcements
-          {announcementList.length > 0 && (
-            <span className="bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full text-xs">
-              {announcementList.length}
-            </span>
-          )}
-        </button>
-        <button
-          onClick={() => setActiveTab('sections')}
-          className={`px-4 py-2 font-medium transition flex items-center gap-2 ${
-            activeTab === 'sections'
-              ? 'text-blue-600 border-b-2 border-blue-600'
-              : 'text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          <UsersIcon className="h-5 w-5" />
-          Sections
-          {sectionList.length > 0 && (
-            <span className="bg-green-100 text-green-600 px-2 py-0.5 rounded-full text-xs">
-              {sectionList.length}
-            </span>
-          )}
-        </button>
-      </div>
-
-      {/* Posts Tab */}
-      {activeTab === 'posts' && (
-        <>
-          {/* ✅ Pass handleCreatePost instead of createPost directly */}
-          <CreatePost onCreatePost={handleCreatePost} isLoading={isPosting} />
-
-          <div className="space-y-4 mt-6">
-            {postsLoading && postList.length === 0 ? (
-              <Card variant="glass" className="text-center py-8">
-                <p className="text-gray-500">Loading posts...</p>
-              </Card>
-            ) : postList.length === 0 ? (
-              <Card variant="glass" className="text-center py-8">
-                <p className="text-gray-500">No posts yet. Check back later!</p>
-              </Card>
-            ) : (
-              postList.map((post) => (
-                <PostCard
-                  key={post.id}
-                  {...post}
-                  onLike={toggleLike}
-                  onDelete={deletePost}
-                  onEdit={editPost}
-                />
-              ))
-            )}
-          </div>
-        </>
-      )}
-
-      {/* Announcements Tab */}
-      {activeTab === 'announcements' && (
-        <>
-          <div className="space-y-4">
-            {announcementsLoading ? (
-              <Card variant="glass" className="text-center py-8">
-                <p className="text-gray-500">Loading announcements...</p>
-              </Card>
-            ) : announcementList.length === 0 ? (
-              <Card variant="glass" className="text-center py-8">
-                <p className="text-gray-500">No announcements for your sections yet.</p>
-              </Card>
-            ) : (
-              announcementList.map((announcement) => (
-                <AnnouncementCard
-                  key={announcement.id}
-                  announcement={announcement}
-                />
-              ))
-            )}
-          </div>
-        </>
-      )}
-
-      {/* Sections Tab */}
-      {activeTab === 'sections' && (
-        <>
-          <div className="space-y-4">
-            {sectionsLoading ? (
-              <Card variant="glass" className="text-center py-8">
-                <p className="text-gray-500">Loading your sections...</p>
-              </Card>
-            ) : sectionList.length === 0 ? (
-              <Card variant="glass" className="text-center py-8">
-                <p className="text-gray-500">You are not enrolled in any sections yet.</p>
-                <p className="text-sm text-gray-400 mt-2">Contact your professor to be added to a section.</p>
-              </Card>
-            ) : (
-              sectionList.map((section) => (
-                <SectionCard
-                  key={section.id}
-                  section={section}
-                  onRefresh={refetchSections}
-                />
-              ))
-            )}
-          </div>
-        </>
-      )}
     </div>
   );
 }
