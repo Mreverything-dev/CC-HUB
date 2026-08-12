@@ -171,7 +171,18 @@ async def end_stream(
     """End a livestream"""
     service = LivestreamService(db)
     stream = await service.end_stream(stream_id, str(current_user.id))
-    
+
+    # Ending via REST doesn't itself disconnect the host's Socket.IO
+    # connection - it's a single connection shared by the whole app, so it
+    # stays open after navigating away. Without this, viewers would only
+    # ever find out the stream ended by fully closing/logging out, so
+    # broadcast it immediately and clear the in-memory host/viewer tracking.
+    from app.websocket.manager import manager, sio
+
+    await sio.emit('stream:host_left', {'stream_id': stream_id}, room=f"stream_{stream_id}")
+    manager.stream_hosts.pop(stream_id, None)
+    manager.stream_viewers.pop(stream_id, None)
+
     return {
         "id": str(stream.id),
         "host_id": str(stream.host_id),

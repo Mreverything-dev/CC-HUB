@@ -14,9 +14,10 @@ import { RoleBadge } from './RoleBadge';
 
 interface TopbarProps {
   avatarUrl: string | null;
+  onOpenFriends?: () => void;
 }
 
-export function Topbar({ avatarUrl }: TopbarProps) {
+export function Topbar({ avatarUrl, onOpenFriends }: TopbarProps) {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const { unreadCount, toggleWidget } = useChat();
@@ -38,7 +39,7 @@ export function Topbar({ avatarUrl }: TopbarProps) {
       {/* Actions */}
       <div className="flex items-center gap-2">
         <button
-          onClick={() => navigate('/friends')}
+          onClick={() => (onOpenFriends ? onOpenFriends() : navigate('/friends'))}
           title="Friends"
           className="p-2 text-[#a0a0a0] hover:text-[#00d4ff] transition rounded-xl hover:bg-white/5"
         >
@@ -58,7 +59,7 @@ export function Topbar({ avatarUrl }: TopbarProps) {
           )}
         </button>
 
-        <NotificationBell />
+        <NotificationBell onNavigateFriends={onOpenFriends} />
 
         <div className="w-px h-6 bg-[#2a2a2a] mx-1" />
 

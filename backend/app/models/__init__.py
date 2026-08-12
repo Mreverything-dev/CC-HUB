@@ -2,15 +2,15 @@
 from app.models.user import User, Role, Permission
 from app.models.profile import StudentProfile, ProfessorProfile, AdminProfile
 from app.models.section import Section, SectionMember
-from app.models.announcement import Announcement, AnnouncementTarget
+from app.models.announcement import Announcement, AnnouncementTarget, AnnouncementReaction, AnnouncementBookmark
 from app.models.post import Post, PostMedia
 from app.models.comment import Comment
 from app.models.like import Like
 from app.models.share import Share
-from app.models.friend import Friend, FriendRequest
+from app.models.friend import Friend, FriendRequest, BlockedUser, UserReport
 from app.models.conversation import Conversation, ConversationMember, Message
 from app.models.notification import Notification
-from app.models.livestream import Livestream, StreamViewer
+from app.models.livestream import Livestream, StreamViewer, StreamComment, StreamCommentReaction
 from app.models.invitation_code import InvitationCode
 
 __all__ = [
@@ -29,6 +29,8 @@ __all__ = [
     "Share",
     "Friend",
     "FriendRequest",
+    "BlockedUser",
+    "UserReport",
     "Announcement",
     "Message",
     "Conversation",
@@ -36,7 +38,9 @@ __all__ = [
     "Notification",
     "Livestream",
     "StreamViewer",
-    "Announcement", "AnnouncementTarget",
+    "StreamComment",
+    "StreamCommentReaction",
+    "Announcement", "AnnouncementTarget", "AnnouncementReaction", "AnnouncementBookmark",
     "Report",
     "InvitationCode"
 ]

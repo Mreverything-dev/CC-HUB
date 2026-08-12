@@ -136,6 +136,35 @@ export function useAnnouncements() {
     },
   });
 
+  // React to an announcement (add/change/remove)
+  const reactToAnnouncement = useMutation({
+    mutationFn: async ({ id, reaction }: { id: string; reaction: string }) => {
+      const response = await announcementApi.reactToAnnouncement(id, reaction);
+      return response.data;
+    },
+    onSuccess: (data) => {
+      updateAnnouncement(data.announcement_id, { reactions: data.reactions });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.detail || 'Failed to react to announcement');
+    },
+  });
+
+  // Save/unsave an announcement
+  const toggleBookmark = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await announcementApi.toggleBookmark(id);
+      return response.data;
+    },
+    onSuccess: (data) => {
+      updateAnnouncement(data.announcement_id, { is_bookmarked: data.is_bookmarked });
+      toast.success(data.is_bookmarked ? 'Saved announcement' : 'Removed from saved');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.detail || 'Failed to update saved announcements');
+    },
+  });
+
   return {
     announcements: announcements || [],
     isLoading,
@@ -144,6 +173,8 @@ export function useAnnouncements() {
     updateAnnouncement: updateAnnouncementMutation.mutateAsync,
     deleteAnnouncement: deleteAnnouncement.mutateAsync,
     togglePublish: togglePublish.mutateAsync,
+    reactToAnnouncement: reactToAnnouncement.mutateAsync,
+    toggleBookmark: toggleBookmark.mutateAsync,
     isCreating: createAnnouncement.isPending,
     isUpdating: updateAnnouncementMutation.isPending,
     isDeleting: deleteAnnouncement.isPending,

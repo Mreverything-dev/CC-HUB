@@ -5,7 +5,14 @@ import { formatDistanceToNow } from 'date-fns';
 import { useFriends } from '../hooks/useFriends';
 import { BellIcon } from '@heroicons/react/24/outline';
 
-export default function NotificationBell() {
+interface NotificationBellProps {
+  /** When provided (e.g. inside a Sidebar-based dashboard), friend-related
+   * notifications open the in-dashboard Friends section instead of
+   * navigating away to the standalone /friends page. */
+  onNavigateFriends?: () => void;
+}
+
+export default function NotificationBell({ onNavigateFriends }: NotificationBellProps = {}) {
   const navigate = useNavigate();
   const {
     notifications,
@@ -21,7 +28,11 @@ export default function NotificationBell() {
     }
     setIsOpen(false);
     if (type === 'friend_request' || type === 'friend_accepted') {
-      navigate('/friends');
+      if (onNavigateFriends) {
+        onNavigateFriends();
+      } else {
+        navigate('/friends');
+      }
     }
   };
 

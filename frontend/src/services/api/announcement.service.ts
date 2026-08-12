@@ -38,4 +38,17 @@ export const announcementApi = {
     console.log(`📡 API Call: PATCH /announcements/${id}/publish`, { is_published: isPublished });
     return api.patch(`/announcements/${id}/publish`, { is_published: isPublished });
   },
+
+  // Add/change/remove the current user's reaction
+  reactToAnnouncement: (id: string, reaction: string) => {
+    return api.post<{ announcement_id: string; user_id: string; reaction: string | null; reactions: { user_id: string; reaction: string }[] }>(
+      `/announcements/${id}/react`,
+      { reaction }
+    );
+  },
+
+  // Save/unsave (toggle)
+  toggleBookmark: (id: string) => {
+    return api.post<{ announcement_id: string; is_bookmarked: boolean }>(`/announcements/${id}/bookmark`);
+  },
 };

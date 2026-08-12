@@ -11,7 +11,8 @@ from app.schemas.announcement import (
     AnnouncementUpdate,
     AnnouncementResponse,
     AnnouncementListResponse,
-    AnnouncementFilters
+    AnnouncementFilters,
+    AnnouncementReactionRequest,
 )
 
 router = APIRouter()
@@ -70,9 +71,9 @@ async def get_announcement(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get a single announcement by ID"""
+    """Get a single announcement by ID - 403/404 if the caller can't view it"""
     service = AnnouncementService(db)
-    return await service.get_announcement(announcement_id)
+    return await service.get_announcement(announcement_id, str(current_user.id))
 
 # ============================================
 # CREATE ANNOUNCEMENT
@@ -136,7 +137,36 @@ async def toggle_publish(
     """Toggle publish status of an announcement"""
     service = AnnouncementService(db)
     return await service.toggle_publish_status(
-        announcement_id, 
-        str(current_user.id), 
+        announcement_id,
+        str(current_user.id),
         is_published
     )
+
+# ============================================
+# REACTIONS
+# ============================================
+
+@router.post("/{announcement_id}/react")
+async def react_to_announcement(
+    announcement_id: str,
+    data: AnnouncementReactionRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Add/change/remove the current user's reaction on an announcement"""
+    service = AnnouncementService(db)
+    return await service.react_to_announcement(announcement_id, str(current_user.id), data.reaction)
+
+# ============================================
+# BOOKMARKS
+# ============================================
+
+@router.post("/{announcement_id}/bookmark")
+async def toggle_bookmark(
+    announcement_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Save/unsave (toggle) an announcement for the current user"""
+    service = AnnouncementService(db)
+    return await service.toggle_bookmark(announcement_id, str(current_user.id))

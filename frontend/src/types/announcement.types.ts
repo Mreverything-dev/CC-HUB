@@ -1,4 +1,9 @@
 // frontend/src/types/announcement.types.ts
+export interface AnnouncementReactionEntry {
+  user_id: string;
+  reaction: string;
+}
+
 export interface Announcement {
   id: string;
   user_id: string;
@@ -8,12 +13,17 @@ export interface Announcement {
   priority: 'low' | 'normal' | 'high' | 'urgent';
   created_by_role: 'professor' | 'admin';
   created_by_username?: string | null;
+  created_by_avatar?: string | null;
   is_published: boolean;
   published_at: string;
   expires_at: string | null;
   created_at: string;
   updated_at: string;
   target_sections: string[] | null;
+  target_section_names: string[];
+  audience: string;
+  reactions: AnnouncementReactionEntry[];
+  is_bookmarked: boolean;
 }
 
 export interface AnnouncementCreate {

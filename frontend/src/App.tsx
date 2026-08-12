@@ -4,6 +4,7 @@ import { Login } from './features/auth/pages/Login';
 import { Register } from './features/auth/pages/Register';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import AnnouncementFeed from './features/announcements/components/AnnouncementFeed';
+import AnnouncementDetailPage from './features/announcements/components/AnnouncementDetailPage';
 import { QueryProvider } from './app/providers/QueryProvider';
 import PostsPage from './features/dashboard/pages/PostsPage';
 import ProfilePage from '@/features/profile/pages/ProfilePage';
@@ -117,6 +118,14 @@ function App() {
               }
             />
             <Route
+              path="/announcements/:announcementId"
+              element={
+                <ProtectedRoute>
+                  <AnnouncementDetailPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/posts"
               element={
                 <ProtectedRoute>
@@ -137,7 +146,9 @@ function App() {
               path="/friends"
               element={
                 <ProtectedRoute>
-                  <FriendsPage />
+                  <div className="min-h-screen bg-[#060B12] py-8 px-4">
+                    <FriendsPage />
+                  </div>
                 </ProtectedRoute>
               }
             />

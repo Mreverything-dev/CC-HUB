@@ -72,6 +72,11 @@ class AnnouncementUpdate(BaseModel):
 
 # ✅ REMOVED AnnouncementTargetResponse - not needed
 
+class AnnouncementReactionSummary(BaseModel):
+    user_id: str
+    reaction: str
+
+
 class AnnouncementResponse(BaseModel):
     id: str
     user_id: str
@@ -81,15 +86,20 @@ class AnnouncementResponse(BaseModel):
     priority: str
     created_by_role: str
     created_by_username: Optional[str] = None
+    created_by_avatar: Optional[str] = None
     is_published: bool
     published_at: datetime
     expires_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
     target_sections: Optional[List[str]] = None  # ✅ Keep this - it's the sections the announcement targets
-    
+    target_section_names: List[str] = Field(default_factory=list)
+    audience: str = "Public"
+    reactions: List[AnnouncementReactionSummary] = Field(default_factory=list)
+    is_bookmarked: bool = False
+
     model_config = ConfigDict(from_attributes=True)
-    
+
     # ✅ Convert UUID to string
     @field_validator('id', 'user_id', mode='before')
     @classmethod
@@ -97,6 +107,10 @@ class AnnouncementResponse(BaseModel):
         if isinstance(v, uuid.UUID):
             return str(v)
         return v
+
+
+class AnnouncementReactionRequest(BaseModel):
+    reaction: str = Field(..., min_length=1, max_length=16)
 
 # ============================================
 # LIST RESPONSE SCHEMA

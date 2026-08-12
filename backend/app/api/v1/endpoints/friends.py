@@ -8,7 +8,8 @@ from app.services.friend_service import FriendService
 from app.schemas.friend import (
     FriendRequestCreate, FriendRequestUpdate,
     FriendRequestResponse, FriendResponse,
-    FriendListResponse, FriendRequestListResponse
+    FriendListResponse, FriendRequestListResponse,
+    SuggestionResponse, BlockedUserListResponse, UserReportCreate
 )
 from typing import List
 
@@ -82,6 +83,68 @@ async def remove_friend(
     """Remove a friend"""
     service = FriendService(db)
     return await service.remove_friend(str(current_user.id), friend_id)
+
+# ============================================
+# SUGGESTIONS
+# ============================================
+
+@router.get("/suggestions", response_model=List[SuggestionResponse])
+async def get_suggestions(
+    limit: int = Query(20, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get friend suggestions ranked by mutual friend count"""
+    service = FriendService(db)
+    return await service.get_suggestions(str(current_user.id), limit)
+
+# ============================================
+# BLOCKING
+# ============================================
+
+@router.get("/blocked", response_model=BlockedUserListResponse)
+async def get_blocked_users(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get the current user's blocked users"""
+    service = FriendService(db)
+    return await service.get_blocked_users(str(current_user.id))
+
+@router.post("/block/{user_id}")
+async def block_user(
+    user_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Block a user"""
+    service = FriendService(db)
+    return await service.block_user(str(current_user.id), user_id)
+
+@router.delete("/block/{user_id}")
+async def unblock_user(
+    user_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Unblock a user"""
+    service = FriendService(db)
+    return await service.unblock_user(str(current_user.id), user_id)
+
+# ============================================
+# REPORTING
+# ============================================
+
+@router.post("/report/{user_id}")
+async def report_user(
+    user_id: str,
+    data: UserReportCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Report a user"""
+    service = FriendService(db)
+    return await service.report_user(str(current_user.id), user_id, data.reason, data.details)
 
 # ============================================
 # NOTIFICATIONS

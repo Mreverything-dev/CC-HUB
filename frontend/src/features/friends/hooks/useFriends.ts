@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { friendApi } from '@/services/api/friend.service';
 import { useFriendStore } from '../store/friend.store';
 import { socketService } from '@/lib/socket';
-import { FriendRequestCreate, FriendRequestUpdate } from '@/types/friend.types';
+import { FriendRequestCreate, FriendRequestUpdate, UserReportCreate } from '@/types/friend.types';
 import toast from 'react-hot-toast';
 
 export function useFriends() {
@@ -26,7 +26,7 @@ export function useFriends() {
   } = useFriendStore();
 
   // Get friends
-  const { isLoading: isLoadingFriends, refetch: refetchFriends } = useQuery({
+  const { isLoading: isLoadingFriends, isError: isFriendsError, refetch: refetchFriends } = useQuery({
     queryKey: ['friends'],
     queryFn: async () => {
       const response = await friendApi.getFriends();
@@ -53,6 +53,34 @@ export function useFriends() {
       setNotifications(response.data.notifications);
       setUnreadNotifications(response.data.unread_count);
       return response.data;
+    },
+  });
+
+  // Get friend suggestions
+  const {
+    data: suggestions = [],
+    isLoading: isLoadingSuggestions,
+    isError: isSuggestionsError,
+    refetch: refetchSuggestions,
+  } = useQuery({
+    queryKey: ['friendSuggestions'],
+    queryFn: async () => {
+      const response = await friendApi.getSuggestions();
+      return response.data;
+    },
+  });
+
+  // Get blocked users
+  const {
+    data: blockedUsers = [],
+    isLoading: isLoadingBlocked,
+    isError: isBlockedError,
+    refetch: refetchBlocked,
+  } = useQuery({
+    queryKey: ['blockedUsers'],
+    queryFn: async () => {
+      const response = await friendApi.getBlockedUsers();
+      return response.data.blocked;
     },
   });
 
@@ -112,6 +140,47 @@ export function useFriends() {
     },
   });
 
+  // Block a user
+  const blockUser = useMutation({
+    mutationFn: (userId: string) => friendApi.blockUser(userId),
+    onSuccess: (_, userId) => {
+      removeFriend(userId);
+      toast.success('User blocked');
+      queryClient.invalidateQueries({ queryKey: ['friends'] });
+      queryClient.invalidateQueries({ queryKey: ['friendRequests'] });
+      queryClient.invalidateQueries({ queryKey: ['friendSuggestions'] });
+      queryClient.invalidateQueries({ queryKey: ['blockedUsers'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.detail || 'Failed to block user');
+    },
+  });
+
+  // Unblock a user
+  const unblockUser = useMutation({
+    mutationFn: (userId: string) => friendApi.unblockUser(userId),
+    onSuccess: () => {
+      toast.success('User unblocked');
+      queryClient.invalidateQueries({ queryKey: ['blockedUsers'] });
+      queryClient.invalidateQueries({ queryKey: ['friendSuggestions'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.detail || 'Failed to unblock user');
+    },
+  });
+
+  // Report a user
+  const reportUser = useMutation({
+    mutationFn: ({ userId, data }: { userId: string; data: UserReportCreate }) =>
+      friendApi.reportUser(userId, data),
+    onSuccess: () => {
+      toast.success('Report submitted. Our team will review it.');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.detail || 'Failed to submit report');
+    },
+  });
+
   // Mark notification as read
   const markRead = useMutation({
     mutationFn: (notificationId: string) => friendApi.markNotificationRead(notificationId),
@@ -156,15 +225,27 @@ export function useFriends() {
     friendRequests,
     notifications,
     unreadNotifications,
+    suggestions,
+    blockedUsers,
     isLoading: isLoadingFriends,
+    isFriendsError,
+    isLoadingSuggestions,
+    isSuggestionsError,
+    isLoadingBlocked,
+    isBlockedError,
     sendFriendRequest: sendFriendRequest.mutateAsync,
     respondToFriendRequest: respondToFriendRequest.mutateAsync,
     cancelFriendRequest: cancelFriendRequest.mutateAsync,
     removeFriend: removeFriendMutation.mutateAsync,
+    blockUser: blockUser.mutateAsync,
+    unblockUser: unblockUser.mutateAsync,
+    reportUser: reportUser.mutateAsync,
     markNotificationRead: markRead.mutateAsync,
     markAllNotificationsRead: markAllRead.mutateAsync,
     refetchFriends,
     refetchRequests,
     refetchNotifications,
+    refetchSuggestions,
+    refetchBlocked,
   };
 }

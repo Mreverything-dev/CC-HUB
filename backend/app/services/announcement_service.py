@@ -7,10 +7,13 @@ from fastapi import HTTPException, status
 from datetime import datetime
 import logging
 
-from app.models.announcement import Announcement, AnnouncementTarget
+from app.models.announcement import Announcement, AnnouncementTarget, AnnouncementReaction, AnnouncementBookmark
 from app.models.user import User
+from app.models.profile import StudentProfile, ProfessorProfile, AdminProfile
 from app.models.section import Section, SectionMember
 from app.schemas.announcement import AnnouncementCreate, AnnouncementUpdate
+
+ALLOWED_REACTIONS = {"❤️", "😂", "🔥", "👍", "😮", "😢", "🚀"}
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +25,86 @@ class AnnouncementService:
     # GET USER HELPER METHODS
     # ============================================
     
-    def _attach_author_username(self, announcement: Announcement) -> Announcement:
-        """Attach the author's username - required by AnnouncementResponse but not a real column"""
+    async def _get_avatar_url(self, user_id: str, role: str) -> Optional[str]:
+        model = {
+            "student": StudentProfile,
+            "professor": ProfessorProfile,
+            "admin": AdminProfile,
+        }.get(role)
+        if not model:
+            return None
+        result = await self.db.execute(
+            select(model.avatar_url).where(model.user_id == user_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def _enrich(self, announcement: Announcement, viewer_id: str) -> Announcement:
+        """Attach display-only fields required by AnnouncementResponse that
+        aren't real columns: author display info, resolved section names/
+        audience label, reactions, and whether the viewer has bookmarked it."""
         announcement.created_by_username = announcement.user.username if announcement.user else None
+        announcement.created_by_avatar = (
+            await self._get_avatar_url(str(announcement.user_id), announcement.user.role)
+            if announcement.user else None
+        )
+
+        section_target_ids = [t.target_id for t in (announcement.targets or []) if t.target_type == "section"]
+        if section_target_ids:
+            section_result = await self.db.execute(
+                select(Section.name).where(Section.id.in_(section_target_ids))
+            )
+            names = list(section_result.scalars().all())
+            announcement.target_section_names = names
+            announcement.audience = ", ".join(names) if names else "Public"
+        else:
+            announcement.target_section_names = []
+            announcement.audience = "Public"
+
+        reaction_result = await self.db.execute(
+            select(AnnouncementReaction).where(AnnouncementReaction.announcement_id == announcement.id)
+        )
+        announcement.reactions = [
+            {"user_id": str(r.user_id), "reaction": r.reaction} for r in reaction_result.scalars().all()
+        ]
+
+        bookmark_result = await self.db.execute(
+            select(AnnouncementBookmark).where(
+                AnnouncementBookmark.announcement_id == announcement.id,
+                AnnouncementBookmark.user_id == viewer_id,
+            )
+        )
+        announcement.is_bookmarked = bookmark_result.scalar_one_or_none() is not None
+
         return announcement
+
+    async def _can_view(self, user: User, announcement: Announcement) -> bool:
+        """Same visibility rules already applied by get_announcements' role-based
+        queries, but evaluable against a single already-loaded announcement so
+        GET /announcements/{id} can enforce them too instead of trusting the
+        client to only ever request IDs it saw in its own feed."""
+        # Owner and admins can always view (including their own drafts).
+        if str(announcement.user_id) == str(user.id) or user.role == "admin":
+            return True
+
+        if not announcement.is_published:
+            return False
+
+        if announcement.created_by_role == "admin":
+            return True
+
+        # Professor-authored announcement.
+        if user.role in ("professor", "admin"):
+            return True
+
+        if user.role == "student":
+            section_target_ids = [t.target_id for t in (announcement.targets or []) if t.target_type == "section"]
+            if not section_target_ids:
+                # No section-specific targeting => visible to every student.
+                return True
+            student_sections = await self.get_student_sections(str(user.id))
+            return any(sid in student_sections for sid in section_target_ids)
+
+        return False
 
     async def get_user(self, user_id: str) -> User:
         """Get user by ID"""
@@ -169,7 +248,7 @@ class AnnouncementService:
         unique_announcements.sort(key=lambda x: x.created_at, reverse=True)
 
         for ann in unique_announcements:
-            self._attach_author_username(ann)
+            await self._enrich(ann, user_id)
 
         logger.info(f"📢 Total unique announcements: {len(unique_announcements)}")
         return unique_announcements
@@ -281,10 +360,12 @@ class AnnouncementService:
         announcement = result.scalar_one()
 
         logger.info(f"📝 Announcement created with {len(announcement.targets) if announcement.targets else 0} targets")
-        return self._attach_author_username(announcement)
+        return await self._enrich(announcement, user_id)
 
-    async def get_announcement(self, announcement_id: str) -> Announcement:
-        """Get a single announcement by ID"""
+    async def get_announcement(self, announcement_id: str, viewer_id: str) -> Announcement:
+        """Get a single announcement by ID - enforces the same visibility
+        rules as the feed (get_announcements), so a user can't view an
+        announcement just by knowing/guessing its ID."""
         result = await self.db.execute(
             select(Announcement)
             .options(selectinload(Announcement.targets), selectinload(Announcement.user))
@@ -296,16 +377,24 @@ class AnnouncementService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Announcement not found"
             )
-        return self._attach_author_username(announcement)
+
+        viewer = await self.get_user(viewer_id)
+        if not await self._can_view(viewer, announcement):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to view this announcement"
+            )
+
+        return await self._enrich(announcement, viewer_id)
 
     async def update_announcement(
-        self, 
-        announcement_id: str, 
-        user_id: str, 
+        self,
+        announcement_id: str,
+        user_id: str,
         data: AnnouncementUpdate
     ) -> Announcement:
         """Update an announcement"""
-        announcement = await self.get_announcement(announcement_id)
+        announcement = await self.get_announcement(announcement_id, user_id)
         
         # Check if user is the creator or admin
         if str(announcement.user_id) != user_id:
@@ -354,11 +443,11 @@ class AnnouncementService:
         )
         announcement = result.scalar_one()
 
-        return self._attach_author_username(announcement)
+        return await self._enrich(announcement, user_id)
 
     async def delete_announcement(self, announcement_id: str, user_id: str) -> dict:
         """Delete an announcement"""
-        announcement = await self.get_announcement(announcement_id)
+        announcement = await self.get_announcement(announcement_id, user_id)
         
         # Check if user is the creator or admin
         if str(announcement.user_id) != user_id:
@@ -381,7 +470,7 @@ class AnnouncementService:
         is_published: bool
     ) -> dict:
         """Toggle publish status of an announcement"""
-        announcement = await self.get_announcement(announcement_id)
+        announcement = await self.get_announcement(announcement_id, user_id)
         
         # Check if user is the creator or admin
         if str(announcement.user_id) != user_id:
@@ -398,3 +487,87 @@ class AnnouncementService:
         
         status_text = "published" if is_published else "unpublished"
         return {"message": f"Announcement {status_text} successfully"}
+
+    # ============================================
+    # REACTIONS & BOOKMARKS
+    # ============================================
+
+    async def _get_viewable_announcement(self, announcement_id: str, user_id: str) -> Announcement:
+        result = await self.db.execute(
+            select(Announcement)
+            .options(selectinload(Announcement.targets))
+            .where(Announcement.id == announcement_id)
+        )
+        announcement = result.scalar_one_or_none()
+        if not announcement:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Announcement not found")
+
+        user = await self.get_user(user_id)
+        if not await self._can_view(user, announcement):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to access this announcement",
+            )
+        return announcement
+
+    async def react_to_announcement(self, announcement_id: str, user_id: str, reaction: str) -> dict:
+        """Add/change/remove the caller's reaction. Same reaction twice removes
+        it; a different reaction replaces it - mirrors the livestream comment
+        reaction behavior for consistency, without touching that system."""
+        if reaction not in ALLOWED_REACTIONS:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported reaction")
+
+        await self._get_viewable_announcement(announcement_id, user_id)
+
+        existing_result = await self.db.execute(
+            select(AnnouncementReaction).where(
+                AnnouncementReaction.announcement_id == announcement_id,
+                AnnouncementReaction.user_id == user_id,
+            )
+        )
+        existing = existing_result.scalar_one_or_none()
+
+        if existing and existing.reaction == reaction:
+            await self.db.delete(existing)
+            new_reaction = None
+        elif existing:
+            existing.reaction = reaction
+            new_reaction = reaction
+        else:
+            self.db.add(AnnouncementReaction(announcement_id=announcement_id, user_id=user_id, reaction=reaction))
+            new_reaction = reaction
+
+        await self.db.commit()
+
+        reaction_result = await self.db.execute(
+            select(AnnouncementReaction).where(AnnouncementReaction.announcement_id == announcement_id)
+        )
+        return {
+            "announcement_id": str(announcement_id),
+            "user_id": str(user_id),
+            "reaction": new_reaction,
+            "reactions": [
+                {"user_id": str(r.user_id), "reaction": r.reaction} for r in reaction_result.scalars().all()
+            ],
+        }
+
+    async def toggle_bookmark(self, announcement_id: str, user_id: str) -> dict:
+        """Save/unsave an announcement for the current user."""
+        await self._get_viewable_announcement(announcement_id, user_id)
+
+        existing_result = await self.db.execute(
+            select(AnnouncementBookmark).where(
+                AnnouncementBookmark.announcement_id == announcement_id,
+                AnnouncementBookmark.user_id == user_id,
+            )
+        )
+        existing = existing_result.scalar_one_or_none()
+
+        if existing:
+            await self.db.delete(existing)
+            await self.db.commit()
+            return {"announcement_id": str(announcement_id), "is_bookmarked": False}
+
+        self.db.add(AnnouncementBookmark(announcement_id=announcement_id, user_id=user_id))
+        await self.db.commit()
+        return {"announcement_id": str(announcement_id), "is_bookmarked": True}

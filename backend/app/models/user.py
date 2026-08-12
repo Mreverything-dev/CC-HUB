@@ -33,6 +33,7 @@ class User(Base):
     is_verified = Column(Boolean, default=False)
     role = Column(String(50), default='student')  # Changed from Enum
     last_login = Column(DateTime)
+    last_seen = Column(DateTime)  # updated on WS connect/disconnect - see app/websocket/manager.py
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     livestreams = relationship("Livestream", back_populates="host", cascade="all, delete-orphan")

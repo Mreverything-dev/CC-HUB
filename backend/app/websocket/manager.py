@@ -2,6 +2,7 @@
 import socketio
 from typing import Dict, List, Any
 import logging
+from fastapi import HTTPException
 from app.services.chat_service import ChatService
 from app.core.database import AsyncSessionLocal
 from app.core.security import decode_token
@@ -41,11 +42,12 @@ class SocketManager:
                 'user_id': user_id,
                 'sid': sid
             }
-            
+
             logger.info(f"✅ User {user_id} connected with SID {sid}")
             await sio.emit('connected', {'user_id': user_id}, room=sid)
+            await self._touch_last_seen(user_id)
             return True
-            
+
         except Exception as e:
             logger.error(f"❌ Connection error: {e}")
             await sio.emit('error', {'message': str(e)}, room=sid)
@@ -57,8 +59,28 @@ class SocketManager:
             user_id = self.active_connections[sid]['user_id']
             logger.info(f"👋 User {user_id} disconnected")
             del self.active_connections[sid]
+            # Only stamp last_seen if the user has no other active connections
+            # (e.g. multiple tabs) left.
+            if not any(c['user_id'] == user_id for c in self.active_connections.values()):
+                await self._touch_last_seen(user_id)
 
         await self.cleanup_stream_connection(sid)
+
+    async def _touch_last_seen(self, user_id: str):
+        """Persist a fresh last_seen timestamp for a user - best effort."""
+        try:
+            from app.models.user import User
+            async with AsyncSessionLocal() as db:
+                await db.execute(
+                    update(User).where(User.id == user_id).values(last_seen=datetime.utcnow())
+                )
+                await db.commit()
+        except Exception as e:
+            logger.error(f"❌ Failed to update last_seen for {user_id}: {e}")
+
+    def get_online_user_ids(self) -> set:
+        """User IDs with at least one active WebSocket connection right now."""
+        return {conn['user_id'] for conn in self.active_connections.values()}
 
     async def cleanup_stream_connection(self, sid: str):
         """Tear down any livestream host/viewer state held by this sid"""
@@ -334,10 +356,16 @@ async def stream_host_start(sid, data):
         await sio.enter_room(sid, _stream_room(stream_id))
         logger.info(f"📡 Host {user_id} started broadcasting stream {stream_id}")
 
-        # Re-announce to any viewers who were already waiting (e.g. host
-        # briefly reconnected) so they can (re)request an offer.
+        # Tell the host about any viewers who already joined the room while
+        # nobody was broadcasting yet (or reconnected), reusing the same
+        # event/payload shape as a live join so the existing
+        # stream:viewer_ready handler on the host just sends them an offer.
         for viewer_sid in manager.stream_viewers.get(stream_id, set()):
-            await sio.emit('stream:host_ready', {'stream_id': stream_id, 'viewer_sid': viewer_sid}, room=sid)
+            await sio.emit(
+                'stream:viewer_ready',
+                {'stream_id': stream_id, 'viewer_sid': viewer_sid},
+                room=sid,
+            )
     except Exception as e:
         logger.error(f"❌ Error starting stream host: {e}")
         await sio.emit('stream:error', {'message': str(e)}, room=sid)
@@ -346,12 +374,21 @@ async def stream_host_start(sid, data):
 async def stream_viewer_join(sid, data):
     """Viewer requests to watch a stream - visibility/section access enforced here."""
     if sid not in manager.active_connections:
-        await sio.emit('stream:error', {'message': 'Not authenticated'}, room=sid)
+        await sio.emit('stream:error', {'code': 'NOT_AUTHENTICATED', 'message': 'Not authenticated'}, room=sid)
         return
 
     user_id = manager.active_connections[sid]['user_id']
     stream_id = data.get('stream_id')
     if not stream_id:
+        return
+
+    # Idempotent: if this sid already joined this stream (duplicate/retry
+    # call, reconnect race, etc.), don't re-run authorization or re-notify
+    # the host - that would make the host spin up a second, orphaned
+    # RTCPeerConnection for the same viewer instead of reusing the one
+    # already being negotiated.
+    if sid in manager.stream_viewers.get(stream_id, set()):
+        await sio.emit('stream:viewer_joined', {'stream_id': stream_id}, room=sid)
         return
 
     try:
@@ -362,7 +399,11 @@ async def stream_viewer_join(sid, data):
             service = LivestreamService(db)
             allowed = await service.can_view_stream(user_id, stream_id)
             if not allowed:
-                await sio.emit('stream:error', {'message': "You don't have permission to view this stream"}, room=sid)
+                await sio.emit(
+                    'stream:error',
+                    {'code': 'PERMISSION_DENIED', 'message': "You don't have permission to view this stream"},
+                    room=sid,
+                )
                 return
 
             user_result = await db.execute(select(User).where(User.id == user_id))
@@ -384,11 +425,26 @@ async def stream_viewer_join(sid, data):
                 },
                 room=host_sid,
             )
+            await sio.emit('stream:viewer_joined', {'stream_id': stream_id}, room=sid)
         else:
-            await sio.emit('stream:error', {'message': 'Host is not currently broadcasting'}, room=sid)
-    except Exception as e:
-        logger.error(f"❌ Error joining stream: {e}")
-        await sio.emit('stream:error', {'message': str(e)}, room=sid)
+            # Not an error condition - the viewer is validated and registered
+            # (see stream_host_start's catch-up loop), just waiting for the
+            # host to actually start broadcasting.
+            await sio.emit(
+                'stream:error',
+                {'code': 'HOST_OFFLINE', 'message': 'Host is not currently broadcasting yet.'},
+                room=sid,
+            )
+    except Exception:
+        # logger.exception() includes the full traceback - never send that
+        # detail to the client, only a generic, frontend-safe error.
+        logger.exception(f"❌ stream:viewer_join failed for user={user_id} stream={stream_id}")
+        manager.stream_viewers.get(stream_id, set()).discard(sid)
+        await sio.emit(
+            'stream:error',
+            {'code': 'STREAM_VIEWER_JOIN_FAILED', 'message': 'Unable to join the livestream.'},
+            room=sid,
+        )
 
 @sio.on('stream:leave')
 async def stream_leave(sid, data):
@@ -447,42 +503,93 @@ async def stream_ice_candidate(sid, data):
 
 @sio.on('stream:chat_message')
 async def stream_chat_message(sid, data):
-    """Live chat message for a stream - broadcast to host + all viewers"""
+    """Live chat message (or reply, when parent_comment_id is set) for a
+    stream - persisted, then broadcast to host + all viewers."""
     if sid not in manager.active_connections:
         return
     user_id = manager.active_connections[sid]['user_id']
     stream_id = data.get('stream_id')
     message = data.get('message')
+    parent_comment_id = data.get('parent_comment_id')
     if not stream_id or not message:
         return
 
     is_host = manager.stream_hosts.get(stream_id) == sid
     is_viewer = sid in manager.stream_viewers.get(stream_id, set())
     if not is_host and not is_viewer:
-        await sio.emit('stream:error', {'message': 'Join the stream before chatting'}, room=sid)
+        await sio.emit('stream:error', {'code': 'NOT_JOINED', 'message': 'Join the stream before chatting'}, room=sid)
         return
 
     try:
         async with AsyncSessionLocal() as db:
-            from app.services.chat_service import ChatService
-            from app.models.user import User
+            from app.services.stream_comment_service import StreamCommentService
 
-            user_result = await db.execute(select(User).where(User.id == user_id))
-            user = user_result.scalar_one_or_none()
-            service = ChatService(db)
-            avatar_url = await service._get_avatar_url(user_id, user.role) if user else None
+            service = StreamCommentService(db)
+            comment = await service.create_comment(stream_id, user_id, message, parent_comment_id)
 
-        await sio.emit(
-            'stream:chat_message',
-            {
-                'stream_id': stream_id,
-                'user_id': user_id,
-                'username': user.username if user else 'Unknown',
-                'avatar': avatar_url,
-                'message': message,
-                'timestamp': datetime.utcnow().isoformat(),
-            },
-            room=_stream_room(stream_id),
-        )
-    except Exception as e:
-        logger.error(f"❌ Error sending stream chat message: {e}")
+        await sio.emit('stream:chat_message', comment, room=_stream_room(stream_id))
+    except HTTPException as e:
+        await sio.emit('stream:error', {'code': 'COMMENT_FAILED', 'message': e.detail}, room=sid)
+    except Exception:
+        logger.exception(f"❌ Error sending stream chat message: user={user_id} stream={stream_id}")
+        await sio.emit('stream:error', {'code': 'COMMENT_FAILED', 'message': 'Unable to send your message.'}, room=sid)
+
+@sio.on('stream:comment_react')
+async def stream_comment_react(sid, data):
+    """Add/change/remove the caller's reaction on a comment - broadcasts the
+    resulting per-user reaction state so every client can update its own
+    local aggregate (see useLiveStreamSignaling on the frontend)."""
+    if sid not in manager.active_connections:
+        return
+    user_id = manager.active_connections[sid]['user_id']
+    stream_id = data.get('stream_id')
+    comment_id = data.get('comment_id')
+    reaction = data.get('reaction')
+    if not stream_id or not comment_id or not reaction:
+        return
+
+    is_host = manager.stream_hosts.get(stream_id) == sid
+    is_viewer = sid in manager.stream_viewers.get(stream_id, set())
+    if not is_host and not is_viewer:
+        await sio.emit('stream:error', {'code': 'NOT_JOINED', 'message': 'Join the stream before reacting'}, room=sid)
+        return
+
+    try:
+        async with AsyncSessionLocal() as db:
+            from app.services.stream_comment_service import StreamCommentService
+
+            service = StreamCommentService(db)
+            result = await service.react_to_comment(comment_id, user_id, reaction)
+
+        await sio.emit('stream:comment_reaction', result, room=_stream_room(stream_id))
+    except HTTPException as e:
+        await sio.emit('stream:error', {'code': 'REACTION_FAILED', 'message': e.detail}, room=sid)
+    except Exception:
+        logger.exception(f"❌ Error reacting to comment: user={user_id} comment={comment_id}")
+        await sio.emit('stream:error', {'code': 'REACTION_FAILED', 'message': 'Unable to react to that comment.'}, room=sid)
+
+@sio.on('stream:comment_delete')
+async def stream_comment_delete(sid, data):
+    """Delete (soft) a comment - only the comment's author or the stream
+    host may do this, enforced in StreamCommentService.delete_comment."""
+    if sid not in manager.active_connections:
+        return
+    user_id = manager.active_connections[sid]['user_id']
+    stream_id = data.get('stream_id')
+    comment_id = data.get('comment_id')
+    if not stream_id or not comment_id:
+        return
+
+    try:
+        async with AsyncSessionLocal() as db:
+            from app.services.stream_comment_service import StreamCommentService
+
+            service = StreamCommentService(db)
+            result = await service.delete_comment(comment_id, user_id)
+
+        await sio.emit('stream:comment_deleted', result, room=_stream_room(stream_id))
+    except HTTPException as e:
+        await sio.emit('stream:error', {'code': 'DELETE_FAILED', 'message': e.detail}, room=sid)
+    except Exception:
+        logger.exception(f"❌ Error deleting comment: user={user_id} comment={comment_id}")
+        await sio.emit('stream:error', {'code': 'DELETE_FAILED', 'message': 'Unable to delete that comment.'}, room=sid)

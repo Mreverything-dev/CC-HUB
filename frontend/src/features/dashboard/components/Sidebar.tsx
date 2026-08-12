@@ -13,6 +13,7 @@ import {
   CalendarIcon,
   BookOpenIcon,
   UserGroupIcon,
+  UserPlusIcon,
   Cog6ToothIcon,
   QuestionMarkCircleIcon,
   ArrowRightOnRectangleIcon,
@@ -22,7 +23,7 @@ import { profileService } from '@/services/api/profile.service';
 import { Avatar } from './Avatar';
 import { RoleBadge } from './RoleBadge';
 
-export type SidebarSection = 'feed' | 'announcements' | 'sections';
+export type SidebarSection = 'feed' | 'announcements' | 'sections' | 'friends';
 
 interface NavItem {
   id: string;
@@ -40,6 +41,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'classes', label: 'Classes', icon: AcademicCapIcon, comingSoon: true },
   { id: 'live', label: 'Live Streams', icon: VideoCameraIcon, href: '/livestreams' },
   { id: 'chat', label: 'Chat', icon: ChatBubbleLeftIcon, href: '/chat' },
+  { id: 'friends', label: 'Friends', icon: UserPlusIcon, section: 'friends' },
   { id: 'events', label: 'Events', icon: CalendarIcon, comingSoon: true },
   { id: 'resources', label: 'Resources', icon: BookOpenIcon, comingSoon: true },
   { id: 'groups', label: 'Groups', icon: UserGroupIcon, comingSoon: true },

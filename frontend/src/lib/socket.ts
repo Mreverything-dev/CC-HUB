@@ -330,8 +330,20 @@ class SocketService {
     this.emit('stream:ice_candidate', { stream_id: streamId, target_sid: targetSid, candidate });
   }
 
-  sendStreamChatMessage(streamId: string, message: string) {
-    this.emit('stream:chat_message', { stream_id: streamId, message });
+  sendStreamChatMessage(streamId: string, message: string, parentCommentId?: string | null) {
+    this.emit('stream:chat_message', {
+      stream_id: streamId,
+      message,
+      ...(parentCommentId ? { parent_comment_id: parentCommentId } : {}),
+    });
+  }
+
+  sendStreamCommentReaction(streamId: string, commentId: string, reaction: string) {
+    this.emit('stream:comment_react', { stream_id: streamId, comment_id: commentId, reaction });
+  }
+
+  deleteStreamComment(streamId: string, commentId: string) {
+    this.emit('stream:comment_delete', { stream_id: streamId, comment_id: commentId });
   }
 }
 

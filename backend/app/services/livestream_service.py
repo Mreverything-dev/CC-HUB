@@ -1,6 +1,7 @@
 # backend/app/services/livestream_service.py
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from app.models.livestream import Livestream, StreamViewer, StreamStatus, StreamVisibility
 from app.models.user import User
@@ -184,6 +185,7 @@ class LivestreamService:
             .where(StreamViewer.stream_id == stream_id)
             .values(left_at=datetime.utcnow(), is_active=False)
         )
+        stream.viewer_count = 0
         
         await self.db.commit()
         await self.db.refresh(stream)
@@ -254,29 +256,65 @@ class LivestreamService:
                 detail="You don't have permission to view this stream"
             )
         
-        # Check if already viewing
-        existing = await self.db.execute(
-            select(StreamViewer).where(
-                StreamViewer.stream_id == stream_id,
-                StreamViewer.user_id == user_id,
-                StreamViewer.is_active == True
+        try:
+            result = await self.db.execute(
+                select(StreamViewer)
+                .where(
+                    StreamViewer.stream_id == stream_id,
+                    StreamViewer.user_id == user_id,
+                    StreamViewer.is_active == True
+                )
+                .order_by(StreamViewer.joined_at.asc(), StreamViewer.id.asc())
             )
-        )
-        if not existing.scalar_one_or_none():
+            active_viewers = result.scalars().all()
+
+            if active_viewers:
+                primary_viewer = active_viewers[0]
+                duplicate_viewers = active_viewers[1:]
+
+                if duplicate_viewers:
+                    for duplicate in duplicate_viewers:
+                        duplicate.is_active = False
+                        duplicate.left_at = duplicate.left_at or primary_viewer.joined_at
+
+                    await self.db.execute(
+                        update(Livestream)
+                        .where(Livestream.id == stream_id)
+                        .values(viewer_count=func.greatest(func.coalesce(Livestream.viewer_count, 0) - len(duplicate_viewers), 0))
+                    )
+                    await self.db.flush()
+
+                await self.db.commit()
+                return {"joined": True}
+
             viewer = StreamViewer(
                 stream_id=stream_id,
                 user_id=user_id
             )
             self.db.add(viewer)
-            
-            # Increment viewer count
+
+            # Increment viewer count only for a new active viewer row.
             await self.db.execute(
                 update(Livestream)
                 .where(Livestream.id == stream_id)
                 .values(viewer_count=Livestream.viewer_count + 1)
             )
-        
-        await self.db.commit()
+
+            await self.db.commit()
+        except IntegrityError:
+            await self.db.rollback()
+            # A concurrent join may have inserted the active row first; treat
+            # that as a successful join and avoid double-counting.
+            recovery = await self.db.execute(
+                select(StreamViewer).where(
+                    StreamViewer.stream_id == stream_id,
+                    StreamViewer.user_id == user_id,
+                    StreamViewer.is_active == True
+                )
+            )
+            if recovery.scalar_one_or_none():
+                return {"joined": True}
+            raise
         return {"joined": True}
 
     async def remove_viewer(self, stream_id: str, user_id: str) -> dict:
@@ -286,21 +324,26 @@ class LivestreamService:
                 StreamViewer.stream_id == stream_id,
                 StreamViewer.user_id == user_id,
                 StreamViewer.is_active == True
-            )
+            ).order_by(StreamViewer.joined_at.asc(), StreamViewer.id.asc())
         )
-        viewer = result.scalar_one_or_none()
-        
-        if viewer:
+        active_viewers = result.scalars().all()
+
+        if active_viewers:
+            viewer = active_viewers[0]
+            duplicates = active_viewers[1:]
             viewer.is_active = False
             viewer.left_at = datetime.utcnow()
-            
-            # Decrement viewer count
+
+            for duplicate in duplicates:
+                duplicate.is_active = False
+                duplicate.left_at = duplicate.left_at or viewer.left_at
+
+            decrement_by = 1 + len(duplicates)
             await self.db.execute(
                 update(Livestream)
                 .where(Livestream.id == stream_id)
-                .values(viewer_count=Livestream.viewer_count - 1)
+                .values(viewer_count=func.greatest(func.coalesce(Livestream.viewer_count, 0) - decrement_by, 0))
             )
-            
             await self.db.commit()
         
         return {"left": True}

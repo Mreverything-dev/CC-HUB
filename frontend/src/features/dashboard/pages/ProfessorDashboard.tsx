@@ -20,6 +20,7 @@ import { FeedTabs, FeedFilter } from '@/features/dashboard/components/FeedTabs';
 import { AnnouncementWidget } from '@/features/dashboard/components/AnnouncementWidget';
 import { SectionWidget } from '@/features/dashboard/components/SectionWidget';
 import { EventCardList } from '@/features/dashboard/components/EventCard';
+import FriendsPage from '@/features/friends/components/FriendsPage';
 
 export default function ProfessorDashboard() {
   const { user } = useAuthStore();
@@ -96,7 +97,7 @@ export default function ProfessorDashboard() {
       <Sidebar activeSection={activeSection} onNavigate={setActiveSection} />
 
       <div className="flex-1 min-w-0 flex flex-col">
-        <Topbar avatarUrl={avatarUrl} />
+        <Topbar avatarUrl={avatarUrl} onOpenFriends={() => setActiveSection('friends')} />
 
         <main className="relative flex-1 max-w-6xl w-full mx-auto px-4 py-6 lg:px-8">
           {activeSection === 'feed' && (
@@ -245,6 +246,8 @@ export default function ProfessorDashboard() {
           )}
 
           {activeSection === 'sections' && <SectionManager />}
+
+          {activeSection === 'friends' && <FriendsPage />}
         </main>
       </div>
 

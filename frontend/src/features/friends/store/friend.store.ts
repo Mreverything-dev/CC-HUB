@@ -69,9 +69,10 @@ export const useFriendStore = create<FriendState>((set) => ({
     friends: [friend, ...state.friends]
   })),
   
-  // ✅ Remove a friend by ID
-  removeFriend: (id) => set((state) => ({
-    friends: state.friends.filter((f) => f.id !== id)
+  // ✅ Remove a friend by the OTHER user's id (what every caller actually passes -
+  // friendApi.removeFriend/blockUser both take the target user's id, not this Friend row's own id)
+  removeFriend: (userId) => set((state) => ({
+    friends: state.friends.filter((f) => f.user_id !== userId)
   })),
   
   setNotifications: (notifications) => set({ notifications }),
