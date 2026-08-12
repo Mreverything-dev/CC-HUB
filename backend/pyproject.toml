@@ -3,6 +3,7 @@ name = "ccs-hub-backend"
 version = "1.0.0"
 description = "CCS HUB - College of Computer Studies Backend"
 authors = ["CCS HUB Team <team@ccshub.edu.ph>"]
+package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.11"
