@@ -1,4 +1,4 @@
-﻿[tool.poetry]
+[tool.poetry]
 name = "ccs-hub-backend"
 version = "1.0.0"
 description = "CCS HUB - College of Computer Studies Backend"
