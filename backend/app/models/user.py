@@ -1,5 +1,6 @@
 ﻿# backend/app/models/user.py
 from sqlalchemy import Column, String, Boolean, DateTime, Enum, Table, ForeignKey, Text
+from app.core.db_types import UTCDateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -32,10 +33,10 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
     role = Column(String(50), default='student')  # Changed from Enum
-    last_login = Column(DateTime)
-    last_seen = Column(DateTime)  # updated on WS connect/disconnect - see app/websocket/manager.py
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_login = Column(UTCDateTime)
+    last_seen = Column(UTCDateTime)  # updated on WS connect/disconnect - see app/websocket/manager.py
+    created_at = Column(UTCDateTime, default=datetime.utcnow)
+    updated_at = Column(UTCDateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     livestreams = relationship("Livestream", back_populates="host", cascade="all, delete-orphan")
     # Relationships
     roles = relationship("Role", secondary=user_roles, back_populates="users")
@@ -70,7 +71,7 @@ class Role(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(50), unique=True, nullable=False)
     description = Column(String(255))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=datetime.utcnow)
     
     users = relationship("User", secondary=user_roles, back_populates="roles")
     permissions = relationship("Permission", secondary=role_permissions, back_populates="roles")
@@ -86,7 +87,7 @@ class Permission(Base):
     resource = Column(String(100))
     action = Column(String(50))
     description = Column(String(255))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=datetime.utcnow)
     
     roles = relationship("Role", secondary=role_permissions, back_populates="permissions")
     

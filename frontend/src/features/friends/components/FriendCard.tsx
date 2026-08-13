@@ -1,7 +1,7 @@
 // frontend/src/features/friends/components/FriendCard.tsx
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { formatDistanceToNow } from 'date-fns';
+import { formatRelativeTime } from '@/lib/formatters';
 import { ChatBubbleLeftIcon, EllipsisHorizontalIcon } from '@heroicons/react/24/outline';
 import { Friend } from '@/types/friend.types';
 import { FriendAvatar } from './FriendAvatar';
@@ -33,7 +33,7 @@ export function FriendCard({ friend, onMessage, onRemove, onBlock, onReport }: F
   const statusText = friend.is_online
     ? 'Online'
     : friend.last_seen
-    ? `Last seen ${formatDistanceToNow(new Date(friend.last_seen), { addSuffix: true })}`
+    ? `Last seen ${formatRelativeTime(friend.last_seen)}`
     : 'Offline';
 
   return (

@@ -5,6 +5,7 @@ import { useSections } from '@/features/sections/hooks/useSections';
 import { livestreamService } from '@/services/api/livestream.service';
 import { StreamVisibility } from '@/types/livestream.types';
 import { STREAM_CATEGORIES, categoryTag } from '../constants';
+import { todayLocalIso } from '@/lib/formatters';
 import toast from 'react-hot-toast';
 import {
   XMarkIcon,
@@ -202,7 +203,7 @@ export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalPro
   const isFormValid = titleValid && sectionValid && scheduleValid;
 
   const timezoneLabel = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = todayLocalIso();
 
   const handleSubmit = async () => {
     if (!isFormValid || isLoading) return;

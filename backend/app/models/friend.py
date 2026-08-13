@@ -1,5 +1,6 @@
 # backend/app/models/friend.py
 from sqlalchemy import Column, String, Text, ForeignKey, DateTime, Index
+from app.core.db_types import UTCDateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -12,8 +13,8 @@ class Friend(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
     friend_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=datetime.utcnow)
+    updated_at = Column(UTCDateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     user = relationship("User", foreign_keys=[user_id], back_populates="friends")
@@ -27,8 +28,8 @@ class FriendRequest(Base):
     receiver_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
     status = Column(String(20), default='pending')  # 'pending' | 'accepted' | 'rejected' | 'cancelled'
     message = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=datetime.utcnow)
+    updated_at = Column(UTCDateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     sender = relationship("User", foreign_keys=[sender_id], back_populates="sent_requests")
@@ -44,7 +45,7 @@ class BlockedUser(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     blocker_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     blocked_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=datetime.utcnow)
 
     blocker = relationship("User", foreign_keys=[blocker_id])
     blocked = relationship("User", foreign_keys=[blocked_id])
@@ -60,7 +61,7 @@ class UserReport(Base):
     reported_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     reason = Column(String(50), nullable=False)
     details = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=datetime.utcnow)
 
     reporter = relationship("User", foreign_keys=[reporter_id])
     reported = relationship("User", foreign_keys=[reported_id])

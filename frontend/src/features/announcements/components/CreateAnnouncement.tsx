@@ -17,6 +17,7 @@ import { useAnnouncements } from '../hooks/useAnnouncements';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { useSections } from '@/features/sections/hooks/useSections';
 import { mediaService } from '@/services/api/media.service';
+import { localInputToUtcIso } from '@/lib/formatters';
 import { AnnouncementCreate } from '@/types/announcement.types';
 
 // Keep in sync with backend ALLOWED_TYPES in app/api/v1/endpoints/media.py (images only here)
@@ -146,7 +147,11 @@ export function CreateAnnouncement({ onClose, defaultSectionId }: CreateAnnounce
       const announcementData = {
         ...formData,
         image_url: uploadedImageUrl,
-        expires_at: formData.expires_at || null,
+        // The datetime-local input holds the announcer's own local wall-clock
+        // time (e.g. 5:00 PM Manila) - convert it to a real UTC instant before
+        // sending, instead of letting the backend store "17:00" as if it were
+        // already UTC (which would make the announcement expire 8 hours early).
+        expires_at: formData.expires_at ? localInputToUtcIso(formData.expires_at) : null,
         // ✅ If no sections selected, target ALL postable sections
         target_sections: (user.role === 'professor' || isOfficer) && (formData.target_sections?.length ?? 0) === 0
           ? postableSections.map(s => s.id)

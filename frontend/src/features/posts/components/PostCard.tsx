@@ -1,7 +1,7 @@
 // frontend/src/features/posts/components/PostCard.tsx
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { formatDistanceToNow } from 'date-fns';
+import { formatRelativeTime } from '@/lib/formatters';
 import { XMarkIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import { Button } from '@/components/ui/Button/Button';
 import { Badge } from '@/components/ui/Badge/Badge';
@@ -210,7 +210,7 @@ export function PostCard({
                   )}
                 </div>
                 <div className={`flex items-center space-x-2 text-xs ${dark ? 'text-[#6b6b6b]' : 'text-gray-400'}`}>
-                  <span>{formatDistanceToNow(new Date(created_at), { addSuffix: true })}</span>
+                  <span>{formatRelativeTime(created_at)}</span>
                   <span>•</span>
                   <span>{visibilityLabels[visibility as keyof typeof visibilityLabels]}</span>
                 </div>

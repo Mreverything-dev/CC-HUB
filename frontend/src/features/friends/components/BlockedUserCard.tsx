@@ -1,5 +1,5 @@
 // frontend/src/features/friends/components/BlockedUserCard.tsx
-import { formatDistanceToNow } from 'date-fns';
+import { formatRelativeTime } from '@/lib/formatters';
 import { BlockedUser } from '@/types/friend.types';
 import { FriendAvatar } from './FriendAvatar';
 
@@ -16,7 +16,7 @@ export function BlockedUserCard({ blocked, isUnblocking, onUnblock }: BlockedUse
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-[#F1F5F9] truncate">{blocked.username}</p>
         <p className="text-xs text-[#64748B] truncate">
-          Blocked {formatDistanceToNow(new Date(blocked.blocked_at), { addSuffix: true })}
+          Blocked {formatRelativeTime(blocked.blocked_at)}
         </p>
       </div>
       <button

@@ -8,6 +8,7 @@ export interface Comment {
   avatar_url?: string | null;
   parent_id: string | null;
   content: string;
+  image_url?: string | null;
   likes_count: number;
   created_at: string;
   updated_at: string;
@@ -17,6 +18,7 @@ export interface Comment {
 
 export interface CommentCreate {
   content: string;
+  image_url?: string | null;
   parent_id?: string | null;
 }
 

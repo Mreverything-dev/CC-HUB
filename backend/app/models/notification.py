@@ -1,5 +1,6 @@
 # backend/app/models/notification.py
 from sqlalchemy import Column, String, Text, ForeignKey, DateTime, Boolean, JSON
+from app.core.db_types import UTCDateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -15,9 +16,9 @@ class Notification(Base):
     title = Column(String(255))
     content = Column(Text)
     is_read = Column(Boolean, default=False)
-    read_at = Column(DateTime, nullable=True)
+    read_at = Column(UTCDateTime, nullable=True)
     data = Column(JSON, default={})
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=datetime.utcnow)
     
     # Relationship
     user = relationship("User", back_populates="notifications")

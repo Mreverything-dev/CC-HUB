@@ -19,6 +19,7 @@ import { SuggestionCard } from './SuggestionCard';
 import { BlockedUserCard } from './BlockedUserCard';
 import { FindPeoplePanel } from './FindPeoplePanel';
 import { ReportUserDialog } from './ReportUserDialog';
+import { parseServerDate } from '@/lib/formatters';
 
 type Tab = 'all' | 'requests' | 'suggestions' | 'blocked' | 'find';
 type SortMode = 'recent' | 'name' | 'online';
@@ -137,7 +138,7 @@ export default function FriendsPage() {
     } else if (sortMode === 'online') {
       sorted.sort((a, b) => Number(b.is_online) - Number(a.is_online));
     } else {
-      sorted.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      sorted.sort((a, b) => parseServerDate(b.created_at).getTime() - parseServerDate(a.created_at).getTime());
     }
     return sorted;
   }, [friends, search, sortMode]);

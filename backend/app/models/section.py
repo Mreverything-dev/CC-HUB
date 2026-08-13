@@ -1,5 +1,6 @@
 # backend/app/models/section.py
 from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Boolean, Text
+from app.core.db_types import UTCDateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -16,8 +17,8 @@ class Section(Base):
     academic_year = Column(String(20))
     advisor_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
     description = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=datetime.utcnow)
+    updated_at = Column(UTCDateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # ✅ Relationships
     advisor = relationship("User", foreign_keys=[advisor_id])
@@ -32,7 +33,7 @@ class SectionMember(Base):
     role = Column(String(50), default="student")
     is_officer = Column(Boolean, default=False)
     is_mayor = Column(Boolean, default=False)
-    joined_at = Column(DateTime, default=datetime.utcnow)
+    joined_at = Column(UTCDateTime, default=datetime.utcnow)
     
     # ✅ Relationships
     section = relationship("Section", back_populates="members")

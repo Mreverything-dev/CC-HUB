@@ -77,8 +77,8 @@ export function MessageReactions({ messageId, reactions, align = 'left' }: Messa
           onClick={(e) => handleReact(e, emoji)}
           className={`flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs transition ${
             myReaction === emoji
-              ? 'bg-[#00d4ff]/15 border-[#00d4ff]/50 text-[#00d4ff]'
-              : 'bg-[#1f1f1f] border-[#2a2a2a] text-[#a0a0a0] hover:border-[#00d4ff]/30'
+              ? 'bg-[#00C8FF]/15 border-[#00C8FF]/50 text-[#00C8FF]'
+              : 'bg-[#101D2A] border-[#1E3447] text-[#94A3B8] hover:border-[#00C8FF]/30'
           }`}
         >
           <span>{emoji}</span>
@@ -93,7 +93,7 @@ export function MessageReactions({ messageId, reactions, align = 'left' }: Messa
             setPickerOpen((v) => !v);
           }}
           title="React"
-          className={`flex items-center rounded-full border border-[#2a2a2a] bg-[#1f1f1f] text-[#6b6b6b] hover:text-[#00d4ff] hover:border-[#00d4ff]/30 transition p-1 ${
+          className={`flex items-center rounded-full border border-[#1E3447] bg-[#101D2A] text-[#64748B] hover:text-[#00C8FF] hover:border-[#00C8FF]/30 transition p-1 ${
             groups.length === 0
               ? 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'
               : ''
@@ -103,7 +103,7 @@ export function MessageReactions({ messageId, reactions, align = 'left' }: Messa
         </button>
         {pickerOpen && (
           <div
-            className={`absolute bottom-full mb-1 flex items-center gap-1 px-2 py-1.5 rounded-full border border-[#2a2a2a] bg-[#1a1a1a] shadow-lg z-20 ${
+            className={`absolute bottom-full mb-1 flex items-center gap-1 px-2 py-1.5 rounded-full border border-[#1E3447] bg-[#111E2B] shadow-lg z-20 ${
               align === 'right' ? 'right-0' : 'left-0'
             }`}
           >

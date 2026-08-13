@@ -1,5 +1,6 @@
 # backend/app/models/share.py
 from sqlalchemy import Column, ForeignKey, DateTime, UniqueConstraint
+from app.core.db_types import UTCDateTime
 from sqlalchemy.dialects.postgresql import UUID
 from app.core.database import Base
 import uuid
@@ -14,4 +15,4 @@ class Share(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
     post_id = Column(UUID(as_uuid=True), ForeignKey("posts.id", ondelete="CASCADE"))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=datetime.utcnow)

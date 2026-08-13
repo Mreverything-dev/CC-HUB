@@ -1,5 +1,5 @@
 // frontend/src/features/dashboard/components/AnnouncementWidget.tsx
-import { formatDistanceToNow } from 'date-fns';
+import { formatRelativeTime } from '@/lib/formatters';
 import { MegaphoneIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
 import { Announcement } from '@/types/announcement.types';
 
@@ -50,7 +50,7 @@ export function AnnouncementWidget({ announcements, isLoading, onViewAll }: Anno
               <div className="min-w-0 flex-1">
                 <p className="text-sm text-white font-medium truncate">{a.title}</p>
                 <p className="text-xs text-[#6b6b6b] mt-0.5">
-                  {formatDistanceToNow(new Date(a.created_at), { addSuffix: true })} • {a.created_by_role}
+                  {formatRelativeTime(a.created_at)} • {a.created_by_role}
                 </p>
               </div>
             </button>

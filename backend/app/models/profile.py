@@ -1,5 +1,6 @@
 # backend/app/models/profile.py
 from sqlalchemy import Column, String, Text, ForeignKey, DateTime, Integer
+from app.core.db_types import UTCDateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -19,11 +20,12 @@ class StudentProfile(Base):
     year_level = Column(Integer)
     section_id = Column(UUID(as_uuid=True))
     avatar_url = Column(Text)  # ✅ Avatar URL for profile picture
+    cover_url = Column(Text)  # ✅ Cover/banner photo URL
     bio = Column(Text)
     contact_number = Column(String(20))
     address = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=datetime.utcnow)
+    updated_at = Column(UTCDateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     user = relationship("User", back_populates="student_profile")
@@ -43,11 +45,12 @@ class ProfessorProfile(Base):
     department = Column(String(100))
     title = Column(String(100))
     avatar_url = Column(Text)  # ✅ Avatar URL for profile picture
+    cover_url = Column(Text)  # ✅ Cover/banner photo URL
     bio = Column(Text)
     office = Column(String(100))
     contact_number = Column(String(20))
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=datetime.utcnow)
+    updated_at = Column(UTCDateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     user = relationship("User", back_populates="professor_profile")
@@ -65,9 +68,10 @@ class AdminProfile(Base):
     last_name = Column(String(100))
     position = Column(String(100))
     avatar_url = Column(Text)  # ✅ Avatar URL for profile picture
+    cover_url = Column(Text)  # ✅ Cover/banner photo URL
     contact_number = Column(String(20))
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=datetime.utcnow)
+    updated_at = Column(UTCDateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     user = relationship("User", back_populates="admin_profile")

@@ -1,15 +1,29 @@
 // frontend/src/features/chat/components/ChatWindow.tsx
 import { useState, useEffect, useRef, } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useChat } from '../hooks/useChat';
 import { useAuthStore } from '@/features/auth/store/auth.store';
+import { useFriends } from '@/features/friends/hooks/useFriends';
 import { formatChatTime } from '@/lib/formatters';
 import { useTick } from '@/hooks/useTick';
 import { Avatar } from '@/features/dashboard/components/Avatar';
 import { ConversationAvatar } from './ConversationAvatar';
 import { mediaService } from '@/services/api/media.service';
 import { MessageReactions } from './MessageReactions';
+import { EmojiPicker } from '@/features/posts/components/EmojiPicker';
 import toast from 'react-hot-toast';
-import { PaperAirplaneIcon, PhotoIcon, XMarkIcon, DocumentIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import {
+  PaperAirplaneIcon,
+  PhotoIcon,
+  XMarkIcon,
+  DocumentIcon,
+  ArrowDownTrayIcon,
+  ArrowLeftIcon,
+  PhoneIcon,
+  VideoCameraIcon,
+  EllipsisVerticalIcon,
+  UserIcon,
+} from '@heroicons/react/24/outline';
 
 // Keep in sync with backend ALLOWED_TYPES in app/api/v1/endpoints/media.py
 const ALLOWED_ATTACHMENT_TYPES = [
@@ -31,20 +45,37 @@ function attachmentTypeOf(file: File): 'image' | 'video' | 'file' {
 
 interface ChatWindowProps {
   conversationId: string;
+  /** Shows a back button (mobile only) that returns to the conversation list. */
+  onBack?: () => void;
 }
 
-export function ChatWindow({ conversationId }: ChatWindowProps) {
+export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
+  const navigate = useNavigate();
   const { user } = useAuthStore();
   const { currentConversation, messages, getMessages, sendMessage, handleTyping, isLoading, typingByConversation } = useChat();
+  const { friends } = useFriends();
   const [newMessage, setNewMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [attachmentPreview, setAttachmentPreview] = useState<string | null>(null);
   const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showMoreMenu) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setShowMoreMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [showMoreMenu]);
 
   // Re-render periodically so "2 mins ago" style timestamps stay accurate.
   useTick(30000);
@@ -165,40 +196,125 @@ export function ChatWindow({ conversationId }: ChatWindowProps) {
     return otherParticipant?.username || 'User';
   };
 
+  // Only show a real presence indicator when we actually know it - the
+  // Friends feature tracks is_online, but there's no such data for a
+  // non-friend or for group chats, so omit the dot/label rather than guess.
+  const otherFriendRecord = otherParticipant
+    ? friends.find((f) => f.user_id === otherParticipant.id)
+    : undefined;
+  const isOtherOnline = otherFriendRecord ? otherFriendRecord.is_online : null;
+
+  const handleEmojiSelect = (emoji: string) => {
+    setNewMessage((prev) => prev + emoji);
+  };
+
   if (!currentConversation) {
     return (
-      <div className="flex items-center justify-center h-full bg-[#141414]/70 backdrop-blur-xl">
-        <div className="text-center text-[#6b6b6b]">
+      <div className="flex items-center justify-center h-full w-full bg-[#0A111A]">
+        <div className="text-center text-[#64748B]">
           <p className="text-2xl">💬</p>
-          <p className="mt-2">Select a conversation to start chatting</p>
+          <p className="mt-2 text-[#94A3B8]">Select a conversation to start chatting</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#141414]/70 backdrop-blur-xl">
+    <div className="flex flex-col h-full w-full min-w-0 bg-[#0A111A]">
       {/* Header */}
-      <div className="p-4 border-b border-[#2a2a2a] flex items-center gap-3 flex-shrink-0">
+      <div className="p-3 sm:p-4 border-b border-[#1E3447] flex items-center gap-2 sm:gap-3 flex-shrink-0">
+        {onBack && (
+          <button
+            onClick={onBack}
+            title="Back to conversations"
+            className="p-1.5 -ml-1 rounded-xl text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5 transition sm:hidden flex-shrink-0"
+          >
+            <ArrowLeftIcon className="h-5 w-5" />
+          </button>
+        )}
         <ConversationAvatar conversation={currentConversation} currentUserId={user?.id} size="sm" />
-        <div>
-          <h3 className="font-semibold text-white">{getConversationName()}</h3>
-          <p className="text-xs text-[#6b6b6b]">
-            {currentConversation.type === 'group'
-              ? `${currentConversation.participants?.length || 0} members`
-              : 'Direct message'}
+        <div className="min-w-0 flex-1">
+          <h3 className="font-semibold text-[#F1F5F9] truncate">{getConversationName()}</h3>
+          <p className="text-xs text-[#64748B] flex items-center gap-1.5">
+            {currentConversation.type === 'group' ? (
+              `${currentConversation.participants?.length || 0} members`
+            ) : isOtherOnline !== null ? (
+              <>
+                <span className={`h-1.5 w-1.5 rounded-full ${isOtherOnline ? 'bg-[#22C55E]' : 'bg-[#64748B]'}`} />
+                {isOtherOnline ? 'Online' : 'Offline'}
+              </>
+            ) : (
+              'Direct message'
+            )}
           </p>
+        </div>
+
+        {/* Header actions */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <button
+            onClick={() => toast('Voice calling coming soon')}
+            title="Voice call"
+            className="p-2 rounded-xl text-[#94A3B8] hover:text-[#00C8FF] hover:bg-white/5 transition"
+          >
+            <PhoneIcon className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => toast('Video calling coming soon')}
+            title="Video call"
+            className="p-2 rounded-xl text-[#94A3B8] hover:text-[#00C8FF] hover:bg-white/5 transition"
+          >
+            <VideoCameraIcon className="h-4 w-4" />
+          </button>
+          <div className="relative" ref={moreMenuRef}>
+            <button
+              onClick={() => setShowMoreMenu((v) => !v)}
+              title="More"
+              aria-haspopup="menu"
+              aria-expanded={showMoreMenu}
+              className="p-2 rounded-xl text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5 transition"
+            >
+              <EllipsisVerticalIcon className="h-5 w-5" />
+            </button>
+            {showMoreMenu && (
+              <div role="menu" className="absolute right-0 mt-2 w-48 rounded-xl border border-[#1E3447] bg-[#111E2B] shadow-xl py-1 z-20">
+                {otherParticipant && (
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setShowMoreMenu(false);
+                      navigate(`/profile/${otherParticipant.id}`);
+                    }}
+                    className="flex items-center gap-2 w-full px-4 py-2 text-sm text-[#94A3B8] hover:bg-white/5 hover:text-[#F1F5F9] transition"
+                  >
+                    <UserIcon className="h-4 w-4" />
+                    View Profile
+                  </button>
+                )}
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    setShowMoreMenu(false);
+                    toast('More options coming soon');
+                  }}
+                  className="flex items-center gap-2 w-full px-4 py-2 text-sm text-[#94A3B8] hover:bg-white/5 hover:text-[#F1F5F9] transition"
+                >
+                  <EllipsisVerticalIcon className="h-4 w-4" />
+                  More Options
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 themed-scrollbar">
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00d4ff]"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00C8FF]"></div>
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-[#6b6b6b]">
+          <div className="flex items-center justify-center h-full text-[#64748B]">
             <p>No messages yet. Say hello!</p>
           </div>
         ) : (
@@ -222,9 +338,9 @@ export function ChatWindow({ conversationId }: ChatWindowProps) {
                     )}
                   </div>
                 )}
-                <div className={`flex flex-col max-w-[70%] ${isOwn ? 'items-end' : 'items-start'}`}>
+                <div className={`flex flex-col max-w-[75%] sm:max-w-[70%] ${isOwn ? 'items-end' : 'items-start'}`}>
                   {!isOwn && showAvatar && (
-                    <p className="text-xs font-semibold text-[#00d4ff] mb-1 px-1">
+                    <p className="text-xs font-semibold text-[#00C8FF] mb-1 px-1">
                       {message.sender_username}
                     </p>
                   )}
@@ -251,11 +367,11 @@ export function ChatWindow({ conversationId }: ChatWindowProps) {
                       href={message.media_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-[#1f1f1f] border border-[#2a2a2a] hover:bg-white/5 transition max-w-full"
+                      className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-[#101D2A] border border-[#1E3447] hover:bg-white/5 transition max-w-full"
                     >
-                      <DocumentIcon className="h-5 w-5 flex-shrink-0 text-[#a0a0a0]" />
-                      <span className="text-sm text-white truncate">{message.media_name || 'File'}</span>
-                      <ArrowDownTrayIcon className="h-4 w-4 flex-shrink-0 text-[#6b6b6b]" />
+                      <DocumentIcon className="h-5 w-5 flex-shrink-0 text-[#94A3B8]" />
+                      <span className="text-sm text-[#F1F5F9] truncate">{message.media_name || 'File'}</span>
+                      <ArrowDownTrayIcon className="h-4 w-4 flex-shrink-0 text-[#64748B]" />
                     </a>
                   )}
 
@@ -264,15 +380,15 @@ export function ChatWindow({ conversationId }: ChatWindowProps) {
                     <div
                       className={`px-4 py-2 rounded-2xl ${message.type !== 'text' ? 'mt-1.5' : ''} ${
                         isOwn
-                          ? 'bg-gradient-to-br from-[#00d4ff] to-[#0099cc] text-[#0a0a0a]'
-                          : 'bg-[#1f1f1f] text-white border border-[#2a2a2a]'
+                          ? 'bg-gradient-to-br from-[#00C8FF] to-[#3B82F6] text-[#060B12] shadow-[0_0_16px_rgba(0,200,255,0.15)]'
+                          : 'bg-[#101D2A] text-[#F1F5F9] border border-[#1E3447]'
                       }`}
                     >
                       <p className="break-words">{message.content}</p>
                     </div>
                   )}
 
-                  <p className={`text-xs text-[#6b6b6b] mt-1 px-1`}>
+                  <p className={`text-xs text-[#64748B] mt-1 px-1`}>
                     {formatChatTime(message.created_at)}
                     {isOwn && message.is_read && ' ✓✓'}
                   </p>
@@ -299,14 +415,14 @@ export function ChatWindow({ conversationId }: ChatWindowProps) {
             <div className="w-7 flex-shrink-0">
               <Avatar name={typingNames[0]} size="xs" />
             </div>
-            <div className="px-4 py-2 rounded-2xl bg-[#1f1f1f] border border-[#2a2a2a] flex items-center gap-1.5">
-              <span className="text-xs text-[#a0a0a0]">
+            <div className="px-4 py-2 rounded-2xl bg-[#101D2A] border border-[#1E3447] flex items-center gap-1.5">
+              <span className="text-xs text-[#94A3B8]">
                 {typingNames.length === 1 ? `${typingNames[0]} is typing` : `${typingNames.join(', ')} are typing`}
               </span>
               <span className="flex gap-0.5">
-                <span className="w-1 h-1 rounded-full bg-[#00d4ff] animate-bounce [animation-delay:-0.3s]" />
-                <span className="w-1 h-1 rounded-full bg-[#00d4ff] animate-bounce [animation-delay:-0.15s]" />
-                <span className="w-1 h-1 rounded-full bg-[#00d4ff] animate-bounce" />
+                <span className="w-1 h-1 rounded-full bg-[#00C8FF] animate-bounce [animation-delay:-0.3s]" />
+                <span className="w-1 h-1 rounded-full bg-[#00C8FF] animate-bounce [animation-delay:-0.15s]" />
+                <span className="w-1 h-1 rounded-full bg-[#00C8FF] animate-bounce" />
               </span>
             </div>
           </div>
@@ -315,9 +431,9 @@ export function ChatWindow({ conversationId }: ChatWindowProps) {
       </div>
 
       {/* Input */}
-      <form onSubmit={handleSendMessage} className="p-4 border-t border-[#2a2a2a] flex-shrink-0">
+      <form onSubmit={handleSendMessage} className="p-3 sm:p-4 border-t border-[#1E3447] flex-shrink-0">
         {attachmentFile && (
-          <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-xl border border-[#2a2a2a] bg-[#0f0f0f]">
+          <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-xl border border-[#1E3447] bg-[#0A111A]">
             {attachmentPreview ? (
               attachmentFile.type.startsWith('video/') ? (
                 <video src={attachmentPreview} className="h-10 w-10 rounded-lg object-cover flex-shrink-0" />
@@ -325,20 +441,20 @@ export function ChatWindow({ conversationId }: ChatWindowProps) {
                 <img src={attachmentPreview} alt="" className="h-10 w-10 rounded-lg object-cover flex-shrink-0" />
               )
             ) : (
-              <DocumentIcon className="h-6 w-6 text-[#6b6b6b] flex-shrink-0" />
+              <DocumentIcon className="h-6 w-6 text-[#64748B] flex-shrink-0" />
             )}
-            <span className="text-sm text-white truncate flex-1">{attachmentFile.name}</span>
+            <span className="text-sm text-[#F1F5F9] truncate flex-1">{attachmentFile.name}</span>
             <button
               type="button"
               onClick={removeAttachment}
               disabled={isUploadingAttachment}
-              className="p-1 text-[#6b6b6b] hover:text-white rounded-full hover:bg-white/5 transition disabled:opacity-50"
+              className="p-1 text-[#64748B] hover:text-[#F1F5F9] rounded-full hover:bg-white/5 transition disabled:opacity-50"
             >
               <XMarkIcon className="h-4 w-4" />
             </button>
           </div>
         )}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           <input
             ref={fileInputRef}
             type="file"
@@ -351,21 +467,22 @@ export function ChatWindow({ conversationId }: ChatWindowProps) {
             onClick={() => fileInputRef.current?.click()}
             disabled={isUploadingAttachment}
             title="Attach a file, image, or video"
-            className="p-2 text-[#6b6b6b] hover:text-[#00d4ff] transition disabled:opacity-50"
+            className="p-2 text-[#64748B] hover:text-[#00C8FF] hover:bg-white/5 rounded-lg transition disabled:opacity-50 flex-shrink-0"
           >
             <PhotoIcon className="h-5 w-5" />
           </button>
+          <EmojiPicker onSelect={handleEmojiSelect} align="left" />
           <input
             type="text"
             value={newMessage}
             onChange={handleTypingChange}
             placeholder={attachmentFile ? 'Add a caption (optional)...' : 'Type a message...'}
-            className="flex-1 px-4 py-2 rounded-xl border border-[#2a2a2a] bg-[#0f0f0f] text-sm text-white placeholder-[#6b6b6b] focus:ring-1 focus:ring-[#00d4ff] focus:border-[#00d4ff] focus:outline-none"
+            className="flex-1 min-w-0 px-4 py-2 rounded-xl border border-[#1E3447] bg-[#0A111A] text-sm text-[#F1F5F9] placeholder-[#64748B] focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] focus:outline-none transition"
           />
           <button
             type="submit"
             disabled={(!newMessage.trim() && !attachmentFile) || isUploadingAttachment}
-            className="p-2 bg-gradient-to-br from-[#00d4ff] to-[#0099cc] text-[#0a0a0a] rounded-lg hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed"
+            className="p-2 bg-gradient-to-br from-[#00C8FF] to-[#3B82F6] text-[#060B12] rounded-lg hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
           >
             <PaperAirplaneIcon className="h-5 w-5" />
           </button>

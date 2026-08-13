@@ -1,5 +1,6 @@
 # backend/app/models/post.py
 from sqlalchemy import Column, String, Text, ForeignKey, DateTime, Enum, Integer, JSON
+from app.core.db_types import UTCDateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -19,8 +20,8 @@ class Post(Base):
     likes_count = Column(Integer, default=0)
     comments_count = Column(Integer, default=0)
     shares_count = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=datetime.utcnow)
+    updated_at = Column(UTCDateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     user = relationship("User", back_populates="posts")
     comments = relationship("Comment", back_populates="post", cascade="all, delete-orphan")
@@ -39,6 +40,6 @@ class PostMedia(Base):
     post_id = Column(UUID(as_uuid=True), ForeignKey("posts.id", ondelete="CASCADE"))
     media_url = Column(String(500), nullable=False)
     media_type = Column(String(50))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=datetime.utcnow)
     
     post = relationship("Post", back_populates="media")

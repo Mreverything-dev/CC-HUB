@@ -1,6 +1,6 @@
 // frontend/src/features/livestream/components/UpcomingStreamCard.tsx
 import { BellIcon, BellAlertIcon, GlobeAltIcon, UserIcon, UserGroupIcon, ClockIcon } from '@heroicons/react/24/outline';
-import { formatDistanceToNow } from 'date-fns';
+import { formatRelativeTime } from '@/lib/formatters';
 import { Avatar } from '@/features/dashboard/components/Avatar';
 import { Livestream } from '@/types/livestream.types';
 
@@ -42,7 +42,7 @@ export function UpcomingStreamCard({ stream, sectionName, isReminderSet, onToggl
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-[#F1F5F9] truncate">{stream.host_username}</p>
             <p className="text-[11px] text-[#64748B]">
-              Created {formatDistanceToNow(new Date(stream.created_at), { addSuffix: true })}
+              Created {formatRelativeTime(stream.created_at)}
             </p>
           </div>
         </div>

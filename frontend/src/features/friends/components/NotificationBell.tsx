@@ -1,7 +1,7 @@
 // frontend/src/features/friends/components/NotificationBell.tsx
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { formatDistanceToNow } from 'date-fns';
+import { formatRelativeTime } from '@/lib/formatters';
 import { useFriends } from '../hooks/useFriends';
 import { BellIcon } from '@heroicons/react/24/outline';
 
@@ -106,7 +106,7 @@ export default function NotificationBell({ onNavigateFriends }: NotificationBell
                             <p className="text-sm text-gray-500">{n.content}</p>
                           )}
                           <p className="text-xs text-gray-400 mt-1">
-                            {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
+                            {formatRelativeTime(n.created_at)}
                           </p>
                         </div>
                       </div>

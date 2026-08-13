@@ -1,5 +1,6 @@
 # backend/app/models/invitation_code.py
 from sqlalchemy import Column, String, Boolean, ForeignKey, DateTime
+from app.core.db_types import UTCDateTime
 from sqlalchemy.dialects.postgresql import UUID
 from app.core.database import Base
 import uuid
@@ -14,5 +15,5 @@ class InvitationCode(Base):
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
     is_used = Column(Boolean, default=False)
     used_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
-    expires_at = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(UTCDateTime)
+    created_at = Column(UTCDateTime, default=datetime.utcnow)

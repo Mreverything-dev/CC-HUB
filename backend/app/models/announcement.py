@@ -1,5 +1,6 @@
 # backend/app/models/announcement.py
 from sqlalchemy import Column, String, Text, ForeignKey, DateTime, Enum, Boolean, JSON, Index
+from app.core.db_types import UTCDateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -18,10 +19,10 @@ class Announcement(Base):
     priority = Column(Enum('low', 'normal', 'high', 'urgent', name='priority_level'), default='normal')
     created_by_role = Column(String(50))  # 'admin' or 'professor'
     is_published = Column(Boolean, default=True)
-    published_at = Column(DateTime, default=datetime.utcnow)
-    expires_at = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    published_at = Column(UTCDateTime, default=datetime.utcnow)
+    expires_at = Column(UTCDateTime)
+    created_at = Column(UTCDateTime, default=datetime.utcnow)
+    updated_at = Column(UTCDateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     user = relationship("User", back_populates="announcements")
@@ -34,7 +35,7 @@ class AnnouncementTarget(Base):
     announcement_id = Column(UUID(as_uuid=True), ForeignKey("announcements.id", ondelete="CASCADE"))
     target_type = Column(String(50))  # 'role' or 'section'
     target_id = Column(String(100))   # Role name or section ID
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=datetime.utcnow)
 
     # Relationships
     announcement = relationship("Announcement", back_populates="targets")
@@ -50,7 +51,7 @@ class AnnouncementReaction(Base):
     announcement_id = Column(UUID(as_uuid=True), ForeignKey("announcements.id", ondelete="CASCADE"), nullable=False)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     reaction = Column(String(16), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=datetime.utcnow)
 
     announcement = relationship("Announcement")
     user = relationship("User")
@@ -63,7 +64,7 @@ class AnnouncementBookmark(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     announcement_id = Column(UUID(as_uuid=True), ForeignKey("announcements.id", ondelete="CASCADE"), nullable=False)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=datetime.utcnow)
 
     announcement = relationship("Announcement")
     user = relationship("User")

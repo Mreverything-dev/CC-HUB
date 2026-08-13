@@ -51,7 +51,8 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 interface SidebarProps {
-  activeSection: SidebarSection;
+  /** Pass null when the current page (e.g. Profile) isn't one of the in-dashboard sections. */
+  activeSection: SidebarSection | null;
   onNavigate: (section: SidebarSection) => void;
 }
 

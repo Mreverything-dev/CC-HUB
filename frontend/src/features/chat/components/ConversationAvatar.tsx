@@ -26,7 +26,7 @@ export function ConversationAvatar({ conversation, currentUserId, size = 'md' }:
     if (shown.length === 0) {
       return (
         <div
-          className={`${CONTAINER_SIZE[size]} rounded-full bg-gradient-to-br from-[#00d4ff] to-[#0099cc] flex items-center justify-center text-lg flex-shrink-0`}
+          className={`${CONTAINER_SIZE[size]} rounded-full bg-gradient-to-br from-[#00C8FF] to-[#3B82F6] flex items-center justify-center text-lg flex-shrink-0`}
         >
           👥
         </div>
@@ -38,7 +38,7 @@ export function ConversationAvatar({ conversation, currentUserId, size = 'md' }:
         {shown.map((member, i) => (
           <div
             key={member.id}
-            className={`absolute rounded-full ring-2 ring-[#141414] overflow-hidden bg-gradient-to-br from-[#00d4ff] to-[#0099cc] flex items-center justify-center text-[10px] font-bold text-[#0a0a0a] ${
+            className={`absolute rounded-full ring-2 ring-[#0D1722] overflow-hidden bg-gradient-to-br from-[#00C8FF] to-[#3B82F6] flex items-center justify-center text-[10px] font-bold text-[#060B12] ${
               shown.length === 1 ? 'inset-0' : i === 0 ? 'top-0 left-0 w-2/3 h-2/3' : 'bottom-0 right-0 w-2/3 h-2/3'
             }`}
           >

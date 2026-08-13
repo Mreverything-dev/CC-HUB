@@ -90,7 +90,10 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
     }
   };
 
-  // ✅ Check if user can promote/demote (only mayor, professor, admin can promote/demote)
+  // ✅ Gates the whole per-member action row (Mayor also gets to remove
+  // students here); promoting/demoting Mayor or Officer specifically is
+  // further restricted below to just the advisor/admin - a Mayor cannot
+  // appoint or remove another Mayor/Officer.
   const canPromote = user?.role === 'admin' ||
                      user?.id === section.advisor_id ||
                      isMayor;
@@ -342,23 +345,27 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
                               </>
                             )}
 
-                            {/* Officer Actions - Mayor/Advisor/Admin can manage officers */}
-                            {member.is_officer && !member.is_mayor ? (
-                              <button
-                                onClick={() => handleDemoteOfficer(member.user_id)}
-                                disabled={actionLoading}
-                                className="px-3 py-1.5 text-xs font-medium bg-[#EF4444]/10 text-[#EF4444] rounded-lg hover:bg-[#EF4444]/20 transition disabled:opacity-50"
-                              >
-                                Demote Officer
-                              </button>
-                            ) : !member.is_mayor && (
-                              <button
-                                onClick={() => handlePromoteOfficer(member.user_id)}
-                                disabled={actionLoading}
-                                className="px-3 py-1.5 text-xs font-medium bg-[#00C8FF]/10 text-[#00C8FF] rounded-lg hover:bg-[#00C8FF]/20 transition disabled:opacity-50"
-                              >
-                                Make Officer
-                              </button>
+                            {/* Officer Actions - Only Advisor/Admin can manage Officer (Mayor cannot) */}
+                            {(user?.role === 'admin' || user?.id === section.advisor_id) && !member.is_mayor && (
+                              <>
+                                {member.is_officer ? (
+                                  <button
+                                    onClick={() => handleDemoteOfficer(member.user_id)}
+                                    disabled={actionLoading}
+                                    className="px-3 py-1.5 text-xs font-medium bg-[#EF4444]/10 text-[#EF4444] rounded-lg hover:bg-[#EF4444]/20 transition disabled:opacity-50"
+                                  >
+                                    Demote Officer
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => handlePromoteOfficer(member.user_id)}
+                                    disabled={actionLoading}
+                                    className="px-3 py-1.5 text-xs font-medium bg-[#00C8FF]/10 text-[#00C8FF] rounded-lg hover:bg-[#00C8FF]/20 transition disabled:opacity-50"
+                                  >
+                                    Make Officer
+                                  </button>
+                                )}
+                              </>
                             )}
 
                             {/* Remove - Mayor/Advisor/Admin can remove members */}

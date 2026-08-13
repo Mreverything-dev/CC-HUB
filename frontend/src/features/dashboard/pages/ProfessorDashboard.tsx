@@ -1,5 +1,6 @@
 // frontend/src/features/dashboard/pages/ProfessorDashboard.tsx
 import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { CodeXml } from 'lucide-react';
 import { PlusIcon } from '@heroicons/react/24/outline';
 import { CreatePost } from '@/features/posts/components/CreatePost';
@@ -11,7 +12,7 @@ import { AnnouncementFilterBar } from '@/features/announcements/components/Annou
 import { AnnouncementCategory, matchesAnnouncementFilters } from '@/features/announcements/constants';
 import { useAnnouncements } from '@/features/announcements/hooks/useAnnouncements';
 import { useSections } from '@/features/sections/hooks/useSections';
-import SectionManager from '@/features/sections/components/SectionManager';
+import SectionDashboard from '@/features/sections/components/SectionDashboard';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { profileService } from '@/services/api/profile.service';
 import { Sidebar, SidebarSection } from '@/features/dashboard/components/Sidebar';
@@ -25,7 +26,12 @@ import ChatPanel from '@/features/chat/components/ChatPanel';
 
 export default function ProfessorDashboard() {
   const { user } = useAuthStore();
-  const [activeSection, setActiveSection] = useState<SidebarSection>('feed');
+  const location = useLocation();
+  // Allows other pages (e.g. Profile) to deep-link back into a specific
+  // dashboard section via navigate(path, { state: { section } }).
+  const [activeSection, setActiveSection] = useState<SidebarSection>(
+    (location.state as { section?: SidebarSection } | null)?.section || 'feed'
+  );
   const [feedFilter, setFeedFilter] = useState<FeedFilter>('all');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [showCreateAnnouncement, setShowCreateAnnouncement] = useState(false);
@@ -246,7 +252,12 @@ export default function ProfessorDashboard() {
             </div>
           )}
 
-          {activeSection === 'sections' && <SectionManager />}
+          {activeSection === 'sections' && (
+            <SectionDashboard
+              onNavigateToAnnouncements={() => setActiveSection('announcements')}
+              onNavigateToChat={() => setActiveSection('chat')}
+            />
+          )}
 
           {activeSection === 'friends' && <FriendsPage />}
 

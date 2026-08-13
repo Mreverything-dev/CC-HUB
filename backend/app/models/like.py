@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import Column, String, ForeignKey, DateTime, and_
+from app.core.db_types import UTCDateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship, foreign
 from app.core.database import Base
@@ -14,7 +15,7 @@ class Like(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
     target_type = Column(String(50))  # 'post' or 'comment'
     target_id = Column(UUID(as_uuid=True))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=datetime.utcnow)
     
     # Relationships
     user = relationship("User", back_populates="likes")

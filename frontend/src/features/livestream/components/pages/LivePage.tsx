@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { CodeXml } from 'lucide-react';
-import { formatDistanceToNowStrict } from 'date-fns';
+import { formatRelativeTime, formatTime } from '@/lib/formatters';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { livestreamService } from '@/services/api/livestream.service';
 import { Livestream, StreamViewer } from '@/types/livestream.types';
@@ -314,7 +314,7 @@ export default function LivePage() {
               {isOwn ? 'You' : msg.username}
             </span>
             <span className="text-[10px] text-[#64748B] flex-shrink-0">
-              {formatDistanceToNowStrict(new Date(msg.timestamp), { addSuffix: true })}
+              {formatRelativeTime(msg.timestamp)}
             </span>
           </div>
 
@@ -796,7 +796,7 @@ export default function LivePage() {
                     <div>
                       <p className="text-sm font-medium text-[#F1F5F9]">{viewer.username}</p>
                       <p className="text-xs text-[#94A3B8]">
-                        Joined {new Date(viewer.joined_at).toLocaleTimeString()}
+                        Joined {formatTime(viewer.joined_at)}
                       </p>
                     </div>
                   </div>

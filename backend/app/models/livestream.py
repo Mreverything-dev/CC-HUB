@@ -1,5 +1,6 @@
 # backend/app/models/livestream.py
 from sqlalchemy import Column, String, Text, ForeignKey, DateTime, Integer, Boolean, JSON, Enum, Index
+from app.core.db_types import UTCDateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -29,10 +30,10 @@ class Livestream(Base):
     target_section_ids = Column(JSON, default=list)  # For section visibility
     stream_key = Column(String(255), unique=True)
     viewer_count = Column(Integer, default=0)
-    started_at = Column(DateTime)
-    ended_at = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    started_at = Column(UTCDateTime)
+    ended_at = Column(UTCDateTime)
+    created_at = Column(UTCDateTime, default=datetime.utcnow)
+    updated_at = Column(UTCDateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     host = relationship("User", back_populates="livestreams")
@@ -44,8 +45,8 @@ class StreamViewer(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     stream_id = Column(UUID(as_uuid=True), ForeignKey("livestreams.id", ondelete="CASCADE"), nullable=False)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    joined_at = Column(DateTime, default=datetime.utcnow)
-    left_at = Column(DateTime)
+    joined_at = Column(UTCDateTime, default=datetime.utcnow)
+    left_at = Column(UTCDateTime)
     is_active = Column(Boolean, default=True)
 
     # Relationships
@@ -65,7 +66,7 @@ class StreamComment(Base):
     parent_comment_id = Column(UUID(as_uuid=True), ForeignKey("stream_comments.id", ondelete="CASCADE"), nullable=True)
     content = Column(Text, nullable=False)
     is_deleted = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=datetime.utcnow)
 
     # Relationships
     stream = relationship("Livestream")
@@ -82,7 +83,7 @@ class StreamCommentReaction(Base):
     comment_id = Column(UUID(as_uuid=True), ForeignKey("stream_comments.id", ondelete="CASCADE"), nullable=False)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     reaction = Column(String(16), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(UTCDateTime, default=datetime.utcnow)
 
     # Relationships
     comment = relationship("StreamComment", back_populates="reactions")

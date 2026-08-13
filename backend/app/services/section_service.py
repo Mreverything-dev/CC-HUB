@@ -94,6 +94,27 @@ class SectionService:
             detail="You don't have permission to manage this section"
         )
 
+    async def _check_promotion_permission(self, section_id: str, user_id: str):
+        """Stricter check for promoting/demoting Mayor or Officer - only the
+        section's advisor (professor) or an admin may do this. Unlike
+        _check_section_permission, a Mayor/Officer is NOT allowed here: they
+        can manage day-to-day section membership, but must not be able to
+        appoint/remove each other, which would let them bypass the advisor."""
+        section = await self._get_section(section_id)
+
+        user_result = await self.db.execute(select(User).where(User.id == user_id))
+        user = user_result.scalar_one_or_none()
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+        if user.role == "admin" or str(section.advisor_id) == user_id:
+            return True
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the section's professor or an admin can promote or demote members"
+        )
+
     # ============================================
     # SECTION CRUD
     # ============================================
@@ -390,26 +411,46 @@ class SectionService:
     # ============================================
     
     async def promote_to_officer(self, section_id: str, user_id: str, current_user_id: str):
-        """Promote a student to officer"""
-        await self._check_section_permission(section_id, current_user_id)
-        
+        """Promote a student to officer - only one Officer per section at a
+        time, and the Mayor (who already has full permissions) can't also be
+        made Officer."""
+        await self._check_promotion_permission(section_id, current_user_id)
+
         member = await self._get_member(section_id, user_id)
         if not member:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User is not a member of this section"
             )
-        
+
+        if member.is_mayor:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="The Mayor already has full permissions and can't also be made Officer"
+            )
+
+        # Only one Officer per section - demote whoever currently holds it.
+        existing_officer = await self.db.execute(
+            select(SectionMember).where(
+                SectionMember.section_id == section_id,
+                SectionMember.is_officer == True,
+                SectionMember.is_mayor == False,
+            )
+        )
+        existing = existing_officer.scalar_one_or_none()
+        if existing and str(existing.id) != str(member.id):
+            existing.is_officer = False
+
         member.is_officer = True
         await self.db.commit()
         await self.db.refresh(member)
-        
+
         return {"message": "Student promoted to Officer successfully"}
 
     async def demote_officer(self, section_id: str, user_id: str, current_user_id: str):
         """Demote an officer back to student"""
-        await self._check_section_permission(section_id, current_user_id)
-        
+        await self._check_promotion_permission(section_id, current_user_id)
+
         member = await self._get_member(section_id, user_id)
         if not member:
             raise HTTPException(
@@ -435,16 +476,19 @@ class SectionService:
         return {"message": "Officer demoted to Student successfully"}
 
     async def promote_to_mayor(self, section_id: str, user_id: str, current_user_id: str):
-        """Promote a student to class mayor"""
-        await self._check_section_permission(section_id, current_user_id)
-        
+        """Promote a student to class mayor - only one Mayor per section.
+        Mayor and Officer are separate, exclusive roles (a Mayor already has
+        full permissions via _check_section_permission's is_mayor check, so
+        this no longer also flags them as Officer)."""
+        await self._check_promotion_permission(section_id, current_user_id)
+
         member = await self._get_member(section_id, user_id)
         if not member:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User is not a member of this section"
             )
-        
+
         # Check if there's already a mayor
         existing_mayor = await self.db.execute(
             select(SectionMember).where(
@@ -453,22 +497,25 @@ class SectionService:
             )
         )
         existing = existing_mayor.scalar_one_or_none()
-        
+
         if existing:
             existing.is_mayor = False
+            # Clean up stale data from before Mayor/Officer were made
+            # mutually exclusive (a Mayor used to also get is_officer=True).
             existing.is_officer = False
-        
+
         member.is_mayor = True
-        member.is_officer = True
-        
+        # If they were already the section's Officer, that slot is now free.
+        member.is_officer = False
+
         await self.db.commit()
-        
+
         return {"message": "Student promoted to Class Mayor successfully"}
 
     async def demote_mayor(self, section_id: str, user_id: str, current_user_id: str):
         """Demote a mayor back to student"""
-        await self._check_section_permission(section_id, current_user_id)
-        
+        await self._check_promotion_permission(section_id, current_user_id)
+
         member = await self._get_member(section_id, user_id)
         if not member:
             raise HTTPException(

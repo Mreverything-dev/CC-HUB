@@ -51,6 +51,7 @@ class CommentService:
             user_id=user_id,
             parent_id=data.parent_id,
             content=data.content,
+            image_url=data.image_url,
         )
         self.db.add(comment)
 
@@ -109,6 +110,7 @@ class CommentService:
                 "avatar_url": await self._get_avatar_url(str(comment.user_id), role),
                 "parent_id": str(comment.parent_id) if comment.parent_id else None,
                 "content": comment.content,
+                "image_url": comment.image_url,
                 "likes_count": comment.likes_count or 0,
                 "created_at": comment.created_at,
                 "updated_at": comment.updated_at,

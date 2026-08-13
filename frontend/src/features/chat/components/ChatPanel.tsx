@@ -29,24 +29,34 @@ export default function ChatPanel({ initialConversationId = null, fullHeight = t
   };
 
   return (
-    <div className={`flex ${fullHeight ? 'h-screen' : 'h-[calc(100vh-8.5rem)]'} bg-[#0a0a0a] rounded-2xl overflow-hidden border border-[#2a2a2a]`}>
-      {/* Conversation list */}
-      <div className="w-full sm:w-96 h-full border-r border-[#2a2a2a] flex-shrink-0">
+    <div
+      className={`flex ${fullHeight ? 'h-screen' : 'h-[calc(100vh-8.5rem)]'} bg-[#0D1722] rounded-2xl overflow-hidden border border-[#1E3447] shadow-[0_0_40px_rgba(0,200,255,0.05)]`}
+    >
+      {/* Conversation list - on mobile, hidden once a conversation is picked
+          (ChatWindow takes the full width with its own back button instead). */}
+      <div
+        className={`w-full sm:w-80 lg:w-96 h-full border-r border-[#1E3447] flex-shrink-0 flex-col ${
+          selectedConversationId ? 'hidden sm:flex' : 'flex'
+        }`}
+      >
         <ChatList
           onSelectConversation={handleSelectConversation}
           selectedId={selectedConversationId || undefined}
         />
       </div>
 
-      {/* Active conversation */}
-      <div className="flex-1 h-full hidden sm:block">
+      {/* Active conversation - on mobile, only shown once a conversation is selected. */}
+      <div className={`flex-1 h-full min-w-0 ${selectedConversationId ? 'flex' : 'hidden sm:flex'}`}>
         {selectedConversationId ? (
-          <ChatWindow conversationId={selectedConversationId} />
+          <ChatWindow
+            conversationId={selectedConversationId}
+            onBack={() => setSelectedConversationId(null)}
+          />
         ) : (
-          <div className="flex items-center justify-center h-full text-[#6b6b6b] bg-[#141414]/70 backdrop-blur-xl">
-            <div className="text-center">
+          <div className="flex items-center justify-center h-full w-full text-[#64748B] bg-[#0A111A]">
+            <div className="text-center px-4">
               <p className="text-4xl">💬</p>
-              <p className="mt-2 text-lg">Select a conversation to start chatting</p>
+              <p className="mt-2 text-lg text-[#94A3B8]">Select a conversation to start chatting</p>
             </div>
           </div>
         )}

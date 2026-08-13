@@ -1,5 +1,6 @@
 // frontend/src/features/dashboard/pages/StudentDashboard.tsx
 import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { CodeXml } from 'lucide-react';
 import { CreatePost } from '@/features/posts/components/CreatePost';
 import { PostCard } from '@/features/posts/components/PostCard';
@@ -9,7 +10,7 @@ import { AnnouncementFilterBar } from '@/features/announcements/components/Annou
 import { AnnouncementCategory, matchesAnnouncementFilters } from '@/features/announcements/constants';
 import { useAnnouncements } from '@/features/announcements/hooks/useAnnouncements';
 import { useSections } from '@/features/sections/hooks/useSections';
-import SectionCard from '@/features/sections/components/SectionCard';
+import SectionDashboard from '@/features/sections/components/SectionDashboard';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { profileService } from '@/services/api/profile.service';
 import { Sidebar, SidebarSection } from '@/features/dashboard/components/Sidebar';
@@ -23,7 +24,12 @@ import ChatPanel from '@/features/chat/components/ChatPanel';
 
 export default function StudentDashboard() {
   const { user } = useAuthStore();
-  const [activeSection, setActiveSection] = useState<SidebarSection>('feed');
+  const location = useLocation();
+  // Allows other pages (e.g. Profile) to deep-link back into a specific
+  // dashboard section via navigate(path, { state: { section } }).
+  const [activeSection, setActiveSection] = useState<SidebarSection>(
+    (location.state as { section?: SidebarSection } | null)?.section || 'feed'
+  );
   const [feedFilter, setFeedFilter] = useState<FeedFilter>('all');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [announcementSearch, setAnnouncementSearch] = useState('');
@@ -218,23 +224,10 @@ export default function StudentDashboard() {
           )}
 
           {activeSection === 'sections' && (
-            <div className="max-w-2xl mx-auto space-y-4">
-              <h2 className="text-lg font-semibold text-white mb-2">Sections</h2>
-              {sectionsLoading ? (
-                <div className="rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a]/60 p-8 text-center text-[#6b6b6b]">
-                  Loading your sections...
-                </div>
-              ) : sectionList.length === 0 ? (
-                <div className="rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a]/60 p-8 text-center">
-                  <p className="text-[#6b6b6b]">You are not enrolled in any sections yet.</p>
-                  <p className="text-sm text-[#4a4a4a] mt-2">Contact your professor to be added to a section.</p>
-                </div>
-              ) : (
-                sectionList.map((section) => (
-                  <SectionCard key={section.id} section={section} onRefresh={refetchSections} />
-                ))
-              )}
-            </div>
+            <SectionDashboard
+              onNavigateToAnnouncements={() => setActiveSection('announcements')}
+              onNavigateToChat={() => setActiveSection('chat')}
+            />
           )}
 
           {activeSection === 'friends' && <FriendsPage />}

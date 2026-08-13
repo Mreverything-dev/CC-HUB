@@ -13,6 +13,7 @@ class StudentProfileBase(BaseModel):
     year_level: Optional[int] = Field(None, ge=1, le=6)
     section_id: Optional[str] = None
     avatar_url: Optional[str] = None
+    cover_url: Optional[str] = None
     bio: Optional[str] = Field(None, max_length=500)
     contact_number: Optional[str] = Field(None, max_length=20)
     address: Optional[str] = Field(None, max_length=255)
@@ -46,6 +47,7 @@ class ProfessorProfileBase(BaseModel):
     department: Optional[str] = Field(None, max_length=100)
     title: Optional[str] = Field(None, max_length=100)
     avatar_url: Optional[str] = None
+    cover_url: Optional[str] = None
     bio: Optional[str] = Field(None, max_length=500)
     office: Optional[str] = Field(None, max_length=100)
     contact_number: Optional[str] = Field(None, max_length=20)
@@ -77,6 +79,7 @@ class AdminProfileBase(BaseModel):
     last_name: Optional[str] = Field(None, max_length=100)
     position: Optional[str] = Field(None, max_length=100)
     avatar_url: Optional[str] = None
+    cover_url: Optional[str] = None
     contact_number: Optional[str] = Field(None, max_length=20)
 
 class AdminProfileCreate(AdminProfileBase):

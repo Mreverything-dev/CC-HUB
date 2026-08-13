@@ -4,6 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import { livestreamService } from '@/services/api/livestream.service';
 import { Livestream } from '@/types/livestream.types';
 import { useSections } from '@/features/sections/hooks/useSections';
+import { useAuthStore } from '@/features/auth/store/auth.store';
+import { profileService } from '@/services/api/profile.service';
+import { Sidebar, SidebarSection } from '@/features/dashboard/components/Sidebar';
+import { Topbar } from '@/features/dashboard/components/Topbar';
 import GoLiveModal from '../../components/GoLiveModal';
 import { LiveStreamCard } from '../LiveStreamCard';
 import { UpcomingStreamCard } from '../UpcomingStreamCard';
@@ -17,6 +21,12 @@ import {
   UserGroupIcon,
   FilmIcon,
 } from '@heroicons/react/24/outline';
+
+const gridBg = {
+  backgroundImage:
+    'linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)',
+  backgroundSize: '44px 44px',
+};
 
 function StatCard({ icon: Icon, value, label, tint }: { icon: typeof SignalIcon; value: number; label: string; tint: string }) {
   return (
@@ -53,6 +63,7 @@ function CardSkeleton() {
 
 export default function LivestreamsPage() {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const { sections } = useSections();
   const [liveStreams, setLiveStreams] = useState<Livestream[]>([]);
   const [upcomingStreams, setUpcomingStreams] = useState<Livestream[]>([]);
@@ -61,10 +72,28 @@ export default function LivestreamsPage() {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
   const [reminders, setReminders] = useState<Set<string>>(new Set());
+  const [sidebarAvatarUrl, setSidebarAvatarUrl] = useState<string | null>(null);
 
   useEffect(() => {
     fetchStreams();
   }, []);
+
+  // Sidebar/Topbar reflect the current logged-in user, same as every other
+  // dashboard page - reuses the same profile fetch pattern used there.
+  useEffect(() => {
+    profileService
+      .getMyProfile()
+      .then((res) => setSidebarAvatarUrl((res.data.profile as any)?.avatar_url || null))
+      .catch(() => setSidebarAvatarUrl(null));
+  }, []);
+
+  // Livestreams isn't one of the dashboard's in-page sections, so nothing in
+  // the sidebar renders as "active" here. Section nav items route back to the
+  // user's role dashboard and deep-link into that section via router state
+  // (the "Live Streams" item itself is an href-based item Sidebar navigates directly).
+  const dashboardPath =
+    user?.role === 'admin' ? '/admin/dashboard' : user?.role === 'professor' ? '/professor/dashboard' : '/student/dashboard';
+  const handleSidebarNavigate = (section: SidebarSection) => navigate(dashboardPath, { state: { section } });
 
   const fetchStreams = async () => {
     setIsLoading(true);
@@ -137,8 +166,15 @@ export default function LivestreamsPage() {
   const handleGoLive = () => setShowGoLive(true);
 
   return (
-    <div className="min-h-screen bg-[#060B12] py-6 px-4 sm:py-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-[#060B12] text-[#F1F5F9] flex">
+      <div className="pointer-events-none fixed inset-0 opacity-[0.15]" style={gridBg} />
+
+      <Sidebar activeSection={null} onNavigate={handleSidebarNavigate} />
+
+      <div className="flex-1 min-w-0 flex flex-col">
+        <Topbar avatarUrl={sidebarAvatarUrl} onOpenFriends={() => handleSidebarNavigate('friends')} />
+
+        <main className="relative flex-1 max-w-7xl w-full mx-auto px-4 py-6 lg:px-8">
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
           <div>
@@ -266,6 +302,7 @@ export default function LivestreamsPage() {
             )}
           </div>
         )}
+        </main>
       </div>
 
       {/* Go Live Modal */}

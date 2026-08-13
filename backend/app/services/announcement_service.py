@@ -4,7 +4,7 @@ from sqlalchemy import select, or_, and_, func
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
 from fastapi import HTTPException, status
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 import uuid
 
@@ -450,7 +450,10 @@ class AnnouncementService:
             ))
         await self.db.commit()
 
-        created_at_iso = datetime.utcnow().isoformat()
+        # Constructed fresh for this broadcast (not re-read from the DB), so
+        # it must be made explicitly UTC-aware here - otherwise it serializes
+        # without an offset and the browser misreads it as local time.
+        created_at_iso = datetime.now(timezone.utc).isoformat()
         for recipient_id, notif_id in recipients_with_ids:
             await manager.send_to_user(
                 user_id=recipient_id,

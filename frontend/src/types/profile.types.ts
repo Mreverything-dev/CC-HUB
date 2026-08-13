@@ -9,6 +9,7 @@ export interface StudentProfile {
   year_level: number | null;
   section_id: string | null;
   avatar_url: string | null;
+  cover_url: string | null;
   bio: string | null;
   contact_number: string | null;
   address: string | null;
@@ -25,6 +26,7 @@ export interface ProfessorProfile {
   department: string | null;
   title: string | null;
   avatar_url: string | null;
+  cover_url: string | null;
   bio: string | null;
   office: string | null;
   contact_number: string | null;
@@ -39,6 +41,7 @@ export interface AdminProfile {
   last_name: string | null;
   position: string | null;
   avatar_url: string | null;
+  cover_url: string | null;
   contact_number: string | null;
   created_at: string;
   updated_at: string;
@@ -65,6 +68,7 @@ export interface StudentProfileCreate {
   year_level?: number;
   section_id?: string;
   avatar_url?: string;
+  cover_url?: string;
   bio?: string;
   contact_number?: string;
   address?: string;
@@ -78,6 +82,7 @@ export interface StudentProfileUpdate {
   year_level?: number;
   section_id?: string;
   avatar_url?: string;
+  cover_url?: string;
   bio?: string;
   contact_number?: string;
   address?: string;
@@ -95,6 +100,7 @@ export interface ProfessorProfileCreate {
   department?: string;
   title?: string;
   avatar_url?: string;
+  cover_url?: string;
   bio?: string;
   office?: string;
   contact_number?: string;
@@ -107,6 +113,7 @@ export interface ProfessorProfileUpdate {
   department?: string;
   title?: string;
   avatar_url?: string;
+  cover_url?: string;
   bio?: string;
   office?: string;
   contact_number?: string;
@@ -122,6 +129,7 @@ export interface AdminProfileCreate {
   last_name?: string;
   position?: string;
   avatar_url?: string;
+  cover_url?: string;
   contact_number?: string;
 }
 
@@ -130,5 +138,6 @@ export interface AdminProfileUpdate {
   last_name?: string;
   position?: string;
   avatar_url?: string;
+  cover_url?: string;
   contact_number?: string;
 }
