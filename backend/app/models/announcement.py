@@ -13,6 +13,7 @@ class Announcement(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
     title = Column(String(255), nullable=False)
     content = Column(Text, nullable=False)
+    image_url = Column(String(500))
     type = Column(Enum('general', 'academic', 'event', 'emergency', name='announcement_type'), default='general')
     priority = Column(Enum('low', 'normal', 'high', 'urgent', name='priority_level'), default='normal')
     created_by_role = Column(String(50))  # 'admin' or 'professor'

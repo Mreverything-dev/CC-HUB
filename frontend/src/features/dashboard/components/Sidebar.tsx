@@ -19,11 +19,14 @@ import {
   ArrowRightOnRectangleIcon,
 } from '@heroicons/react/24/outline';
 import { useAuthStore } from '@/features/auth/store/auth.store';
+import { useFriendStore } from '@/features/friends/store/friend.store';
+import { useChatStore } from '@/features/chat/store/chat.store';
 import { profileService } from '@/services/api/profile.service';
+import { livestreamService } from '@/services/api/livestream.service';
 import { Avatar } from './Avatar';
 import { RoleBadge } from './RoleBadge';
 
-export type SidebarSection = 'feed' | 'announcements' | 'sections' | 'friends';
+export type SidebarSection = 'feed' | 'announcements' | 'sections' | 'friends' | 'chat';
 
 interface NavItem {
   id: string;
@@ -40,7 +43,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'sections', label: 'Sections', icon: UsersIcon, section: 'sections' },
   { id: 'classes', label: 'Classes', icon: AcademicCapIcon, comingSoon: true },
   { id: 'live', label: 'Live Streams', icon: VideoCameraIcon, href: '/livestreams' },
-  { id: 'chat', label: 'Chat', icon: ChatBubbleLeftIcon, href: '/chat' },
+  { id: 'chat', label: 'Chat', icon: ChatBubbleLeftIcon, section: 'chat' },
   { id: 'friends', label: 'Friends', icon: UserPlusIcon, section: 'friends' },
   { id: 'events', label: 'Events', icon: CalendarIcon, comingSoon: true },
   { id: 'resources', label: 'Resources', icon: BookOpenIcon, comingSoon: true },
@@ -56,6 +59,19 @@ export function Sidebar({ activeSection, onNavigate }: SidebarProps) {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [liveCount, setLiveCount] = useState(0);
+
+  // ✅ Read from the already-populated shared stores rather than calling
+  // useFriends()/useChat() again here - those hooks register their own
+  // socket.io listeners, and socketService.off() removes ALL listeners for
+  // an event name, so a second concurrent registration (Sidebar + Topbar's
+  // NotificationBell both mounted at once) would double-fire notifications.
+  const notifications = useFriendStore((state) => state.notifications);
+  const chatUnreadCount = useChatStore((state) => state.unreadCount);
+
+  const announcementUnreadCount = notifications.filter(
+    (n) => n.type === 'announcement' && !n.is_read
+  ).length;
 
   useEffect(() => {
     profileService
@@ -63,6 +79,24 @@ export function Sidebar({ activeSection, onNavigate }: SidebarProps) {
       .then((res) => setAvatarUrl((res.data.profile as any)?.avatar_url || null))
       .catch(() => setAvatarUrl(null));
   }, []);
+
+  useEffect(() => {
+    const fetchLiveCount = () => {
+      livestreamService
+        .getStreams('live')
+        .then((res) => setLiveCount(res.data.length))
+        .catch(() => setLiveCount(0));
+    };
+    fetchLiveCount();
+    const interval = setInterval(fetchLiveCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const NAV_COUNTS: Record<string, number> = {
+    announcements: announcementUnreadCount,
+    live: liveCount,
+    chat: chatUnreadCount,
+  };
 
   const handleItemClick = (item: NavItem) => {
     if (item.comingSoon) return;
@@ -98,6 +132,7 @@ export function Sidebar({ activeSection, onNavigate }: SidebarProps) {
         {NAV_ITEMS.map((item) => {
           const isActive = item.section && item.section === activeSection;
           const Icon = item.icon;
+          const count = NAV_COUNTS[item.id] || 0;
           return (
             <button
               key={item.id}
@@ -114,11 +149,19 @@ export function Sidebar({ activeSection, onNavigate }: SidebarProps) {
             >
               <Icon className="h-5 w-5 flex-shrink-0" />
               <span className="flex-1 text-left">{item.label}</span>
-              {item.comingSoon && (
+              {item.comingSoon ? (
                 <span className="text-[9px] font-semibold uppercase tracking-wide text-[#4a4a4a] border border-[#2a2a2a] rounded px-1.5 py-0.5">
                   Soon
                 </span>
-              )}
+              ) : count > 0 ? (
+                <span
+                  className={`text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center flex-shrink-0 ${
+                    isActive ? 'bg-[#00d4ff] text-[#0a0a0a]' : 'bg-[#00d4ff]/20 text-[#00d4ff]'
+                  }`}
+                >
+                  {count > 9 ? '9+' : count}
+                </span>
+              ) : null}
             </button>
           );
         })}

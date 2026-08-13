@@ -5,6 +5,7 @@ import { useFriends } from '@/features/friends/hooks/useFriends';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { formatDistanceToNow } from 'date-fns';
 import { MagnifyingGlassIcon, PencilSquareIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { ConversationAvatar } from './ConversationAvatar';
 
 interface ChatListProps {
   onSelectConversation: (conversationId: string) => void;
@@ -34,21 +35,15 @@ export function ChatList({ onSelectConversation, selectedId }: ChatListProps) {
     }
   }, [searchTerm, conversations]);
 
+  const getOtherParticipant = (conv: any) =>
+    conv.participants?.find((p: any) => p.id !== user?.id) || null;
+
   const getConversationName = (conv: any) => {
     if (conv.type === 'group') {
       return conv.name || 'Group Chat';
     }
     // For direct messages, show the other participant's name
-    const otherUser = conv.participants?.find((p: any) => p.id !== user?.id);
-    return otherUser?.username || 'Unknown User';
-  };
-
-  const getConversationAvatar = (conv: any) => {
-    if (conv.type === 'group') {
-      return '👥';
-    }
-    const otherUser = conv.participants?.find((p: any) => p.id !== user?.id);
-    return otherUser?.username?.charAt(0).toUpperCase() || 'U';
+    return getOtherParticipant(conv)?.username || 'Unknown User';
   };
 
   const handleStartChat = async (friendUserId: string) => {
@@ -120,10 +115,7 @@ export function ChatList({ onSelectConversation, selectedId }: ChatListProps) {
                   isSelected ? 'bg-[#00d4ff]/10' : ''
                 }`}
               >
-                {/* Avatar */}
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#00d4ff] to-[#0099cc] flex items-center justify-center text-[#0a0a0a] font-bold text-lg flex-shrink-0">
-                  {getConversationAvatar(conv)}
-                </div>
+                <ConversationAvatar conversation={conv} currentUserId={user?.id} size="md" />
 
                 {/* Info */}
                 <div className="flex-1 min-w-0 text-left">

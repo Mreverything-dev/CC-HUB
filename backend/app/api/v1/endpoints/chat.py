@@ -91,6 +91,9 @@ async def send_message(
         "sender_avatar": await service._get_avatar_url(str(current_user.id), current_user.role),
         "content": message.content,
         "type": message.type,
+        "media_url": message.media_url,
+        "media_name": message.media_name,
+        "reactions": [],
         "is_read": message.is_read,
         "created_at": message.created_at,
         "updated_at": message.updated_at

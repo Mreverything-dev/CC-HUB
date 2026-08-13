@@ -19,6 +19,7 @@ import { AnnouncementWidget } from '@/features/dashboard/components/Announcement
 import { SectionWidget } from '@/features/dashboard/components/SectionWidget';
 import { EventCardList } from '@/features/dashboard/components/EventCard';
 import FriendsPage from '@/features/friends/components/FriendsPage';
+import ChatPanel from '@/features/chat/components/ChatPanel';
 
 export default function StudentDashboard() {
   const { user } = useAuthStore();
@@ -237,6 +238,8 @@ export default function StudentDashboard() {
           )}
 
           {activeSection === 'friends' && <FriendsPage />}
+
+          {activeSection === 'chat' && <ChatPanel fullHeight={false} />}
         </main>
       </div>
     </div>

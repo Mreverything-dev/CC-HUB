@@ -33,9 +33,18 @@ class ConversationResponse(BaseModel):
 class MessageBase(BaseModel):
     content: str = Field(..., min_length=1, max_length=5000)
     type: str = "text"
+    media_url: Optional[str] = None
+    media_name: Optional[str] = None
 
 class MessageCreate(MessageBase):
     conversation_id: str
+
+class MessageReactionSummary(BaseModel):
+    user_id: str
+    reaction: str
+
+class MessageReactionRequest(BaseModel):
+    reaction: str = Field(..., min_length=1, max_length=16)
 
 class MessageResponse(BaseModel):
     id: str
@@ -45,12 +54,15 @@ class MessageResponse(BaseModel):
     sender_avatar: Optional[str] = None
     content: str
     type: str
+    media_url: Optional[str] = None
+    media_name: Optional[str] = None
+    reactions: List[MessageReactionSummary] = Field(default_factory=list)
     is_read: bool
     created_at: datetime
     updated_at: datetime
-    
+
     model_config = ConfigDict(from_attributes=True)
-    
+
     @field_validator('id', 'conversation_id', 'sender_id', mode='before')
     @classmethod
     def convert_uuid_to_str(cls, v):

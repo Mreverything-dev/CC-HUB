@@ -22,7 +22,7 @@ export default function NotificationBell({ onNavigateFriends }: NotificationBell
   } = useFriends();
   const [isOpen, setIsOpen] = useState(false);
 
-  const handleNotificationClick = (id: string, isRead: boolean, type: string) => {
+  const handleNotificationClick = (id: string, isRead: boolean, type: string, data: any) => {
     if (!isRead) {
       markNotificationRead(id);
     }
@@ -33,6 +33,8 @@ export default function NotificationBell({ onNavigateFriends }: NotificationBell
       } else {
         navigate('/friends');
       }
+    } else if (type === 'announcement' && data?.announcement_id) {
+      navigate(`/announcements/${data.announcement_id}`);
     }
   };
 
@@ -72,30 +74,45 @@ export default function NotificationBell({ onNavigateFriends }: NotificationBell
               {notifications.length === 0 ? (
                 <p className="text-sm text-gray-400 text-center py-8">No notifications yet.</p>
               ) : (
-                notifications.map((n) => (
-                  <button
-                    key={n.id}
-                    onClick={() => handleNotificationClick(n.id, n.is_read, n.type)}
-                    className={`w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition ${
-                      !n.is_read ? 'bg-blue-50/50' : ''
-                    }`}
-                  >
-                    <div className="flex items-start gap-2">
-                      {!n.is_read && (
-                        <span className="w-2 h-2 mt-1.5 rounded-full bg-blue-600 flex-shrink-0" />
-                      )}
-                      <div className={n.is_read ? 'ml-4' : ''}>
-                        <p className="text-sm font-medium text-gray-900">{n.title}</p>
-                        {n.content && (
-                          <p className="text-sm text-gray-500">{n.content}</p>
-                        )}
-                        <p className="text-xs text-gray-400 mt-1">
-                          {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
-                        </p>
+                notifications.map((n) => {
+                  const actorAvatar = n.data?.actor_avatar as string | null | undefined;
+                  const actorName = n.data?.actor_name as string | undefined;
+                  return (
+                    <button
+                      key={n.id}
+                      onClick={() => handleNotificationClick(n.id, n.is_read, n.type, n.data)}
+                      className={`w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition ${
+                        !n.is_read ? 'bg-blue-50/50' : ''
+                      }`}
+                    >
+                      <div className="flex items-start gap-2.5">
+                        <div className="relative flex-shrink-0">
+                          <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
+                            {actorAvatar ? (
+                              <img src={actorAvatar} alt={actorName || ''} className="w-full h-full object-cover" />
+                            ) : (
+                              <span className="text-gray-500 text-xs font-semibold">
+                                {actorName?.charAt(0).toUpperCase() || 'C'}
+                              </span>
+                            )}
+                          </div>
+                          {!n.is_read && (
+                            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-blue-600 border-2 border-white" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900">{n.title}</p>
+                          {n.content && (
+                            <p className="text-sm text-gray-500">{n.content}</p>
+                          )}
+                          <p className="text-xs text-gray-400 mt-1">
+                            {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  </button>
-                ))
+                    </button>
+                  );
+                })
               )}
             </div>
           </div>

@@ -155,6 +155,7 @@ class FriendService:
         
         # ✅ Send notification to receiver
         sender_name = sender.username if sender else "Someone"
+        sender_avatar = await self._get_avatar_url(sender_id, sender.role) if sender else None
         await self.create_notification(
             user_id=data.receiver_id,
             type="friend_request",
@@ -162,7 +163,10 @@ class FriendService:
             content=f"{sender_name} sent you a friend request",
             data={
                 "request_id": str(friend_request.id),
-                "sender_id": sender_id
+                "sender_id": sender_id,
+                "actor_id": sender_id,
+                "actor_name": sender_name,
+                "actor_avatar": sender_avatar,
             }
         )
 
@@ -220,6 +224,7 @@ class FriendService:
             )
             responder = responder_result.scalar_one_or_none()
             responder_name = responder.username if responder else "Someone"
+            responder_avatar = await self._get_avatar_url(user_id, responder.role) if responder else None
             await self.create_notification(
                 user_id=friend_request.sender_id,
                 type="friend_accepted",
@@ -227,7 +232,10 @@ class FriendService:
                 content=f"{responder_name} accepted your friend request",
                 data={
                     "request_id": str(friend_request.id),
-                    "user_id": user_id
+                    "user_id": user_id,
+                    "actor_id": user_id,
+                    "actor_name": responder_name,
+                    "actor_avatar": responder_avatar,
                 }
             )
 

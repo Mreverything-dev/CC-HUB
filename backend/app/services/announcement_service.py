@@ -6,11 +6,13 @@ from typing import List, Optional
 from fastapi import HTTPException, status
 from datetime import datetime
 import logging
+import uuid
 
 from app.models.announcement import Announcement, AnnouncementTarget, AnnouncementReaction, AnnouncementBookmark
 from app.models.user import User
 from app.models.profile import StudentProfile, ProfessorProfile, AdminProfile
 from app.models.section import Section, SectionMember
+from app.models.notification import Notification
 from app.schemas.announcement import AnnouncementCreate, AnnouncementUpdate
 
 ALLOWED_REACTIONS = {"❤️", "😂", "🔥", "👍", "😮", "😢", "🚀"}
@@ -124,6 +126,18 @@ class AnnouncementService:
         result = await self.db.execute(
             select(SectionMember.section_id).where(
                 SectionMember.user_id == user_id
+            )
+        )
+        sections = result.scalars().all()
+        return [str(section) for section in sections]
+
+    async def get_officer_sections(self, user_id: str) -> List[str]:
+        """Get section IDs where the user holds a mayor/officer position -
+        the only sections a non-professor/admin is allowed to post to."""
+        result = await self.db.execute(
+            select(SectionMember.section_id).where(
+                SectionMember.user_id == user_id,
+                or_(SectionMember.is_mayor == True, SectionMember.is_officer == True)
             )
         )
         sections = result.scalars().all()
@@ -262,14 +276,19 @@ class AnnouncementService:
         logger.info(f"📝 Creating announcement for user: {user_id}")
         
         user = await self.get_user(user_id)
-        
-        # Only professors and admins can create announcements
+
+        # Professors and admins can always post. Everyone else (students) may
+        # only post if they hold a mayor/officer position in at least one
+        # section - and even then, only to the section(s) they officiate.
+        officer_section_ids: List[str] = []
         if user.role not in ["professor", "admin"]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only professors and admins can create announcements"
-            )
-        
+            officer_section_ids = await self.get_officer_sections(user_id)
+            if not officer_section_ids:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Only professors, admins, and section mayors/officers can create announcements"
+                )
+
         # For professors, validate they have sections
         if user.role == "professor":
             professor_sections = await self.get_professor_sections(user_id)
@@ -284,6 +303,7 @@ class AnnouncementService:
             user_id=user_id,
             title=data.title,
             content=data.content,
+            image_url=data.image_url,
             type=data.type,
             priority=data.priority,
             created_by_role=user.role,
@@ -342,16 +362,34 @@ class AnnouncementService:
                     )
                     self.db.add(target)
                     logger.info(f"📝 Added target for section: {section_id}")
-                
+
                 await self.db.commit()
             else:
                 logger.warning("⚠️ No sections targeted for this announcement")
-        
+
+        else:
+            # Mayor/officer - always scoped to the section(s) they officiate,
+            # never public/CCS-wide even if target_sections is omitted.
+            target_section_ids = [
+                sid for sid in (data.target_sections or officer_section_ids)
+                if sid in officer_section_ids
+            ] or officer_section_ids
+            logger.info(f"📝 Mayor/officer targeting sections: {target_section_ids}")
+
+            for section_id in target_section_ids:
+                target = AnnouncementTarget(
+                    announcement_id=announcement.id,
+                    target_type="section",
+                    target_id=section_id
+                )
+                self.db.add(target)
+            await self.db.commit()
+
         # ============================================
         # EAGERLY LOAD TARGETS BEFORE RETURNING
         # ============================================
         await self.db.refresh(announcement)
-        
+
         result = await self.db.execute(
             select(Announcement)
             .options(selectinload(Announcement.targets), selectinload(Announcement.user))
@@ -360,7 +398,72 @@ class AnnouncementService:
         announcement = result.scalar_one()
 
         logger.info(f"📝 Announcement created with {len(announcement.targets) if announcement.targets else 0} targets")
+
+        if announcement.is_published:
+            await self._notify_new_announcement(announcement, user)
+
         return await self._enrich(announcement, user_id)
+
+    async def _notify_new_announcement(self, announcement: Announcement, author: User):
+        """Notify everyone the announcement targets (DB row + realtime WS
+        push), mirroring FriendService.create_notification's pattern."""
+        from app.websocket.manager import manager
+
+        target_types = {t.target_type for t in (announcement.targets or [])}
+        if "all" in target_types:
+            result = await self.db.execute(select(User.id).where(User.id != author.id))
+            recipient_ids = {str(uid) for uid in result.scalars().all()}
+        else:
+            section_ids = [t.target_id for t in (announcement.targets or []) if t.target_type == "section"]
+            if not section_ids:
+                return
+            result = await self.db.execute(
+                select(SectionMember.user_id).where(
+                    SectionMember.section_id.in_(section_ids),
+                    SectionMember.user_id != author.id
+                )
+            )
+            recipient_ids = {str(uid) for uid in result.scalars().all()}
+
+        if not recipient_ids:
+            return
+
+        author_avatar = await self._get_avatar_url(str(author.id), author.role)
+        title = "New Announcement"
+        content = f"{author.username} posted: {announcement.title}"
+        notif_data = {
+            "announcement_id": str(announcement.id),
+            "actor_id": str(author.id),
+            "actor_name": author.username,
+            "actor_avatar": author_avatar,
+        }
+
+        recipients_with_ids = [(recipient_id, uuid.uuid4()) for recipient_id in recipient_ids]
+        for recipient_id, notif_id in recipients_with_ids:
+            self.db.add(Notification(
+                id=notif_id,
+                user_id=recipient_id,
+                type="announcement",
+                title=title,
+                content=content,
+                data=notif_data,
+            ))
+        await self.db.commit()
+
+        created_at_iso = datetime.utcnow().isoformat()
+        for recipient_id, notif_id in recipients_with_ids:
+            await manager.send_to_user(
+                user_id=recipient_id,
+                event="new_notification",
+                data={
+                    "id": str(notif_id),
+                    "type": "announcement",
+                    "title": title,
+                    "content": content,
+                    "data": notif_data,
+                    "created_at": created_at_iso,
+                },
+            )
 
     async def get_announcement(self, announcement_id: str, viewer_id: str) -> Announcement:
         """Get a single announcement by ID - enforces the same visibility

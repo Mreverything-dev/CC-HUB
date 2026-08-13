@@ -11,14 +11,22 @@ import {
   ArrowUpIcon,
   ExclamationCircleIcon,
   CheckIcon,
+  PhotoIcon,
 } from '@heroicons/react/24/outline';
 import { useAnnouncements } from '../hooks/useAnnouncements';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { useSections } from '@/features/sections/hooks/useSections';
+import { mediaService } from '@/services/api/media.service';
 import { AnnouncementCreate } from '@/types/announcement.types';
+
+// Keep in sync with backend ALLOWED_TYPES in app/api/v1/endpoints/media.py (images only here)
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
 
 interface CreateAnnouncementProps {
   onClose: () => void;
+  /** Pre-select a single target section (e.g. opened from that section's own
+   * management view) instead of defaulting to every section the user can post to. */
+  defaultSectionId?: string;
 }
 
 const TYPE_OPTIONS: { value: AnnouncementCreate['type']; label: string; icon: typeof MegaphoneIcon }[] = [
@@ -38,7 +46,7 @@ const PRIORITY_OPTIONS: { value: AnnouncementCreate['priority']; label: string; 
 const inputClassName =
   'w-full px-3 py-2 rounded-xl border border-[#2a2a2a] bg-[#0f0f0f] text-sm text-white placeholder-[#6b6b6b] focus:ring-1 focus:ring-[#00d4ff] focus:border-[#00d4ff] focus:outline-none transition';
 
-export function CreateAnnouncement({ onClose }: CreateAnnouncementProps) {
+export function CreateAnnouncement({ onClose, defaultSectionId }: CreateAnnouncementProps) {
   const { createAnnouncement, isCreating } = useAnnouncements();
   const { user } = useAuthStore();
   const { sections, isLoading: sectionsLoading, refetch: refetchSections } = useSections();
@@ -49,43 +57,99 @@ export function CreateAnnouncement({ onClose }: CreateAnnouncementProps) {
     priority: 'normal',
     is_published: true,
     expires_at: null,
-    target_sections: [],
+    target_sections: defaultSectionId ? [defaultSectionId] : [],
   });
   const [error, setError] = useState('');
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
-  // ✅ Fetch sections on mount
+  // ✅ Clean up the object URL preview when it changes/unmounts
   useEffect(() => {
-    if (user?.role === 'professor') {
+    return () => {
+      if (imagePreview) URL.revokeObjectURL(imagePreview);
+    };
+  }, [imagePreview]);
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      setError('Unsupported image type. Allowed: JPEG, PNG, GIF, WEBP, SVG.');
+      return;
+    }
+    setError('');
+    setImageFile(file);
+    setImagePreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
+  };
+
+  const removeImage = () => {
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImageFile(null);
+    setImagePreview(null);
+  };
+
+  // ✅ Fetch sections on mount (professors need their advised sections,
+  // students need their memberships to determine mayor/officer status)
+  useEffect(() => {
+    if (user?.role === 'professor' || user?.role === 'student') {
       refetchSections();
     }
   }, [user]);
 
-  // ✅ Only professors and admins can create announcements
-  if (!user || (user.role !== 'professor' && user.role !== 'admin')) {
+  // ✅ Sections where the current user holds a mayor/officer position -
+  // the only sections a student is allowed to post to
+  const officerSections = sections.filter((s) =>
+    s.members?.some((m) => m.user_id === user?.id && (m.is_mayor || m.is_officer))
+  );
+  const isOfficer = user?.role === 'student' && officerSections.length > 0;
+
+  // ✅ Professors, admins, and section mayors/officers can create announcements
+  if (!user || (user.role !== 'professor' && user.role !== 'admin' && !isOfficer)) {
     return null;
   }
 
-  // ✅ Get professor's sections
-  const professorSections = user.role === 'professor' ? sections : [];
+  // ✅ Sections this user is allowed to post to
+  const postableSections = user.role === 'professor' ? sections : isOfficer ? officerSections : [];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    // ✅ Validate professor has sections
-    if (user.role === 'professor' && professorSections.length === 0) {
+    // ✅ Validate professor/officer has sections
+    if ((user.role === 'professor' || isOfficer) && postableSections.length === 0) {
       setError('You don\'t have any sections to post announcements to. Please create a section first.');
       return;
     }
 
     try {
-      // ✅ For professors, target_sections must be set
+      // ✅ Upload the image first (if one was selected) so we have a URL to attach
+      let uploadedImageUrl: string | null = formData.image_url ?? null;
+      if (imageFile) {
+        setIsUploadingImage(true);
+        try {
+          const uploaded = await mediaService.uploadFiles([imageFile]);
+          uploadedImageUrl = uploaded.urls[0];
+        } catch (uploadErr: any) {
+          setError(uploadErr.response?.data?.detail || 'Failed to upload image');
+          setIsUploadingImage(false);
+          return;
+        }
+        setIsUploadingImage(false);
+      }
+
+      // ✅ For professors/officers, target_sections must be set
       const announcementData = {
         ...formData,
+        image_url: uploadedImageUrl,
         expires_at: formData.expires_at || null,
-        // ✅ If no sections selected, target ALL sections
-        target_sections: user.role === 'professor' && formData.target_sections?.length === 0
-          ? professorSections.map(s => s.id)
+        // ✅ If no sections selected, target ALL postable sections
+        target_sections: (user.role === 'professor' || isOfficer) && (formData.target_sections?.length ?? 0) === 0
+          ? postableSections.map(s => s.id)
           : formData.target_sections,
       };
 
@@ -108,10 +172,10 @@ export function CreateAnnouncement({ onClose }: CreateAnnouncementProps) {
   };
 
   const selectAllSections = () => {
-    if (professorSections.length > 0) {
+    if (postableSections.length > 0) {
       setFormData(prev => ({
         ...prev,
-        target_sections: professorSections.map(s => s.id)
+        target_sections: postableSections.map(s => s.id)
       }));
     }
   };
@@ -131,7 +195,11 @@ export function CreateAnnouncement({ onClose }: CreateAnnouncementProps) {
           <div>
             <h2 className="text-lg font-bold text-white">Create Announcement</h2>
             <p className="text-xs text-[#6b6b6b] mt-0.5">
-              {user.role === 'admin' ? 'Share an update with everyone' : 'Share important updates with your students'}
+              {user.role === 'admin'
+                ? 'Share an update with everyone'
+                : isOfficer
+                ? 'Share an update with your section'
+                : 'Share important updates with your students'}
             </p>
           </div>
           <button
@@ -181,6 +249,39 @@ export function CreateAnnouncement({ onClose }: CreateAnnouncementProps) {
               className={`${inputClassName} resize-none`}
               placeholder="Write your announcement content here..."
             />
+          </div>
+
+          {/* Image */}
+          <div>
+            <label className="block text-sm font-medium text-[#a0a0a0] mb-1.5">Image (Optional)</label>
+            {imagePreview ? (
+              <div className="relative rounded-xl overflow-hidden border border-[#2a2a2a] bg-[#0f0f0f]">
+                <img src={imagePreview} alt="Announcement attachment preview" className="w-full max-h-64 object-cover" />
+                <button
+                  type="button"
+                  onClick={removeImage}
+                  title="Remove image"
+                  className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 text-white hover:bg-black/80 transition"
+                >
+                  <XMarkIcon className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <label
+                htmlFor="announcement-image"
+                className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-[#2a2a2a] bg-[#0f0f0f] py-6 text-sm text-[#6b6b6b] hover:border-[#3a3a3a] hover:text-[#a0a0a0] cursor-pointer transition"
+              >
+                <PhotoIcon className="h-5 w-5" />
+                Click to attach an image
+                <input
+                  id="announcement-image"
+                  type="file"
+                  accept={ALLOWED_IMAGE_TYPES.join(',')}
+                  onChange={handleImageSelect}
+                  className="hidden"
+                />
+              </label>
+            )}
           </div>
 
           {/* Type */}
@@ -260,8 +361,8 @@ export function CreateAnnouncement({ onClose }: CreateAnnouncementProps) {
             </div>
           </div>
 
-          {/* ✅ Section Selection for Professors */}
-          {user.role === 'professor' && (
+          {/* ✅ Section Selection for Professors and section mayors/officers */}
+          {(user.role === 'professor' || isOfficer) && (
             <div className="rounded-xl border border-[#2a2a2a] bg-[#0f0f0f]/60 p-4">
               <div className="flex items-center justify-between mb-3">
                 <label className="block text-sm font-medium text-[#a0a0a0]">
@@ -288,14 +389,14 @@ export function CreateAnnouncement({ onClose }: CreateAnnouncementProps) {
 
               {sectionsLoading ? (
                 <p className="text-sm text-[#6b6b6b] py-2">Loading sections...</p>
-              ) : professorSections.length === 0 ? (
+              ) : postableSections.length === 0 ? (
                 <p className="text-sm text-amber-400">
                   You don't have any sections yet. Create a section first.
                 </p>
               ) : (
                 <div className="space-y-2">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {professorSections.map((section) => {
+                    {postableSections.map((section) => {
                       const isSelected = (formData.target_sections || []).includes(section.id);
                       return (
                         <button
@@ -361,10 +462,10 @@ export function CreateAnnouncement({ onClose }: CreateAnnouncementProps) {
             </button>
             <button
               type="submit"
-              disabled={isCreating}
+              disabled={isCreating || isUploadingImage}
               className="px-6 py-2 text-sm font-semibold bg-gradient-to-br from-[#00d4ff] to-[#0099cc] text-[#0a0a0a] rounded-xl hover:opacity-90 transition disabled:opacity-50"
             >
-              {isCreating ? 'Creating...' : 'Create Announcement'}
+              {isUploadingImage ? 'Uploading image...' : isCreating ? 'Creating...' : 'Create Announcement'}
             </button>
           </div>
         </form>

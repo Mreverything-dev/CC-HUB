@@ -11,10 +11,12 @@ import {
   UserGroupIcon,
   ShieldCheckIcon,
   ExclamationTriangleIcon,
+  MegaphoneIcon,
 } from '@heroicons/react/24/outline';
 import { Avatar } from '@/features/dashboard/components/Avatar';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import AddStudentModal from '../components/AddStudentModal';
+import { CreateAnnouncement } from '@/features/announcements/components/CreateAnnouncement';
 
 interface SectionDetailModalProps {
   section: Section;
@@ -36,6 +38,7 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
 
   const [section, setSection] = useState<Section>(initialSection);
   const [showAddStudent, setShowAddStudent] = useState(false);
+  const [showCreateAnnouncement, setShowCreateAnnouncement] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -228,15 +231,22 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
           </div>
         ) : !error && (
           <>
-            {/* Actions - Show for users with manage permission */}
+            {/* Actions - Show for users with manage permission (advisor, admin, mayor, officer) */}
             {canManage && (
-              <div className="p-4 border-b border-[#1E3447] flex items-center gap-2">
+              <div className="p-4 border-b border-[#1E3447] flex items-center gap-2 flex-wrap">
                 <button
                   onClick={() => setShowAddStudent(true)}
                   className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-gradient-to-br from-[#00C8FF] to-[#0090CC] text-[#060B12] rounded-xl hover:opacity-90 transition"
                 >
                   <UserPlusIcon className="h-5 w-5" />
                   Add Student
+                </button>
+                <button
+                  onClick={() => setShowCreateAnnouncement(true)}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-semibold border border-[#00C8FF]/30 bg-[#00C8FF]/10 text-[#00C8FF] rounded-xl hover:bg-[#00C8FF]/20 transition"
+                >
+                  <MegaphoneIcon className="h-5 w-5" />
+                  Create Announcement
                 </button>
               </div>
             )}
@@ -378,6 +388,14 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
           sectionId={section.id}
           onClose={() => setShowAddStudent(false)}
           onSuccess={refreshSection}
+        />
+      )}
+
+      {/* Create Announcement Modal - pre-scoped to this section */}
+      {showCreateAnnouncement && (
+        <CreateAnnouncement
+          defaultSectionId={section.id}
+          onClose={() => setShowCreateAnnouncement(false)}
         />
       )}
 

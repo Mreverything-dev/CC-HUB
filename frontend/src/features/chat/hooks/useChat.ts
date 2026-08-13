@@ -66,12 +66,16 @@ export function useChat() {
   }, [setLoading, setMessages, resetUnreadCount]);
 
   // Send message
-  const sendMessage = useCallback(async (conversationId: string, content: string) => {
+  const sendMessage = useCallback((
+    conversationId: string,
+    content: string,
+    options?: { type?: string; mediaUrl?: string; mediaName?: string }
+  ) => {
     if (!content.trim()) return;
 
     try {
       // Send via WebSocket for real-time
-      socketService.sendMessage(conversationId, content);
+      socketService.sendMessage(conversationId, content, options?.type || 'text', options?.mediaUrl, options?.mediaName);
     } catch (error) {
       console.error('Error sending message:', error);
       toast.error('Failed to send message');
@@ -94,6 +98,13 @@ export function useChat() {
   // Handle typing
   const handleTyping = useCallback((conversationId: string, isTyping: boolean) => {
     socketService.sendTyping(conversationId, isTyping);
+  }, []);
+
+  // React to a message (add/change/remove) - the resulting reaction state
+  // comes back via the 'message:reaction' socket event (see lib/socket.ts),
+  // which updates the store for every client viewing the conversation.
+  const reactToMessage = useCallback((messageId: string, reaction: string) => {
+    socketService.reactToMessage(messageId, reaction);
   }, []);
 
   // Mark conversation as read
@@ -120,6 +131,7 @@ export function useChat() {
     setCurrentConversation,
     handleTyping,
     markConversationRead,
+    reactToMessage,
     refetchConversations,
   };
 }

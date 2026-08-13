@@ -9,6 +9,7 @@ export interface Announcement {
   user_id: string;
   title: string;
   content: string;
+  image_url?: string | null;
   type: 'general' | 'academic' | 'event' | 'emergency';
   priority: 'low' | 'normal' | 'high' | 'urgent';
   created_by_role: 'professor' | 'admin';
@@ -29,6 +30,7 @@ export interface Announcement {
 export interface AnnouncementCreate {
   title: string;
   content: string;
+  image_url?: string | null;
   type?: 'general' | 'academic' | 'event' | 'emergency';
   priority?: 'low' | 'normal' | 'high' | 'urgent';
   is_published?: boolean;
@@ -39,6 +41,7 @@ export interface AnnouncementCreate {
 export interface AnnouncementUpdate {
   title?: string;
   content?: string;
+  image_url?: string | null;
   type?: 'general' | 'academic' | 'event' | 'emergency';
   priority?: 'low' | 'normal' | 'high' | 'urgent';
   is_published?: boolean;

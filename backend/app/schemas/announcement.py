@@ -28,6 +28,7 @@ class PriorityLevel(str, Enum):
 class AnnouncementBase(BaseModel):
     title: str = Field(..., min_length=1, max_length=255, description="Announcement title")
     content: str = Field(..., min_length=1, description="Announcement content")
+    image_url: Optional[str] = Field(None, max_length=500, description="Attached image URL")
     type: AnnouncementType = AnnouncementType.GENERAL
     priority: PriorityLevel = PriorityLevel.NORMAL
     is_published: bool = True
@@ -57,6 +58,7 @@ class AnnouncementCreate(AnnouncementBase):
 class AnnouncementUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=255)
     content: Optional[str] = Field(None, min_length=1)
+    image_url: Optional[str] = Field(None, max_length=500)
     type: Optional[AnnouncementType] = None
     priority: Optional[PriorityLevel] = None
     is_published: Optional[bool] = None
@@ -82,6 +84,7 @@ class AnnouncementResponse(BaseModel):
     user_id: str
     title: str
     content: str
+    image_url: Optional[str] = None
     type: str
     priority: str
     created_by_role: str

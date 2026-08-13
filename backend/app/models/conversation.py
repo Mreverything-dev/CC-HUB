@@ -1,5 +1,5 @@
 # backend/app/models/conversation.py
-from sqlalchemy import Column, String, DateTime, Boolean, ForeignKey, Text
+from sqlalchemy import Column, String, DateTime, Boolean, ForeignKey, Text, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -40,6 +40,8 @@ class Message(Base):
     sender_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
     content = Column(Text, nullable=False)
     type = Column(String(50), default="text")  # text, image, video, file
+    media_url = Column(String(500))
+    media_name = Column(String(255))  # original filename, shown for file-type attachments
     is_read = Column(Boolean, default=False)
     read_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -48,3 +50,27 @@ class Message(Base):
     # Relationships
     conversation = relationship("Conversation", back_populates="messages")
     sender = relationship("User")
+
+
+class MessageReaction(Base):
+    """One Discord-style emoji reaction per user per message - re-reacting
+    with the same emoji removes it, a different emoji replaces it (enforced
+    in ChatService.react_to_message)."""
+    __tablename__ = "message_reactions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    message_id = Column(UUID(as_uuid=True), ForeignKey("messages.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    reaction = Column(String(16), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    message = relationship("Message")
+    user = relationship("User")
+
+
+Index(
+    "uq_message_reactions_message_user",
+    MessageReaction.message_id,
+    MessageReaction.user_id,
+    unique=True,
+)

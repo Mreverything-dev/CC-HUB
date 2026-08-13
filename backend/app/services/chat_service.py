@@ -2,7 +2,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, and_, or_, func
 from sqlalchemy.orm import selectinload
-from app.models.conversation import Conversation, ConversationMember, Message
+from app.models.conversation import Conversation, ConversationMember, Message, MessageReaction
 from app.models.user import User
 from app.models.profile import StudentProfile, ProfessorProfile, AdminProfile
 from app.schemas.chat import ConversationCreate, MessageCreate
@@ -10,6 +10,9 @@ from fastapi import HTTPException, status
 from datetime import datetime
 from typing import List, Optional
 from sqlalchemy import select, desc, and_, or_, func, update
+
+ALLOWED_REACTIONS = {"❤️", "👍", "😂", "😮", "😢", "🔥", "🚀"}
+
 class ChatService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -27,6 +30,35 @@ class ChatService:
             select(model.avatar_url).where(model.user_id == user_id)
         )
         return result.scalar_one_or_none()
+
+    async def _build_participants(self, conversation_id: str) -> List[dict]:
+        """Participant list (with avatar) for a conversation - shared by every
+        path that returns a ConversationResponse, so newly-created
+        conversations are just as fully populated as ones from the list
+        endpoint (previously only the list endpoint set this, so a brand new
+        conversation had an empty participants array and the frontend showed
+        "Unknown User")."""
+        result = await self.db.execute(
+            select(User)
+            .join(ConversationMember)
+            .where(ConversationMember.conversation_id == conversation_id)
+        )
+        users = result.scalars().all()
+        return [
+            {
+                "id": str(u.id),
+                "username": u.username,
+                "email": u.email,
+                "avatar_url": await self._get_avatar_url(str(u.id), u.role),
+            }
+            for u in users
+        ]
+
+    async def _get_message_reactions(self, message_id: str) -> List[dict]:
+        result = await self.db.execute(
+            select(MessageReaction).where(MessageReaction.message_id == message_id)
+        )
+        return [{"user_id": str(r.user_id), "reaction": r.reaction} for r in result.scalars().all()]
 
     # ============================================
     # CONVERSATION METHODS
@@ -48,22 +80,24 @@ class ChatService:
             )
         )
         conversation = result.scalar_one_or_none()
-        
+
         if conversation:
+            conversation.participants = await self._build_participants(str(conversation.id))
             return conversation
-        
+
         # Create new conversation
         conversation = Conversation(type="direct")
         self.db.add(conversation)
         await self.db.flush()
-        
+
         # Add participants
         for uid in [user_id, other_user_id]:
             member = ConversationMember(conversation_id=conversation.id, user_id=uid)
             self.db.add(member)
-        
+
         await self.db.commit()
         await self.db.refresh(conversation)
+        conversation.participants = await self._build_participants(str(conversation.id))
         return conversation
 
     async def create_group_conversation(self, user_id: str, data: ConversationCreate):
@@ -87,6 +121,7 @@ class ChatService:
         
         await self.db.commit()
         await self.db.refresh(conversation)
+        conversation.participants = await self._build_participants(str(conversation.id))
         return conversation
 
     async def get_user_conversations(self, user_id: str, limit: int = 50):
@@ -133,15 +168,7 @@ class ChatService:
             conv.unread_count = count_result.scalar()
 
             # Get participants (as plain dicts - ConversationResponse.participants is typed as List[dict])
-            participants = await self.db.execute(
-                select(User)
-                .join(ConversationMember)
-                .where(ConversationMember.conversation_id == conv.id)
-            )
-            conv.participants = [
-                {"id": str(u.id), "username": u.username, "email": u.email}
-                for u in participants.scalars().all()
-            ]
+            conv.participants = await self._build_participants(str(conv.id))
         
         return conversations
 
@@ -180,7 +207,9 @@ class ChatService:
             conversation_id=data.conversation_id,
             sender_id=user_id,
             content=data.content,
-            type=data.type
+            type=data.type,
+            media_url=data.media_url,
+            media_name=data.media_name
         )
         self.db.add(message)
         
@@ -189,7 +218,8 @@ class ChatService:
         
         await self.db.commit()
         await self.db.refresh(message)
-        
+        message.reactions = []  # brand new message, nothing to react to yet
+
         return message
 
     async def get_conversation_messages(self, conversation_id: str, user_id: str, limit: int = 50, before: Optional[datetime] = None):
@@ -223,6 +253,7 @@ class ChatService:
                 await self._get_avatar_url(str(message.sender_id), message.sender.role)
                 if message.sender else None
             )
+            message.reactions = await self._get_message_reactions(str(message.id))
 
         # Mark messages as read
         await self.db.execute(
@@ -265,3 +296,62 @@ class ChatService:
             .where(ConversationMember.conversation_id == conversation_id)
         )
         return result.scalars().all()
+
+    # ============================================
+    # REACTIONS
+    # ============================================
+
+    async def react_to_message(self, message_id: str, user_id: str, reaction: str) -> dict:
+        """Add/change/remove the caller's reaction on a message - same-emoji
+        toggles it off, a different emoji replaces it. Mirrors
+        StreamCommentService.react_to_comment / AnnouncementService's
+        reaction toggle."""
+        if reaction not in ALLOWED_REACTIONS:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported reaction")
+
+        message_result = await self.db.execute(select(Message).where(Message.id == message_id))
+        message = message_result.scalar_one_or_none()
+        if not message:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
+
+        # Only members of the conversation may react to its messages.
+        member_result = await self.db.execute(
+            select(ConversationMember).where(
+                ConversationMember.conversation_id == message.conversation_id,
+                ConversationMember.user_id == user_id
+            )
+        )
+        if not member_result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not a member of this conversation"
+            )
+
+        existing_result = await self.db.execute(
+            select(MessageReaction).where(
+                MessageReaction.message_id == message_id,
+                MessageReaction.user_id == user_id,
+            )
+        )
+        existing = existing_result.scalar_one_or_none()
+
+        if existing and existing.reaction == reaction:
+            await self.db.delete(existing)
+            new_reaction = None
+        elif existing:
+            existing.reaction = reaction
+            new_reaction = reaction
+        else:
+            self.db.add(MessageReaction(message_id=message_id, user_id=user_id, reaction=reaction))
+            new_reaction = reaction
+
+        await self.db.commit()
+        reactions = await self._get_message_reactions(message_id)
+
+        return {
+            "message_id": str(message_id),
+            "conversation_id": str(message.conversation_id),
+            "user_id": str(user_id),
+            "reaction": new_reaction,
+            "reactions": reactions,
+        }

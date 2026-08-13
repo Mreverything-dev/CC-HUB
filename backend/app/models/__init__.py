@@ -8,7 +8,7 @@ from app.models.comment import Comment
 from app.models.like import Like
 from app.models.share import Share
 from app.models.friend import Friend, FriendRequest, BlockedUser, UserReport
-from app.models.conversation import Conversation, ConversationMember, Message
+from app.models.conversation import Conversation, ConversationMember, Message, MessageReaction
 from app.models.notification import Notification
 from app.models.livestream import Livestream, StreamViewer, StreamComment, StreamCommentReaction
 from app.models.invitation_code import InvitationCode
@@ -33,6 +33,7 @@ __all__ = [
     "UserReport",
     "Announcement",
     "Message",
+    "MessageReaction",
     "Conversation",
     "ConversationMember",
     "Notification",

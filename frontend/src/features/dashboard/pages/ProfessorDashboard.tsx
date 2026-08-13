@@ -21,6 +21,7 @@ import { AnnouncementWidget } from '@/features/dashboard/components/Announcement
 import { SectionWidget } from '@/features/dashboard/components/SectionWidget';
 import { EventCardList } from '@/features/dashboard/components/EventCard';
 import FriendsPage from '@/features/friends/components/FriendsPage';
+import ChatPanel from '@/features/chat/components/ChatPanel';
 
 export default function ProfessorDashboard() {
   const { user } = useAuthStore();
@@ -185,24 +186,24 @@ export default function ProfessorDashboard() {
 
           {activeSection === 'announcements' && (
             <div className="max-w-2xl mx-auto space-y-4">
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-lg font-semibold text-white">Announcements</h2>
-                {canCreateAnnouncement && (
-                  <button
-                    onClick={() => setShowCreateAnnouncement(true)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#00d4ff]/10 text-[#00d4ff] hover:bg-[#00d4ff]/20 transition font-medium text-sm"
-                  >
-                    <PlusIcon className="h-4 w-4" />
-                    New Announcement
-                  </button>
-                )}
-              </div>
+              <h2 className="text-lg font-semibold text-white mb-2">Announcements</h2>
 
               <AnnouncementFilterBar
                 search={announcementSearch}
                 onSearchChange={setAnnouncementSearch}
                 category={announcementCategory}
                 onCategoryChange={setAnnouncementCategory}
+                actionSlot={
+                  canCreateAnnouncement && (
+                    <button
+                      onClick={() => setShowCreateAnnouncement(true)}
+                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#00d4ff]/10 text-[#00d4ff] hover:bg-[#00d4ff]/20 transition font-medium text-sm whitespace-nowrap"
+                    >
+                      <PlusIcon className="h-4 w-4" />
+                      New Announcement
+                    </button>
+                  )
+                }
               />
 
               {announcementsLoading ? (
@@ -248,6 +249,8 @@ export default function ProfessorDashboard() {
           {activeSection === 'sections' && <SectionManager />}
 
           {activeSection === 'friends' && <FriendsPage />}
+
+          {activeSection === 'chat' && <ChatPanel fullHeight={false} />}
         </main>
       </div>
 

@@ -10,6 +10,11 @@ export interface Conversation {
   participants: User[];
 }
 
+export interface MessageReactionEntry {
+  user_id: string;
+  reaction: string;
+}
+
 export interface Message {
   id: string;
   conversation_id: string;
@@ -18,6 +23,9 @@ export interface Message {
   sender_avatar?: string;
   content: string;
   type: 'text' | 'image' | 'video' | 'file';
+  media_url?: string | null;
+  media_name?: string | null;
+  reactions: MessageReactionEntry[];
   is_read: boolean;
   created_at: string;
   updated_at: string;
@@ -27,6 +35,8 @@ export interface MessageCreate {
   conversation_id: string;
   content: string;
   type?: string;
+  media_url?: string | null;
+  media_name?: string | null;
 }
 
 export interface ConversationCreate {

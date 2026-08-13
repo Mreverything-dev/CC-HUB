@@ -12,7 +12,14 @@ router = APIRouter()
 # Allowed file types
 ALLOWED_TYPES = [
     'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
-    'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo'
+    'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo',
+    # Generic file attachments (chat "send a file" support)
+    'application/pdf', 'application/msword', 'text/plain', 'application/zip',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
 ]
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB

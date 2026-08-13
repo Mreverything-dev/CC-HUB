@@ -192,22 +192,26 @@ async def send_message(sid, data):
     conversation_id = data.get('conversation_id')
     content = data.get('content')
     message_type = data.get('type', 'text')
-    
+    media_url = data.get('media_url')
+    media_name = data.get('media_name')
+
     if not conversation_id or not content:
         await sio.emit('error', {'message': 'Missing required fields'}, room=sid)
         return
-    
+
     try:
         # Save message to database
         async with AsyncSessionLocal() as db:
             service = ChatService(db)
-            
+
             # Create message in database
             from app.schemas.chat import MessageCreate
             message_data = MessageCreate(
                 conversation_id=conversation_id,
                 content=content,
-                type=message_type
+                type=message_type,
+                media_url=media_url,
+                media_name=media_name
             )
             message = await service.send_message(user_id, message_data)
             
@@ -228,11 +232,14 @@ async def send_message(sid, data):
                 'sender_avatar': avatar_url,
                 'content': message.content,
                 'type': message.type,
+                'media_url': message.media_url,
+                'media_name': message.media_name,
+                'reactions': [],
                 'is_read': message.is_read,
                 'created_at': message.created_at.isoformat() if message.created_at else None,
                 'updated_at': message.updated_at.isoformat() if message.updated_at else None
             }
-            
+
             # Broadcast to conversation room
             room = f"conversation_{conversation_id}"
             await manager.send_to_room(room, 'new_message', response)
@@ -254,6 +261,36 @@ async def send_message(sid, data):
     except Exception as e:
         logger.error(f"❌ Error sending message: {e}")
         await sio.emit('error', {'message': str(e)}, room=sid)
+
+@sio.on('message:react')
+async def message_react(sid, data):
+    """Add/change/remove the caller's reaction on a message - broadcasts the
+    resulting per-message reaction state to the conversation room so every
+    client viewing it updates in real time. Reuses this same Socket.IO
+    connection (no new WS infrastructure), mirroring stream:comment_react."""
+    if sid not in manager.active_connections:
+        await sio.emit('error', {'message': 'Not authenticated'}, room=sid)
+        return
+
+    user_id = manager.active_connections[sid]['user_id']
+    message_id = data.get('message_id')
+    reaction = data.get('reaction')
+    if not message_id or not reaction:
+        await sio.emit('error', {'message': 'Missing required fields'}, room=sid)
+        return
+
+    try:
+        async with AsyncSessionLocal() as db:
+            service = ChatService(db)
+            result = await service.react_to_message(message_id, user_id, reaction)
+
+        room = f"conversation_{result['conversation_id']}"
+        await manager.send_to_room(room, 'message:reaction', result)
+    except HTTPException as e:
+        await sio.emit('error', {'message': e.detail}, room=sid)
+    except Exception as e:
+        logger.error(f"❌ Error reacting to message: {e}")
+        await sio.emit('error', {'message': 'Unable to react to that message.'}, room=sid)
 
 @sio.event
 async def typing(sid, data):

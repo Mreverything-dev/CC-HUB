@@ -158,6 +158,12 @@ export default function AnnouncementDetailPage() {
               {announcement.content}
             </p>
 
+            {announcement.image_url && (
+              <div className="mt-4 rounded-xl overflow-hidden border border-[#1E3447]">
+                <img src={announcement.image_url} alt="" className="w-full max-h-[480px] object-cover" />
+              </div>
+            )}
+
             <div className="mt-6 pt-5 border-t border-[#1E3447] flex items-center justify-between gap-3 flex-wrap">
               <AnnouncementReactions announcementId={announcement.id} reactions={announcement.reactions} size="md" />
 

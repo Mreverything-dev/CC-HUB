@@ -107,17 +107,21 @@ class SocketService {
     this.socket.on('new_message', (message: Message) => {
       console.log('📩 New message received:', message);
       const { currentConversation, addMessage, incrementUnreadCount } = useChatStore.getState();
-      
+
       addMessage(message);
       useChatStore.getState().updateConversation(message.conversation_id, {
         last_message: message,
         updated_at: message.created_at
       });
-      
+
       if (currentConversation?.id !== message.conversation_id) {
         incrementUnreadCount();
         toast.success(`New message from ${message.sender_username}`);
       }
+    });
+
+    this.socket.on('message:reaction', (data: { message_id: string; reactions: { user_id: string; reaction: string }[] }) => {
+      useChatStore.getState().updateMessage(data.message_id, { reactions: data.reactions });
     });
 
     this.socket.on('user_typing', (data: { user_id: string; conversation_id: string; is_typing: boolean }) => {
@@ -285,11 +289,13 @@ class SocketService {
     this.emit('leave_room', { room: `conversation_${conversationId}` });
   }
 
-  sendMessage(conversationId: string, content: string, type: string = 'text') {
+  sendMessage(conversationId: string, content: string, type: string = 'text', mediaUrl?: string, mediaName?: string) {
     this.emit('send_message', {
       conversation_id: conversationId,
       content,
-      type
+      type,
+      media_url: mediaUrl,
+      media_name: mediaName
     });
   }
 
@@ -302,6 +308,10 @@ class SocketService {
 
   markRead(conversationId: string) {
     this.emit('mark_read', { conversation_id: conversationId });
+  }
+
+  reactToMessage(messageId: string, reaction: string) {
+    this.emit('message:react', { message_id: messageId, reaction });
   }
 
   // Livestream signaling - the server only relays these between the host and

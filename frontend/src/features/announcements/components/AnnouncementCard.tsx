@@ -169,6 +169,16 @@ export function AnnouncementCard({
             {announcement.content}
           </p>
 
+          {announcement.image_url && (
+            <div className="mt-3 rounded-xl overflow-hidden border border-[#1E3447]">
+              <img
+                src={announcement.image_url}
+                alt=""
+                className="w-full max-h-56 object-cover"
+              />
+            </div>
+          )}
+
           <div className="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-[#1E3447] flex-wrap">
             <AnnouncementReactions announcementId={announcement.id} reactions={announcement.reactions} size="sm" />
 
