@@ -7,6 +7,7 @@ import {
   HomeIcon,
   MegaphoneIcon,
   UsersIcon,
+  IdentificationIcon,
   AcademicCapIcon,
   VideoCameraIcon,
   ChatBubbleLeftIcon,
@@ -26,7 +27,7 @@ import { livestreamService } from '@/services/api/livestream.service';
 import { Avatar } from './Avatar';
 import { RoleBadge } from './RoleBadge';
 
-export type SidebarSection = 'feed' | 'announcements' | 'sections' | 'friends' | 'chat';
+export type SidebarSection = 'feed' | 'announcements' | 'sections' | 'users' | 'friends' | 'chat';
 
 interface NavItem {
   id: string;
@@ -35,12 +36,14 @@ interface NavItem {
   section?: SidebarSection;
   href?: string;
   comingSoon?: boolean;
+  adminOnly?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'feed', label: 'Feed', icon: HomeIcon, section: 'feed' },
+  { id: 'feed', label: 'Dashboard', icon: HomeIcon, section: 'feed' },
   { id: 'announcements', label: 'Announcements', icon: MegaphoneIcon, section: 'announcements' },
   { id: 'sections', label: 'Sections', icon: UsersIcon, section: 'sections' },
+  { id: 'users', label: 'Users', icon: IdentificationIcon, section: 'users', adminOnly: true },
   { id: 'classes', label: 'Classes', icon: AcademicCapIcon, comingSoon: true },
   { id: 'live', label: 'Live Streams', icon: VideoCameraIcon, href: '/livestreams' },
   { id: 'chat', label: 'Chat', icon: ChatBubbleLeftIcon, section: 'chat' },
@@ -130,7 +133,7 @@ export function Sidebar({ activeSection, onNavigate }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5 themed-scrollbar">
-        {NAV_ITEMS.map((item) => {
+        {NAV_ITEMS.filter((item) => !item.adminOnly || user?.role === 'admin').map((item) => {
           const isActive = item.section && item.section === activeSection;
           const Icon = item.icon;
           const count = NAV_COUNTS[item.id] || 0;

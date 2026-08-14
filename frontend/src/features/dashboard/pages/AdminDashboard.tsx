@@ -1,11 +1,17 @@
 // frontend/src/features/dashboard/pages/AdminDashboard.tsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
-import { CodeXml } from 'lucide-react';
-import { PlusIcon, UsersIcon } from '@heroicons/react/24/outline';
-import { CreatePost } from '@/features/posts/components/CreatePost';
-import { PostCard } from '@/features/posts/components/PostCard';
-import { useFeed } from '@/features/posts/hooks/useFeed';
+import {
+  PlusIcon,
+  UsersIcon,
+  AcademicCapIcon,
+  UserGroupIcon,
+  DocumentTextIcon,
+  FlagIcon,
+  SignalIcon,
+  CalendarIcon,
+  ArrowPathIcon,
+} from '@heroicons/react/24/outline';
 import { AnnouncementCard } from '@/features/announcements/components/AnnouncementCard';
 import { CreateAnnouncement } from '@/features/announcements/components/CreateAnnouncement';
 import { AnnouncementFilterBar } from '@/features/announcements/components/AnnouncementFilterBar';
@@ -13,17 +19,37 @@ import { AnnouncementCategory, matchesAnnouncementFilters } from '@/features/ann
 import { useAnnouncements } from '@/features/announcements/hooks/useAnnouncements';
 import { useSections } from '@/features/sections/hooks/useSections';
 import SectionDashboard from '@/features/sections/components/SectionDashboard';
+import CreateSectionModal from '@/features/sections/components/CreateSectionModal';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { profileService } from '@/services/api/profile.service';
+import { livestreamService } from '@/services/api/livestream.service';
+import { useFeed } from '@/features/posts/hooks/useFeed';
+import { Livestream } from '@/types/livestream.types';
 import { Sidebar, SidebarSection } from '@/features/dashboard/components/Sidebar';
 import { Topbar } from '@/features/dashboard/components/Topbar';
-import { FeedTabs, FeedFilter } from '@/features/dashboard/components/FeedTabs';
-import { AnnouncementWidget } from '@/features/dashboard/components/AnnouncementWidget';
-import { SectionWidget } from '@/features/dashboard/components/SectionWidget';
-import { EventCardList } from '@/features/dashboard/components/EventCard';
 import FriendsPage from '@/features/friends/components/FriendsPage';
 import ChatPanel from '@/features/chat/components/ChatPanel';
-import toast from 'react-hot-toast';
+import { useAdminStats } from '../hooks/useAdminStats';
+import UserManagementPage from './admin/UserManagementPage';
+import { StatCard } from '../components/admin/StatCard';
+import { UserGrowthChart } from '../components/admin/UserGrowthChart';
+import { RecentActivityWidget } from '../components/admin/RecentActivityWidget';
+import { SectionsOverviewWidget } from '../components/admin/SectionsOverviewWidget';
+import { EngagementOverviewWidget } from '../components/admin/EngagementOverviewWidget';
+import { LiveStreamsWidget } from '../components/admin/LiveStreamsWidget';
+import { QuickActionsWidget } from '../components/admin/QuickActionsWidget';
+
+function getCurrentWeekRangeLabel(): string {
+  const now = new Date();
+  const day = now.getDay();
+  const diffToMonday = day === 0 ? 6 : day - 1;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - diffToMonday);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return `${fmt(monday)} - ${fmt(sunday)}`;
+}
 
 export default function AdminDashboard() {
   const { user } = useAuthStore();
@@ -33,22 +59,22 @@ export default function AdminDashboard() {
   const [activeSection, setActiveSection] = useState<SidebarSection>(
     (location.state as { section?: SidebarSection } | null)?.section || 'feed'
   );
-  const [feedFilter, setFeedFilter] = useState<FeedFilter>('all');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [showCreateAnnouncement, setShowCreateAnnouncement] = useState(false);
+  const [showCreateSection, setShowCreateSection] = useState(false);
   const [announcementSearch, setAnnouncementSearch] = useState('');
   const [announcementCategory, setAnnouncementCategory] = useState<'all' | AnnouncementCategory>('all');
+  const [liveStreams, setLiveStreams] = useState<Livestream[]>([]);
+  const [upcomingStreams, setUpcomingStreams] = useState<Livestream[]>([]);
+  const [streamsLoading, setStreamsLoading] = useState(true);
 
-  // Posts
-  const {
-    posts = [],
-    isLoading: postsLoading,
-    isPosting,
-    createPost,
-    toggleLike,
-    deletePost,
-    editPost,
-  } = useFeed();
+  // Admin dashboard stats (real counts from the DB via /admin/dashboard-stats)
+  const { stats, isLoading: statsLoading, isError: statsError, refetch: refetchStats, isFetching: statsRefetching } =
+    useAdminStats();
+
+  // Recent posts, for the Recent Activity feed only - the admin dashboard no
+  // longer shows a post composer/feed (that stays on Student/Professor).
+  const { posts = [], isLoading: postsLoading } = useFeed();
 
   // Announcements
   const {
@@ -59,7 +85,7 @@ export default function AdminDashboard() {
     refetch: refetchAnnouncements,
   } = useAnnouncements();
 
-  // Sections (for the right-rail widget; SectionDashboard handles the full Sections view itself)
+  // Sections
   const { sections = [], isLoading: sectionsLoading } = useSections();
 
   useEffect(() => {
@@ -73,22 +99,25 @@ export default function AdminDashboard() {
       .catch(() => setAvatarUrl(null));
   }, []);
 
+  useEffect(() => {
+    setStreamsLoading(true);
+    Promise.all([livestreamService.getStreams('live'), livestreamService.getStreams('scheduled')])
+      .then(([liveRes, upcomingRes]) => {
+        setLiveStreams(liveRes.data);
+        setUpcomingStreams(upcomingRes.data);
+      })
+      .catch(() => {
+        setLiveStreams([]);
+        setUpcomingStreams([]);
+      })
+      .finally(() => setStreamsLoading(false));
+  }, []);
+
   const canCreateAnnouncement = user?.role === 'professor' || user?.role === 'admin';
   const postList = Array.isArray(posts) ? posts : [];
   const announcementList = Array.isArray(announcements) ? announcements : [];
   const sectionList = Array.isArray(sections) ? sections : [];
-  const mySection = sectionList[0] || null;
-
-  const handleCreatePost = async (data: { content: string; media_urls?: string[] }) => {
-    await createPost(data);
-  };
-
-  const emptyFeedMessage: Record<FeedFilter, string> = {
-    all: '',
-    following: "You're not following anyone yet.",
-    section: mySection ? 'Section-specific feeds are coming soon.' : 'You are not advising any sections yet.',
-    saved: "You haven't saved any posts yet.",
-  };
+  const weekRangeLabel = useMemo(getCurrentWeekRangeLabel, []);
 
   return (
     <div className="min-h-screen bg-[#07111A] text-[#F1F5F9] flex">
@@ -107,104 +136,140 @@ export default function AdminDashboard() {
       <div className="flex-1 min-w-0 flex flex-col">
         <Topbar avatarUrl={avatarUrl} onOpenFriends={() => setActiveSection('friends')} />
 
-        <main className="relative flex-1 max-w-6xl w-full mx-auto px-4 py-6 lg:px-8">
+        <main className="relative flex-1 max-w-7xl w-full mx-auto px-4 py-6 lg:px-8">
           {activeSection === 'feed' && (
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-              {/* Center - Feed */}
-              <div className="xl:col-span-2 space-y-6 min-w-0">
-                {/* Greeting */}
-                <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-6 flex items-center justify-between">
-                  <div>
-                    <h1 className="text-xl font-semibold text-[#F1F5F9]">
-                      Good morning, <span className="text-[#00C8FF]">{user?.username || 'Admin'}</span>! 👋
-                    </h1>
-                    <p className="text-sm text-[#94A3B8] mt-1">
-                      Manage the platform, posts, and announcements.
-                    </p>
-                  </div>
-                  <div className="hidden sm:flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-[#00C8FF]/30 bg-[#00C8FF]/10 shadow-[0_0_16px_rgba(0,200,245,0.12)]">
-                    <CodeXml className="h-5 w-5 text-[#00C8FF]" />
-                  </div>
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h1 className="text-xl sm:text-2xl font-semibold text-[#F1F5F9]">
+                    Welcome back, <span className="text-[#00C8FF]">{user?.username || 'Admin'}</span> 👋
+                  </h1>
+                  <p className="text-sm text-[#94A3B8] mt-1">
+                    Here's what's happening in the College of Computer Studies.
+                  </p>
                 </div>
-
-                <FeedTabs active={feedFilter} onChange={setFeedFilter} />
-
-                <CreatePost onCreatePost={handleCreatePost} isLoading={isPosting} dark avatarUrl={avatarUrl} />
-
-                <div className="space-y-4">
-                  {feedFilter !== 'all' ? (
-                    <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-10 text-center">
-                      <p className="text-sm text-[#94A3B8]">{emptyFeedMessage[feedFilter]}</p>
-                    </div>
-                  ) : postsLoading && postList.length === 0 ? (
-                    <div className="space-y-4">
-                      {[0, 1, 2].map((i) => (
-                        <div
-                          key={i}
-                          className="rounded-2xl border border-[rgba(0,200,245,0.1)] bg-[rgba(15,28,40,0.4)] p-6 animate-pulse"
-                        >
-                          <div className="flex items-center gap-3 mb-4">
-                            <div className="w-10 h-10 rounded-full bg-[#1E3447]" />
-                            <div className="space-y-2">
-                              <div className="h-3 w-32 rounded bg-[#1E3447]" />
-                              <div className="h-2 w-20 rounded bg-[#1E3447]" />
-                            </div>
-                          </div>
-                          <div className="h-3 w-full rounded bg-[#1E3447] mb-2" />
-                          <div className="h-3 w-2/3 rounded bg-[#1E3447]" />
-                        </div>
-                      ))}
-                    </div>
-                  ) : postList.length === 0 ? (
-                    <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-10 text-center">
-                      <p className="text-[#94A3B8]">No posts yet.</p>
-                    </div>
-                  ) : (
-                    postList.map((post) => (
-                      <PostCard
-                        key={post.id}
-                        {...post}
-                        onLike={toggleLike}
-                        onDelete={deletePost}
-                        onEdit={editPost}
-                        dark
-                      />
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {/* Right sidebar */}
-              <div className="space-y-6 xl:sticky xl:top-24 xl:self-start xl:max-h-[calc(100vh-7rem)] xl:overflow-y-auto xl:pr-1 themed-scrollbar">
-                <AnnouncementWidget
-                  announcements={announcementList}
-                  isLoading={announcementsLoading}
-                  onViewAll={() => setActiveSection('announcements')}
-                />
-                <SectionWidget
-                  section={mySection}
-                  isLoading={sectionsLoading}
-                  onGoToSection={() => setActiveSection('sections')}
-                />
-                {/* Admin-only: user management has no backend yet, so this stays
-                    an honest placeholder rather than a fake working panel. */}
-                <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-4">
-                  <h3 className="flex items-center gap-2 text-sm font-semibold text-[#F1F5F9] mb-3">
-                    <UsersIcon className="h-4 w-4 text-[#00C8FF]" />
-                    User Management
-                  </h3>
-                  <p className="text-xs text-[#94A3B8]">Platform-wide user management is coming soon.</p>
+                <div className="flex items-center gap-2 flex-shrink-0">
                   <button
-                    onClick={() => toast('User management coming soon')}
-                    className="w-full mt-3 text-sm font-medium text-center py-2 rounded-xl bg-[#00C8FF]/10 text-[#00C8FF] hover:bg-[#00C8FF]/20 transition"
+                    title="Custom date range filtering is coming soon"
+                    onClick={() => {}}
+                    className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-[#1E3447] bg-[rgba(10,20,30,0.75)] text-sm text-[#94A3B8] hover:text-[#F1F5F9] hover:border-[#00C8FF]/30 transition"
                   >
-                    Manage Users
+                    <CalendarIcon className="h-4 w-4" />
+                    {weekRangeLabel}
+                  </button>
+                  <button
+                    onClick={() => refetchStats()}
+                    disabled={statsRefetching}
+                    title="Refresh dashboard"
+                    className="p-2 rounded-xl border border-[#1E3447] bg-[rgba(10,20,30,0.75)] text-[#94A3B8] hover:text-[#00C8FF] hover:border-[#00C8FF]/30 transition disabled:opacity-50"
+                  >
+                    <ArrowPathIcon className={`h-4 w-4 ${statsRefetching ? 'animate-spin' : ''}`} />
                   </button>
                 </div>
-                <EventCardList />
               </div>
+
+              {/* Statistics cards */}
+              {statsError ? (
+                <div className="rounded-2xl border border-[rgba(0,200,245,0.15)] bg-[rgba(10,20,30,0.75)] p-8 text-center">
+                  <p className="text-sm text-[#94A3B8]">Unable to load dashboard data</p>
+                  <button
+                    onClick={() => refetchStats()}
+                    className="mt-3 flex items-center gap-1.5 mx-auto px-3.5 py-1.5 text-sm font-medium text-[#00C8FF] hover:bg-[#00C8FF]/10 rounded-lg transition"
+                  >
+                    <ArrowPathIcon className="h-4 w-4" />
+                    Retry
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+                  <StatCard
+                    icon={UsersIcon}
+                    label="Total Users"
+                    value={stats?.total_users.value}
+                    trendPercent={stats?.total_users.trend_percent}
+                    isLoading={statsLoading}
+                    accent="#00C8FF"
+                    onClick={() => setActiveSection('users')}
+                  />
+                  <StatCard
+                    icon={AcademicCapIcon}
+                    label="Students"
+                    value={stats?.students.value}
+                    trendPercent={stats?.students.trend_percent}
+                    isLoading={statsLoading}
+                    accent="#1685FF"
+                  />
+                  <StatCard
+                    icon={UserGroupIcon}
+                    label="Professors"
+                    value={stats?.professors.value}
+                    trendPercent={stats?.professors.trend_percent}
+                    isLoading={statsLoading}
+                    accent="#8B5CF6"
+                  />
+                  <StatCard
+                    icon={SignalIcon}
+                    label="Active Now"
+                    value={null}
+                    unavailableReason="Presence tracking not available"
+                    isLoading={statsLoading}
+                    accent="#22C55E"
+                  />
+                  <StatCard
+                    icon={DocumentTextIcon}
+                    label="Posts"
+                    value={stats?.posts.value}
+                    trendPercent={stats?.posts.trend_percent}
+                    isLoading={statsLoading}
+                    accent="#F59E0B"
+                    onClick={() => setActiveSection('feed')}
+                  />
+                  <StatCard
+                    icon={FlagIcon}
+                    label="Reports"
+                    value={stats?.reports.value}
+                    trendPercent={stats?.reports.trend_percent}
+                    isLoading={statsLoading}
+                    accent="#EF4444"
+                  />
+                </div>
+              )}
+
+              {/* Chart + Recent Activity */}
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                <div className="xl:col-span-2">
+                  <UserGrowthChart />
+                </div>
+                <RecentActivityWidget
+                  posts={postList}
+                  announcements={announcementList}
+                  liveStreams={liveStreams}
+                  upcomingStreams={upcomingStreams}
+                  isLoading={postsLoading || announcementsLoading || streamsLoading}
+                />
+              </div>
+
+              {/* Sections + Engagement + Live Streams */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <SectionsOverviewWidget
+                  sections={sectionList}
+                  isLoading={sectionsLoading}
+                  onViewAll={() => setActiveSection('sections')}
+                />
+                <EngagementOverviewWidget stats={stats} isLoading={statsLoading} isError={statsError} onRetry={refetchStats} />
+                <LiveStreamsWidget liveStreams={liveStreams} upcomingStreams={upcomingStreams} isLoading={streamsLoading} />
+              </div>
+
+              {/* Quick Actions */}
+              <QuickActionsWidget
+                onCreateAnnouncement={() => setShowCreateAnnouncement(true)}
+                onCreateSection={() => setShowCreateSection(true)}
+              />
             </div>
           )}
+
+          {activeSection === 'users' && <UserManagementPage />}
 
           {activeSection === 'announcements' && (
             <div className="max-w-2xl mx-auto space-y-4">
@@ -284,6 +349,11 @@ export default function AdminDashboard() {
       {/* Create Announcement Modal */}
       {showCreateAnnouncement && (
         <CreateAnnouncement onClose={() => setShowCreateAnnouncement(false)} />
+      )}
+
+      {/* Create Section Modal */}
+      {showCreateSection && (
+        <CreateSectionModal onClose={() => setShowCreateSection(false)} />
       )}
     </div>
   );
