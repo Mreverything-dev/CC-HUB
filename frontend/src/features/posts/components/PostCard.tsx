@@ -2,7 +2,18 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatRelativeTime } from '@/lib/formatters';
-import { XMarkIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
+import { PostContentBody } from './PostContentBody';
+import {
+  XMarkIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  HeartIcon,
+  ChatBubbleLeftIcon,
+  ShareIcon,
+  BookmarkIcon,
+  EllipsisVerticalIcon,
+} from '@heroicons/react/24/outline';
+import { HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
 import { Button } from '@/components/ui/Button/Button';
 import { Badge } from '@/components/ui/Badge/Badge';
 import { useAuthStore } from '@/features/auth/store/auth.store';
@@ -166,7 +177,7 @@ export function PostCard({
   };
 
   const cardClassName = dark
-    ? 'rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a]/60 backdrop-blur-xl p-6 hover:border-[#00d4ff]/30 transition-all'
+    ? 'rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-6 hover:border-[#00C8FF]/35 transition-all duration-200'
     : 'glass rounded-xl p-6 transition-all duration-200 hover:shadow-lg hover:border-cyan-500/30';
 
   return (
@@ -182,13 +193,13 @@ export function PostCard({
               <div
                 onClick={goToAuthorProfile}
                 className={`w-10 h-10 rounded-full flex items-center justify-center hover:opacity-80 transition cursor-pointer overflow-hidden ${
-                  dark ? 'bg-gradient-to-br from-[#00d4ff] to-[#0099cc]' : 'bg-gray-200'
+                  dark ? 'bg-gradient-to-br from-[#00C8FF] to-[#3B82F6]' : 'bg-gray-200'
                 }`}
               >
                 {avatar_url ? (
                   <img src={avatar_url} alt={username} className="w-full h-full object-cover" />
                 ) : (
-                  <span className={`font-semibold ${dark ? 'text-[#0a0a0a]' : 'text-gray-600'}`}>
+                  <span className={`font-semibold ${dark ? 'text-[#060B12]' : 'text-gray-600'}`}>
                     {username?.charAt(0).toUpperCase() || 'U'}
                   </span>
                 )}
@@ -197,7 +208,7 @@ export function PostCard({
                 <div className="flex items-center space-x-2">
                   <p
                     onClick={goToAuthorProfile}
-                    className={`font-medium hover:underline cursor-pointer ${dark ? 'text-white' : 'text-gray-800'}`}
+                    className={`font-medium hover:underline cursor-pointer ${dark ? 'text-[#F1F5F9]' : 'text-gray-800'}`}
                   >
                     {username}
                   </p>
@@ -209,7 +220,7 @@ export function PostCard({
                     </Badge>
                   )}
                 </div>
-                <div className={`flex items-center space-x-2 text-xs ${dark ? 'text-[#6b6b6b]' : 'text-gray-400'}`}>
+                <div className={`flex items-center space-x-2 text-xs ${dark ? 'text-[#64748B]' : 'text-gray-400'}`}>
                   <span>{formatRelativeTime(created_at)}</span>
                   <span>•</span>
                   <span>{visibilityLabels[visibility as keyof typeof visibilityLabels]}</span>
@@ -221,14 +232,18 @@ export function PostCard({
               <div className="relative" onClick={(e) => e.stopPropagation()}>
                 <button
                   onClick={() => setShowMenu(!showMenu)}
-                  className={`p-1 rounded-full transition ${dark ? 'hover:bg-white/10' : 'hover:bg-gray-100'}`}
+                  className={`p-1.5 rounded-xl transition ${dark ? 'text-[#64748B] hover:text-[#F1F5F9] hover:bg-white/5' : 'hover:bg-gray-100'}`}
                 >
-                  <span className={`block w-5 text-center leading-none ${dark ? 'text-[#6b6b6b]' : 'text-gray-400'}`}>⋮</span>
+                  {dark ? (
+                    <EllipsisVerticalIcon className="h-5 w-5" />
+                  ) : (
+                    <span className="block w-5 text-center leading-none text-gray-400">⋮</span>
+                  )}
                 </button>
                 {showMenu && (
                   <div
-                    className={`absolute right-0 mt-2 w-48 rounded-lg shadow-lg py-1 z-10 ${
-                      dark ? 'bg-[#1a1a1a] border border-[#2a2a2a]' : 'bg-white border border-gray-100'
+                    className={`absolute right-0 mt-2 w-48 rounded-xl shadow-lg py-1 z-10 ${
+                      dark ? 'bg-[#111E2B] border border-[#1E3447]' : 'bg-white border border-gray-100'
                     }`}
                   >
                     {is_owned_by_current_user && (
@@ -238,7 +253,7 @@ export function PostCard({
                           setShowMenu(false);
                         }}
                         className={`flex items-center space-x-2 w-full px-4 py-2 text-sm transition ${
-                          dark ? 'text-[#a0a0a0] hover:bg-white/5 hover:text-white' : 'text-gray-700 hover:bg-gray-50'
+                          dark ? 'text-[#94A3B8] hover:bg-white/5 hover:text-[#F1F5F9]' : 'text-gray-700 hover:bg-gray-50'
                         }`}
                       >
                         <span className="w-4 text-center leading-none">✎</span>
@@ -249,7 +264,7 @@ export function PostCard({
                       <button
                         onClick={handleDelete}
                         className={`flex items-center space-x-2 w-full px-4 py-2 text-sm transition ${
-                          dark ? 'text-red-400 hover:bg-red-500/10' : 'text-red-600 hover:bg-red-50'
+                          dark ? 'text-[#EF4444] hover:bg-[#EF4444]/10' : 'text-red-600 hover:bg-red-50'
                         }`}
                       >
                         <span className="w-4 text-center leading-none">🗑</span>
@@ -270,21 +285,40 @@ export function PostCard({
                 onChange={(e) => setEditContent(e.target.value)}
                 className={
                   dark
-                    ? 'w-full p-3 rounded-xl border border-[#2a2a2a] bg-[#0f0f0f] text-white focus:ring-1 focus:ring-[#00d4ff] focus:border-[#00d4ff] focus:outline-none'
+                    ? 'w-full p-3 rounded-xl border border-[#1E3447] bg-[#0A111A] text-[#F1F5F9] focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] focus:outline-none transition'
                     : 'w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent'
                 }
                 rows={3}
               />
               <div className="flex space-x-2">
-                <Button size="sm" onClick={handleEdit}>Save</Button>
-                <Button size="sm" variant="ghost" onClick={() => setIsEditing(false)}>Cancel</Button>
+                {dark ? (
+                  <>
+                    <button
+                      onClick={handleEdit}
+                      className="px-3 py-1.5 text-sm font-semibold bg-gradient-to-br from-[#00C8FF] to-[#3B82F6] text-[#060B12] rounded-xl hover:opacity-90 transition"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => setIsEditing(false)}
+                      className="px-3 py-1.5 text-sm font-medium text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5 rounded-xl transition"
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <Button size="sm" onClick={handleEdit}>Save</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setIsEditing(false)}>Cancel</Button>
+                  </>
+                )}
               </div>
             </div>
           ) : (
             <>
-              <p className={`whitespace-pre-wrap line-clamp-3 ${dark ? 'text-[#d0d0d0]' : 'text-gray-700'}`}>{content}</p>
+              <PostContentBody content={content} compact className={dark ? 'text-[#CBD5E1]' : 'text-gray-700'} />
               {content.length > 150 && (
-                <p className="text-sm text-cyan-500 hover:text-cyan-400 mt-1">
+                <p className={`text-sm mt-1 ${dark ? 'text-[#00C8FF] hover:text-[#00E0FF]' : 'text-cyan-500 hover:text-cyan-400'}`}>
                   Click to read more →
                 </p>
               )}
@@ -302,8 +336,8 @@ export function PostCard({
                   return (
                     <div
                       key={index}
-                      className={`${getItemSpan(index, media_urls.length)} rounded-lg flex items-center justify-center p-8 text-sm ${
-                        dark ? 'bg-[#0f0f0f] text-[#6b6b6b]' : 'bg-gray-100 text-gray-400'
+                      className={`${getItemSpan(index, media_urls.length)} rounded-xl flex items-center justify-center p-8 text-sm ${
+                        dark ? 'bg-[#0A111A] text-[#64748B]' : 'bg-gray-100 text-gray-400'
                       }`}
                     >
                       🖼️ Media unavailable
@@ -314,7 +348,7 @@ export function PostCard({
                 return (
                   <div
                     key={index}
-                    className={`${getItemSpan(index, media_urls.length)} relative overflow-hidden rounded-lg ${dark ? 'bg-[#0f0f0f]' : 'bg-gray-100'}`}
+                    className={`${getItemSpan(index, media_urls.length)} relative overflow-hidden rounded-xl ${dark ? 'bg-[#0A111A]' : 'bg-gray-100'}`}
                     onClick={(e) => e.stopPropagation()}
                   >
                     {isVideoFile ? (
@@ -350,18 +384,18 @@ export function PostCard({
 
           {/* Actions */}
           <div
-            className={`flex items-center justify-between mt-4 pt-4 border-t ${dark ? 'border-[#2a2a2a]' : 'border-gray-100/50'}`}
+            className={`flex items-center justify-between mt-4 pt-4 border-t ${dark ? 'border-[#1E3447]' : 'border-gray-100/50'}`}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-1">
               {dark ? (
                 <button
                   onClick={handleLike}
-                  className={`flex items-center space-x-1 px-2 py-1 rounded-lg transition ${
-                    isLiked ? 'text-red-400' : 'text-[#a0a0a0] hover:text-red-400 hover:bg-white/5'
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl transition ${
+                    isLiked ? 'text-[#EF4444]' : 'text-[#94A3B8] hover:text-[#EF4444] hover:bg-white/5'
                   }`}
                 >
-                  <span className="w-4 text-center leading-none">{isLiked ? '♥' : '♡'}</span>
+                  {isLiked ? <HeartIconSolid className="h-[18px] w-[18px]" /> : <HeartIcon className="h-[18px] w-[18px]" />}
                   <span className="text-sm">{likeCount}</span>
                 </button>
               ) : (
@@ -382,9 +416,9 @@ export function PostCard({
               {dark ? (
                 <button
                   onClick={() => setShowDetail(true)}
-                  className="flex items-center space-x-1 px-2 py-1 rounded-lg text-[#a0a0a0] hover:text-white hover:bg-white/5 transition"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5 transition"
                 >
-                  <span className="w-4 text-center leading-none">◌</span>
+                  <ChatBubbleLeftIcon className="h-[18px] w-[18px]" />
                   <span className="text-sm">{comments_count}</span>
                 </button>
               ) : (
@@ -403,11 +437,11 @@ export function PostCard({
                   onClick={handleShare}
                   disabled={isSharing}
                   title={isShared ? 'You already shared this post' : 'Share'}
-                  className={`flex items-center space-x-1 px-2 py-1 rounded-lg transition disabled:opacity-50 ${
-                    isShared ? 'text-emerald-400' : 'text-[#a0a0a0] hover:text-emerald-400 hover:bg-white/5'
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl transition disabled:opacity-50 ${
+                    isShared ? 'text-[#10B981]' : 'text-[#94A3B8] hover:text-[#10B981] hover:bg-white/5'
                   }`}
                 >
-                  <span className="w-4 text-center leading-none">↗</span>
+                  <ShareIcon className="h-[18px] w-[18px]" />
                   <span className="text-sm">{shareCount}</span>
                 </button>
               ) : (
@@ -424,6 +458,18 @@ export function PostCard({
                   <span className="w-4 text-center leading-none">↗</span>
                   <span>{shareCount}</span>
                 </Button>
+              )}
+              {dark && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toast('Saving posts is coming soon');
+                  }}
+                  title="Save"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[#94A3B8] hover:text-[#00C8FF] hover:bg-white/5 transition"
+                >
+                  <BookmarkIcon className="h-[18px] w-[18px]" />
+                </button>
               )}
             </div>
           </div>

@@ -18,7 +18,7 @@ export function Avatar({ src, name, size = 'md', className = '' }: AvatarProps) 
 
   return (
     <div
-      className={`${sizeClasses[size]} rounded-full bg-gradient-to-br from-[#00d4ff] to-[#0099cc] flex items-center justify-center font-bold text-[#0a0a0a] overflow-hidden flex-shrink-0 ${className}`}
+      className={`${sizeClasses[size]} rounded-full bg-gradient-to-br from-[#00C8FF] to-[#3B82F6] flex items-center justify-center font-bold text-[#060B12] overflow-hidden flex-shrink-0 ${className}`}
     >
       {src ? (
         <img src={src} alt={name || 'User'} className="w-full h-full object-cover" />

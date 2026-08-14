@@ -1,7 +1,7 @@
 // frontend/src/features/dashboard/components/RoleBadge.tsx
 const roleStyles: Record<string, string> = {
   admin: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
-  professor: 'bg-[#00d4ff]/15 text-[#00d4ff] border-[#00d4ff]/30',
+  professor: 'bg-[#00C8FF]/15 text-[#00C8FF] border-[#00C8FF]/30',
   student: 'bg-blue-500/15 text-blue-300 border-blue-500/30',
 };
 

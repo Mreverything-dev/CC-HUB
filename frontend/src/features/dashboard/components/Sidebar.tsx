@@ -114,15 +114,15 @@ export function Sidebar({ activeSection, onNavigate }: SidebarProps) {
   };
 
   return (
-    <aside className="hidden lg:flex lg:flex-col w-64 h-screen sticky top-0 border-r border-[#2a2a2a] bg-[#0f0f0f]/95 backdrop-blur-xl">
+    <aside className="hidden lg:flex lg:flex-col w-64 h-screen sticky top-0 border-r border-[rgba(0,200,245,0.1)] bg-[#070D13]/95 backdrop-blur-xl">
       {/* Logo */}
-      <div className="flex items-center gap-3 px-5 py-5 border-b border-[#2a2a2a]">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#00d4ff]/40 bg-[#00d4ff]/10 shadow-[0_0_20px_rgba(0,212,255,0.15)]">
-          <CodeXml className="h-5 w-5 text-[#00d4ff]" />
+      <div className="flex items-center gap-3 px-5 py-5 border-b border-[rgba(0,200,245,0.1)]">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#00C8FF]/40 bg-[#00C8FF]/10 shadow-[0_0_20px_rgba(0,200,245,0.15)]">
+          <CodeXml className="h-5 w-5 text-[#00C8FF]" />
         </div>
         <div>
-          <h1 className="text-base font-bold tracking-tight text-white leading-tight">CCS HUB</h1>
-          <p className="text-[10px] font-medium tracking-wider text-[#6b6b6b]">
+          <h1 className="text-base font-bold tracking-tight text-[#F1F5F9] leading-tight">CCS HUB</h1>
+          <p className="text-[10px] font-medium tracking-wider text-[#64748B]">
             COLLEGE OF COMPUTER STUDIES
           </p>
         </div>
@@ -142,22 +142,22 @@ export function Sidebar({ activeSection, onNavigate }: SidebarProps) {
               title={item.comingSoon ? 'Coming soon' : undefined}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 border ${
                 isActive
-                  ? 'border-[#00d4ff]/40 bg-[#00d4ff]/10 text-[#00d4ff] shadow-[0_0_12px_rgba(0,212,255,0.15)]'
+                  ? 'border-[#00C8FF]/40 bg-[#00C8FF]/10 text-[#00C8FF] shadow-[0_0_12px_rgba(0,200,245,0.18)]'
                   : item.comingSoon
-                  ? 'border-transparent text-[#4a4a4a] cursor-default'
-                  : 'border-transparent text-[#a0a0a0] hover:text-white hover:bg-white/5'
+                  ? 'border-transparent text-[#3D4A5C] cursor-default'
+                  : 'border-transparent text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5'
               }`}
             >
-              <Icon className="h-5 w-5 flex-shrink-0" />
+              <Icon className={`h-5 w-5 flex-shrink-0 ${isActive ? 'text-[#00C8FF]' : ''}`} />
               <span className="flex-1 text-left">{item.label}</span>
               {item.comingSoon ? (
-                <span className="text-[9px] font-semibold uppercase tracking-wide text-[#4a4a4a] border border-[#2a2a2a] rounded px-1.5 py-0.5">
+                <span className="text-[9px] font-semibold uppercase tracking-wide text-[#3D4A5C] border border-[#1E3447] rounded px-1.5 py-0.5">
                   Soon
                 </span>
               ) : count > 0 ? (
                 <span
                   className={`text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center flex-shrink-0 ${
-                    isActive ? 'bg-[#00d4ff] text-[#0a0a0a]' : 'bg-[#00d4ff]/20 text-[#00d4ff]'
+                    isActive ? 'bg-[#00C8FF] text-[#060B12]' : 'bg-[#00C8FF]/20 text-[#00C8FF]'
                   }`}
                 >
                   {count > 9 ? '9+' : count}
@@ -169,18 +169,18 @@ export function Sidebar({ activeSection, onNavigate }: SidebarProps) {
       </nav>
 
       {/* Bottom - User profile / settings / help / logout */}
-      <div className="border-t border-[#2a2a2a] p-3 space-y-3">
+      <div className="border-t border-[rgba(0,200,245,0.1)] p-3 space-y-3">
         <button
           onClick={() => navigate('/profile')}
           className="w-full flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-white/5 transition-all duration-200"
         >
           <Avatar src={avatarUrl} name={user?.username} size="sm" />
           <div className="flex-1 min-w-0 text-left">
-            <p className="text-sm font-medium text-white truncate">{user?.username || 'User'}</p>
+            <p className="text-sm font-medium text-[#F1F5F9] truncate">{user?.username || 'User'}</p>
             <div className="flex items-center gap-2 mt-1">
               <RoleBadge role={user?.role || 'student'} />
-              <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              <span className="flex items-center gap-1 text-[10px] font-medium text-[#10B981]">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#10B981]" />
                 Online
               </span>
             </div>
@@ -191,21 +191,21 @@ export function Sidebar({ activeSection, onNavigate }: SidebarProps) {
           <button
             onClick={() => navigate('/profile')}
             title="Settings"
-            className="p-2.5 rounded-xl text-[#a0a0a0] hover:text-white hover:bg-white/5 transition-all duration-200"
+            className="p-2.5 rounded-xl text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5 transition-all duration-200"
           >
             <Cog6ToothIcon className="h-5 w-5" />
           </button>
           <button
             onClick={() => toast('Help center coming soon')}
             title="Help"
-            className="p-2.5 rounded-xl text-[#a0a0a0] hover:text-white hover:bg-white/5 transition-all duration-200"
+            className="p-2.5 rounded-xl text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5 transition-all duration-200"
           >
             <QuestionMarkCircleIcon className="h-5 w-5" />
           </button>
           <button
             onClick={handleLogout}
             title="Logout"
-            className="p-2.5 rounded-xl text-red-400/80 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200"
+            className="p-2.5 rounded-xl text-[#EF4444]/80 hover:text-[#EF4444] hover:bg-[#EF4444]/10 transition-all duration-200"
           >
             <ArrowRightOnRectangleIcon className="h-5 w-5" />
           </button>

@@ -20,23 +20,23 @@ export function AnnouncementWidget({ announcements, isLoading, onViewAll }: Anno
   const latest = announcements.slice(0, 4);
 
   return (
-    <div className="rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a]/60 backdrop-blur-xl p-4">
+    <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-4 transition hover:border-[#00C8FF]/30">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
-          <MegaphoneIcon className="h-4 w-4 text-[#00d4ff]" />
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-[#F1F5F9]">
+          <MegaphoneIcon className="h-4 w-4 text-[#00C8FF]" />
           Announcements
         </h3>
-        <button onClick={onViewAll} className="text-xs text-[#00d4ff] hover:underline">
+        <button onClick={onViewAll} className="text-xs text-[#00C8FF] hover:text-[#00E0FF] hover:underline">
           View all
         </button>
       </div>
 
       {isLoading ? (
-        <p className="text-xs text-[#6b6b6b] py-4 text-center">Loading...</p>
+        <p className="text-xs text-[#64748B] py-4 text-center">Loading...</p>
       ) : latest.length === 0 ? (
         <div className="text-center py-6">
-          <DocumentTextIcon className="h-6 w-6 text-[#3a3a3a] mx-auto mb-2" />
-          <p className="text-xs text-[#6b6b6b]">No announcements yet.</p>
+          <DocumentTextIcon className="h-6 w-6 text-[#1E3447] mx-auto mb-2" />
+          <p className="text-xs text-[#64748B]">No announcements yet.</p>
         </div>
       ) : (
         <div className="space-y-1">
@@ -48,8 +48,8 @@ export function AnnouncementWidget({ announcements, isLoading, onViewAll }: Anno
             >
               <span className="text-base leading-none mt-0.5">{TYPE_ICON[a.type] || '📢'}</span>
               <div className="min-w-0 flex-1">
-                <p className="text-sm text-white font-medium truncate">{a.title}</p>
-                <p className="text-xs text-[#6b6b6b] mt-0.5">
+                <p className="text-sm text-[#F1F5F9] font-medium truncate">{a.title}</p>
+                <p className="text-xs text-[#64748B] mt-0.5">
                   {formatRelativeTime(a.created_at)} • {a.created_by_role}
                 </p>
               </div>

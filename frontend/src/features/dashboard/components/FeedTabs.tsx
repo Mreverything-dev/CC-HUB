@@ -15,15 +15,15 @@ const TABS: { id: FeedFilter; label: string }[] = [
 
 export function FeedTabs({ active, onChange }: FeedTabsProps) {
   return (
-    <div className="flex items-center gap-1 rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a]/60 backdrop-blur-xl p-1.5">
+    <div className="flex items-center gap-1 rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-1.5">
       {TABS.map((tab) => (
         <button
           key={tab.id}
           onClick={() => onChange(tab.id)}
           className={`px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${
             active === tab.id
-              ? 'bg-[#00d4ff]/15 text-[#00d4ff] shadow-[0_0_12px_rgba(0,212,255,0.15)]'
-              : 'text-[#a0a0a0] hover:text-white hover:bg-white/5'
+              ? 'bg-[#00C8FF]/15 text-[#00C8FF] shadow-[0_0_12px_rgba(0,200,245,0.18)]'
+              : 'text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5'
           }`}
         >
           {tab.label}

@@ -87,7 +87,7 @@ export default function StudentDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white flex">
+    <div className="min-h-screen bg-[#07111A] text-[#F1F5F9] flex">
       {/* Subtle grid background */}
       <div
         className="pointer-events-none fixed inset-0 opacity-[0.15]"
@@ -109,51 +109,51 @@ export default function StudentDashboard() {
               {/* Center - Feed */}
               <div className="xl:col-span-2 space-y-6 min-w-0">
                 {/* Greeting */}
-                <div className="rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a]/60 backdrop-blur-xl p-6 flex items-center justify-between">
+                <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-6 flex items-center justify-between">
                   <div>
-                    <h1 className="text-xl font-semibold text-white">
-                      Good morning, <span className="text-[#00d4ff]">{user?.username || 'Student'}</span>! 👋
+                    <h1 className="text-xl font-semibold text-[#F1F5F9]">
+                      Good morning, <span className="text-[#00C8FF]">{user?.username || 'Student'}</span>! 👋
                     </h1>
-                    <p className="text-sm text-[#a0a0a0] mt-1">
+                    <p className="text-sm text-[#94A3B8] mt-1">
                       Stay updated with your classes, peers, and announcements.
                     </p>
                   </div>
-                  <div className="hidden sm:flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-[#00d4ff]/30 bg-[#00d4ff]/10">
-                    <CodeXml className="h-5 w-5 text-[#00d4ff]" />
+                  <div className="hidden sm:flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-[#00C8FF]/30 bg-[#00C8FF]/10 shadow-[0_0_16px_rgba(0,200,245,0.12)]">
+                    <CodeXml className="h-5 w-5 text-[#00C8FF]" />
                   </div>
                 </div>
 
                 <FeedTabs active={feedFilter} onChange={setFeedFilter} />
 
-                <CreatePost onCreatePost={handleCreatePost} isLoading={isPosting} dark />
+                <CreatePost onCreatePost={handleCreatePost} isLoading={isPosting} dark avatarUrl={avatarUrl} />
 
                 <div className="space-y-4">
                   {feedFilter !== 'all' ? (
-                    <div className="rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a]/60 backdrop-blur-xl p-10 text-center">
-                      <p className="text-sm text-[#6b6b6b]">{emptyFeedMessage[feedFilter]}</p>
+                    <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-10 text-center">
+                      <p className="text-sm text-[#94A3B8]">{emptyFeedMessage[feedFilter]}</p>
                     </div>
                   ) : postsLoading && postList.length === 0 ? (
                     <div className="space-y-4">
                       {[0, 1, 2].map((i) => (
                         <div
                           key={i}
-                          className="rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a]/40 p-6 animate-pulse"
+                          className="rounded-2xl border border-[rgba(0,200,245,0.1)] bg-[rgba(15,28,40,0.4)] p-6 animate-pulse"
                         >
                           <div className="flex items-center gap-3 mb-4">
-                            <div className="w-10 h-10 rounded-full bg-[#2a2a2a]" />
+                            <div className="w-10 h-10 rounded-full bg-[#1E3447]" />
                             <div className="space-y-2">
-                              <div className="h-3 w-32 rounded bg-[#2a2a2a]" />
-                              <div className="h-2 w-20 rounded bg-[#2a2a2a]" />
+                              <div className="h-3 w-32 rounded bg-[#1E3447]" />
+                              <div className="h-2 w-20 rounded bg-[#1E3447]" />
                             </div>
                           </div>
-                          <div className="h-3 w-full rounded bg-[#2a2a2a] mb-2" />
-                          <div className="h-3 w-2/3 rounded bg-[#2a2a2a]" />
+                          <div className="h-3 w-full rounded bg-[#1E3447] mb-2" />
+                          <div className="h-3 w-2/3 rounded bg-[#1E3447]" />
                         </div>
                       ))}
                     </div>
                   ) : postList.length === 0 ? (
-                    <div className="rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a]/60 backdrop-blur-xl p-10 text-center">
-                      <p className="text-[#a0a0a0]">No posts yet. Check back later!</p>
+                    <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-10 text-center">
+                      <p className="text-[#94A3B8]">No posts yet. Check back later!</p>
                     </div>
                   ) : (
                     postList.map((post) => (
@@ -189,7 +189,7 @@ export default function StudentDashboard() {
 
           {activeSection === 'announcements' && (
             <div className="max-w-2xl mx-auto space-y-4">
-              <h2 className="text-lg font-semibold text-white mb-2">Announcements</h2>
+              <h2 className="text-lg font-semibold text-[#F1F5F9] mb-2">Announcements</h2>
               <AnnouncementFilterBar
                 search={announcementSearch}
                 onSearchChange={setAnnouncementSearch}
@@ -197,11 +197,11 @@ export default function StudentDashboard() {
                 onCategoryChange={setAnnouncementCategory}
               />
               {announcementsLoading ? (
-                <div className="rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a]/60 p-8 text-center text-[#6b6b6b]">
+                <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] p-8 text-center text-[#94A3B8]">
                   Loading announcements...
                 </div>
               ) : announcementList.length === 0 ? (
-                <div className="rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a]/60 p-8 text-center text-[#6b6b6b]">
+                <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] p-8 text-center text-[#94A3B8]">
                   No announcements for your sections yet.
                 </div>
               ) : (
@@ -210,7 +210,7 @@ export default function StudentDashboard() {
                     matchesAnnouncementFilters(a, announcementSearch, announcementCategory)
                   );
                   return filtered.length === 0 ? (
-                    <div className="rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a]/60 p-8 text-center text-[#6b6b6b]">
+                    <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] p-8 text-center text-[#94A3B8]">
                       No announcements match your filters.
                     </div>
                   ) : (

@@ -13,6 +13,7 @@ import { Avatar } from '@/features/dashboard/components/Avatar';
 import { RoleBadge } from '@/features/dashboard/components/RoleBadge';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmojiPicker } from './EmojiPicker';
+import { PostContentBody } from './PostContentBody';
 import { Comment } from '@/types/comment.types';
 import toast from 'react-hot-toast';
 import {
@@ -393,7 +394,7 @@ export default function PostDetailModal({
                 </div>
               </div>
             ) : (
-              <p className="text-[#E2E8F0] whitespace-pre-wrap break-words">{post.content}</p>
+              <PostContentBody content={post.content} className="text-[#E2E8F0]" />
             )}
 
             {/* Actions */}

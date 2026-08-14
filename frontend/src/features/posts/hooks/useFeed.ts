@@ -35,15 +35,15 @@ export function useFeed() {
     }
   }, [isAuthenticated]);
 
-  // ✅ Updated: Accept object with content and media_urls
-  const createPost = async (data: { content: string; media_urls?: string[] }) => {
+  // ✅ Updated: Accept object with content, media_urls, and visibility
+  const createPost = async (data: { content: string; media_urls?: string[]; visibility?: string }) => {
     setIsPosting(true);
     try {
       await postService.createPost({
         content: data.content,
         media_urls: data.media_urls || [],
         type: data.media_urls && data.media_urls.length > 0 ? 'image' : 'text',
-        visibility: 'public'
+        visibility: data.visibility || 'public'
       });
       toast.success('Post created successfully!');
       await fetchFeed(1);

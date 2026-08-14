@@ -2,13 +2,17 @@
 import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/Button/Button';
 import { useAuthStore } from '@/features/auth/store/auth.store';
-import { PhotoIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { PhotoIcon, XMarkIcon, FaceSmileIcon, CodeBracketIcon } from '@heroicons/react/24/outline';
 import { mediaService } from '@/services/api/media.service';
+import CreatePostModal from './CreatePostModal';
+
 interface CreatePostProps {
-  onCreatePost: (data: { content: string; media_urls?: string[] }) => void;
+  onCreatePost: (data: { content: string; media_urls?: string[]; visibility?: string }) => void | Promise<void>;
   isLoading?: boolean;
   /** Charcoal/cyan theme for the redesigned dashboard. Defaults to the original light theme. */
   dark?: boolean;
+  /** Current user's avatar, already fetched by the parent dashboard for its Topbar/Sidebar. */
+  avatarUrl?: string | null;
 }
 
 // Keep in sync with backend ALLOWED_TYPES in app/api/v1/endpoints/media.py
@@ -17,14 +21,93 @@ const ALLOWED_MEDIA_TYPES = [
   'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo',
 ];
 
-export function CreatePost({ onCreatePost, isLoading = false, dark = false }: CreatePostProps) {
+export function CreatePost({ onCreatePost, isLoading = false, dark = false, avatarUrl }: CreatePostProps) {
+  const { user } = useAuthStore();
+  const [showModal, setShowModal] = useState(false);
+
+  // Premium dashboard theme: a slim trigger bar that opens the full
+  // Create Post modal (composer, visibility, media, emoji, code snippet,
+  // live preview) - all of it reuses the exact same onCreatePost/useFeed
+  // flow as before, just presented as a modal instead of an inline form.
+  if (dark) {
+    return (
+      <>
+        <div className="mb-6 rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-4 sm:p-5 transition-all duration-200 hover:border-[#00C8FF]/30">
+          <button
+            type="button"
+            onClick={() => setShowModal(true)}
+            className="w-full flex items-center gap-3 text-left"
+          >
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#00C8FF] to-[#3B82F6] flex items-center justify-center flex-shrink-0 overflow-hidden">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt={user?.username} className="w-full h-full object-cover" />
+              ) : (
+                <span className="font-semibold text-[#060B12]">{user?.username?.charAt(0).toUpperCase() || 'U'}</span>
+              )}
+            </div>
+            <span className="flex-1 px-4 py-2.5 rounded-xl border border-[#1E3447] bg-[#0A111A] text-sm text-[#64748B]">
+              What's on your mind, {user?.username || 'there'}?
+            </span>
+          </button>
+
+          <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-[#1E3447]">
+            <button
+              type="button"
+              onClick={() => setShowModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-[#94A3B8] hover:text-[#00C8FF] hover:bg-[#00C8FF]/10 rounded-xl transition"
+            >
+              <PhotoIcon className="h-4 w-4" />
+              Image
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-[#94A3B8] hover:text-[#00C8FF] hover:bg-[#00C8FF]/10 rounded-xl transition"
+            >
+              <FaceSmileIcon className="h-4 w-4" />
+              Emoji
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-[#94A3B8] hover:text-[#00C8FF] hover:bg-[#00C8FF]/10 rounded-xl transition"
+            >
+              <CodeBracketIcon className="h-4 w-4" />
+              Code Snippet
+            </button>
+          </div>
+        </div>
+
+        {showModal && (
+          <CreatePostModal
+            onClose={() => setShowModal(false)}
+            onCreatePost={onCreatePost}
+            isLoading={isLoading}
+            avatarUrl={avatarUrl}
+          />
+        )}
+      </>
+    );
+  }
+
+  return <LegacyCreatePost onCreatePost={onCreatePost} isLoading={isLoading} />;
+}
+
+// Original light-theme inline composer, kept exactly as-is for any
+// still-existing non-dashboard usage.
+function LegacyCreatePost({
+  onCreatePost,
+  isLoading = false,
+}: {
+  onCreatePost: (data: { content: string; media_urls?: string[]; visibility?: string }) => void | Promise<void>;
+  isLoading?: boolean;
+}) {
   const [content, setContent] = useState('');
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [showMediaPreview, setShowMediaPreview] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { user } = useAuthStore();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -109,21 +192,15 @@ export function CreatePost({ onCreatePost, isLoading = false, dark = false }: Cr
     return 'col-span-1';
   };
 
-  const wrapperClassName = dark
-    ? 'mb-6 rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a]/60 backdrop-blur-xl p-6'
-    : 'glass rounded-xl p-6 mb-6 transition-all duration-200 hover:shadow-lg';
+  const { user } = useAuthStore();
 
   return (
-    <div className={wrapperClassName}>
+    <div className="glass rounded-xl p-6 mb-6 transition-all duration-200 hover:shadow-lg">
       <form onSubmit={handleSubmit}>
         <div className="flex items-start space-x-3">
           {/* Avatar */}
-          <div
-            className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-              dark ? 'bg-gradient-to-br from-[#00d4ff] to-[#0099cc]' : 'bg-gray-200'
-            }`}
-          >
-            <span className={`font-semibold ${dark ? 'text-[#0a0a0a]' : 'text-gray-600'}`}>
+          <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 bg-gray-200">
+            <span className="font-semibold text-gray-600">
               {user?.username?.charAt(0).toUpperCase() || 'U'}
             </span>
           </div>
@@ -132,11 +209,7 @@ export function CreatePost({ onCreatePost, isLoading = false, dark = false }: Cr
               value={content}
               onChange={(e) => setContent(e.target.value)}
               placeholder="What's on your mind?"
-              className={
-                dark
-                  ? 'w-full p-3 rounded-xl border border-[#2a2a2a] bg-[#0f0f0f] text-white placeholder-[#6b6b6b] focus:ring-1 focus:ring-[#00d4ff] focus:border-[#00d4ff] focus:outline-none resize-none'
-                  : 'w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent resize-none'
-              }
+              className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent resize-none"
               rows={3}
             />
 
@@ -151,8 +224,8 @@ export function CreatePost({ onCreatePost, isLoading = false, dark = false }: Cr
             {showMediaPreview && mediaFiles.length > 0 && (
               <div className={`mt-3 grid gap-2 ${getGridClasses(mediaFiles.length)}`}>
                 {mediaFiles.map((file, index) => (
-                  <div 
-                    key={index} 
+                  <div
+                    key={index}
                     className={`${getItemSpan(index, mediaFiles.length)} relative group bg-gray-100 rounded-lg overflow-hidden`}
                   >
                     {isVideo(file) ? (
@@ -210,7 +283,7 @@ export function CreatePost({ onCreatePost, isLoading = false, dark = false }: Cr
                   <PhotoIcon className="h-5 w-5" />
                   Media
                 </Button>
-                
+
                 {mediaFiles.length > 0 && (
                   <span className="text-xs text-gray-400 self-center">
                     {mediaFiles.length} file(s) selected
