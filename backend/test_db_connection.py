@@ -27,7 +27,5 @@ async def test_connection():
         print(f"Database connection failed: {e}")
     finally:
         await engine.dispose()
-
-
 if __name__ == "__main__":
     asyncio.run(test_connection())

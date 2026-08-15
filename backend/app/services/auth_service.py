@@ -4,8 +4,10 @@ from sqlalchemy import select
 from app.models.user import User, Role
 from app.models.invitation_code import InvitationCode
 from app.models.profile import StudentProfile, ProfessorProfile, AdminProfile
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
+from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, RegisterResponse, UserResponse
 from app.core.security import verify_password, get_password_hash, create_access_token, create_refresh_token, decode_token
+from app.services.email_service import email_service
+from app.services.redis_service import redis_service
 from fastapi import HTTPException, status
 from datetime import datetime, timedelta
 import logging
@@ -18,7 +20,13 @@ class AuthService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def register(self, request: RegisterRequest) -> TokenResponse:
+    def _verification_key(self, token: str) -> str:
+        return f"verification:{token}"
+
+    def _password_reset_key(self, token: str) -> str:
+        return f"password_reset:{token}"
+
+    async def register(self, request: RegisterRequest) -> RegisterResponse:
         """Register a new user with invitation code validation for professor/admin"""
         logger.info(f"📝 Registering user: {request.email} with role: {request.role}")
         
@@ -86,14 +94,22 @@ class AuthService:
                     detail=f"Password hashing error: {str(e)}"
                 )
 
-            # --- CREATE USER ---
+            # --- CREATE USER with verification fields ---
+            # ✅ Generate verification token
+            verification_token = secrets.token_urlsafe(32)
+            verification_expires = datetime.utcnow() + timedelta(
+                minutes=60  # Token expires in 60 minutes
+            )
+            
             user = User(
                 email=request.email,
                 username=request.username,
                 password_hash=hashed_password,
-                role=request.role,  # Role is stored directly in the column
+                role=request.role,
                 is_active=True,
-                is_verified=True
+                is_verified=False,  # ✅ User starts as unverified
+                verification_token=verification_token,  # ✅ Store token
+                verification_token_expires=verification_expires  # ✅ Store expiration
             )
             
             self.db.add(user)
@@ -101,7 +117,7 @@ class AuthService:
             await self.db.refresh(user)
             logger.info(f"✅ User created with ID: {user.id} and role: {user.role}")
 
-            # --- CREATE PROFILE ROW (so /profiles/{role} updates have something to update) ---
+            # --- CREATE PROFILE ROW ---
             if request.role == "student":
                 self.db.add(StudentProfile(
                     user_id=user.id,
@@ -131,29 +147,46 @@ class AuthService:
             await self.db.commit()
             logger.info(f"✅ Profile row created for user: {user.id}")
 
-            # --- SKIP the separate role assignment to avoid the greenlet error ---
-            # The user's role is already set in the 'role' column of the users table.
-            # No need to also add it to the 'user_roles' many-to-many table.
-
-            # --- Update invitation code with the user who used it (for professor/admin) ---
+            # --- Update invitation code with the user who used it ---
             if request.role in ["professor", "admin"] and invitation:
                 invitation.used_by = user.id
                 await self.db.commit()
 
-            # --- CREATE TOKENS ---
-            access_token = create_access_token(
-                data={"sub": str(user.id), "role": user.role}
-            )
-            refresh_token = create_refresh_token(
-                data={"sub": str(user.id)}
-            )
+            # --- ✅ Send verification email (Non-blocking) ---
+            try:
+                await email_service.send_verification_email(
+                    to_email=user.email,
+                    username=user.username,
+                    token=verification_token
+                )
+                logger.info(f"✅ Verification email sent to {user.email}")
+            except Exception as e:
+                logger.error(f"❌ Failed to send verification email: {e}")
+                # Don't fail registration if email fails
 
+            # --- ✅ Store token in Redis for faster lookups ---
+            try:
+                await redis_service.set_token(
+                    self._verification_key(verification_token),
+                    {"user_id": str(user.id), "email": user.email},
+                    60 * 60  # 60 minutes
+                )
+                logger.info(f"✅ Verification token stored in Redis")
+            except Exception as e:
+                logger.error(f"❌ Failed to store token in Redis: {e}")
+
+            # --- ✅ No tokens issued here on purpose: the account is
+            # unverified until the user clicks the emailed link, so
+            # registration must not hand out a working session (that would
+            # let an unverified account skip straight to the dashboard, or
+            # call protected APIs directly with the response token). The
+            # user logs in normally - and is verified - afterward.
             user_response = UserResponse.model_validate(user)
-            
-            return TokenResponse(
-                access_token=access_token,
-                refresh_token=refresh_token,
-                user=user_response
+
+            return RegisterResponse(
+                message="Registration successful. Please check your email to verify your account.",
+                user=user_response,
+                requires_verification=True,
             )
             
         except HTTPException:
@@ -166,9 +199,265 @@ class AuthService:
                 detail=f"Registration failed: {str(e)}"
             )
 
-    # --- The rest of your methods (login, refresh_token, logout, change_password, 
-    # create_invitation_code, get_invitation_codes, delete_invitation_code) 
-    # remain exactly as they were ---
+    # ============================================
+    # ✅ EMAIL VERIFICATION
+    # ============================================
+    async def verify_email(self, token: str) -> dict:
+        """Verify user email with token"""
+        logger.info(f"🔐 Verifying email with token: {token[:20]}...")
+        
+        try:
+            # ✅ Check Redis first for fast lookup
+            redis_data = await redis_service.get_token(self._verification_key(token))
+            
+            if redis_data:
+                user_id = redis_data.get("user_id")
+                # Find user by ID
+                result = await self.db.execute(
+                    select(User).where(
+                        User.id == user_id,
+                        User.is_verified == False
+                    )
+                )
+                user = result.scalar_one_or_none()
+            else:
+                # Fallback to database lookup
+                result = await self.db.execute(
+                    select(User).where(
+                        User.verification_token == token,
+                        User.verification_token_expires > datetime.utcnow(),
+                        User.is_verified == False
+                    )
+                )
+                user = result.scalar_one_or_none()
+            
+            if not user:
+                # Check if already verified
+                result = await self.db.execute(
+                    select(User).where(
+                        User.verification_token == token,
+                        User.is_verified == True
+                    )
+                )
+                already_verified = result.scalar_one_or_none()
+                if already_verified:
+                    return {
+                        "message": "Email already verified",
+                        "verified": True
+                    }
+                
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid or expired verification token"
+                )
+            
+            # ✅ Verify user. Deliberately keep verification_token on the row
+            # (instead of nulling it) so a repeat click on the same link can
+            # still be recognized as "already verified" below - the primary
+            # lookup above already requires is_verified == False, so a stale
+            # token can never be replayed to re-verify or affect another user.
+            user.is_verified = True
+            user.verification_token_expires = None
+            await self.db.commit()
+            
+            # ✅ Delete token from Redis
+            await redis_service.delete_token(self._verification_key(token))
+            
+            logger.info(f"✅ Email verified for user: {user.email}")
+            
+            # ✅ Send welcome email
+            try:
+                await email_service.send_welcome_email(
+                    to_email=user.email,
+                    username=user.username
+                )
+                logger.info(f"✅ Welcome email sent to {user.email}")
+            except Exception as e:
+                logger.error(f"❌ Failed to send welcome email: {e}")
+            
+            return {
+                "message": "Email verified successfully",
+                "verified": True
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"❌ Email verification error: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Email verification failed: {str(e)}"
+            )
+
+    # ============================================
+    # ✅ RESEND VERIFICATION EMAIL
+    # ============================================
+    async def resend_verification(self, email: str) -> dict:
+        """Resend verification email"""
+        logger.info(f"📧 Resending verification email to: {email}")
+        
+        try:
+            result = await self.db.execute(
+                select(User).where(
+                    User.email == email,
+                    User.is_verified == False
+                )
+            )
+            user = result.scalar_one_or_none()
+            
+            if not user:
+                # Check if already verified
+                result = await self.db.execute(
+                    select(User).where(
+                        User.email == email,
+                        User.is_verified == True
+                    )
+                )
+                if result.scalar_one_or_none():
+                    return {
+                        "message": "Email already verified",
+                        "verified": True
+                    }
+                
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="User not found"
+                )
+            
+            # ✅ Generate new token
+            verification_token = secrets.token_urlsafe(32)
+            verification_expires = datetime.utcnow() + timedelta(minutes=60)
+            
+            user.verification_token = verification_token
+            user.verification_token_expires = verification_expires
+            await self.db.commit()
+            
+            # ✅ Store in Redis
+            await redis_service.set_token(
+                self._verification_key(verification_token),
+                {"user_id": str(user.id), "email": user.email},
+                60 * 60
+            )
+            
+            # ✅ Send email
+            try:
+                await email_service.send_verification_email(
+                    to_email=user.email,
+                    username=user.username,
+                    token=verification_token
+                )
+                logger.info(f"✅ Verification email resent to {user.email}")
+            except Exception as e:
+                logger.error(f"❌ Failed to send verification email: {e}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to send verification email"
+                )
+            
+            return {"message": "Verification email sent successfully"}
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"❌ Resend verification error: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to resend verification: {str(e)}"
+            )
+
+    # ============================================
+    # ✅ CHECK VERIFICATION STATUS
+    # ============================================
+    async def check_verification_status(self, user_id: str) -> dict:
+        """Check if user is verified"""
+        try:
+            result = await self.db.execute(
+                select(User).where(User.id == user_id)
+            )
+            user = result.scalar_one_or_none()
+            
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="User not found"
+                )
+            
+            return {
+                "is_verified": user.is_verified,
+                "email": user.email,
+                "username": user.username
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"❌ Check verification status error: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to check verification status: {str(e)}"
+            )
+
+    async def forgot_password(self, email: str) -> dict:
+        logger.info(f"📧 Password reset requested for: {email}")
+
+        result = await self.db.execute(
+            select(User).where(User.email == email, User.is_active == True)
+        )
+        user = result.scalar_one_or_none()
+
+        if not user:
+            return {"message": "If the email exists, a reset link has been sent", "success": True}
+
+        reset_token = secrets.token_urlsafe(32)
+        reset_expires = datetime.utcnow() + timedelta(minutes=30)
+
+        await redis_service.set_token(
+            self._password_reset_key(reset_token),
+            {"user_id": str(user.id), "email": user.email},
+            30 * 60
+        )
+
+        # Same defensive wrapping as register()'s verification email - never let
+        # an email/SMTP problem turn into a 500 or a response that reveals
+        # whether the address exists.
+        try:
+            await email_service.send_password_reset_email(
+                to_email=user.email,
+                username=user.username,
+                token=reset_token
+            )
+        except Exception as e:
+            logger.error(f"❌ Failed to send password reset email: {e}")
+
+        return {"message": "If the email exists, a reset link has been sent", "success": True}
+
+    async def reset_password(self, token: str, new_password: str) -> dict:
+        logger.info("🔐 Resetting password with token")
+
+        redis_data = await redis_service.get_token(self._password_reset_key(token))
+        user = None
+
+        if redis_data:
+            result = await self.db.execute(
+                select(User).where(User.id == redis_data.get("user_id"), User.is_active == True)
+            )
+            user = result.scalar_one_or_none()
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired reset token"
+            )
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired reset token"
+            )
+
+        user.password_hash = get_password_hash(new_password)
+        await self.db.commit()
+        await redis_service.delete_token(self._password_reset_key(token))
+        return {"message": "Password reset successfully", "success": True}
 
     # ============================================
     # CREATE INVITATION CODE (Admin only)
@@ -293,6 +582,15 @@ class AuthService:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Account is disabled"
+                )
+
+            # ✅ Unverified accounts cannot log in - this is the only place
+            # that would otherwise hand an unverified user a working session.
+            if not user.is_verified:
+                logger.warning(f"❌ Unverified account: {request.email}")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Please verify your email before logging in"
                 )
 
             user.last_login = datetime.utcnow()

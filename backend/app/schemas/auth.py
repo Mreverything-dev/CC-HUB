@@ -75,8 +75,53 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     user: UserResponse
 
+# ✅ Registration no longer issues a usable session - an unverified account
+# has no access token, so there's nothing to bypass verification with even
+# if the frontend is ignored (e.g. a raw API call). See AuthService.register.
+class RegisterResponse(BaseModel):
+    message: str
+    user: UserResponse
+    requires_verification: bool = True
+
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
+
+# ✅ Add these schemas for email verification
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
+
+class VerifyEmailResponse(BaseModel):
+    message: str
+    verified: bool
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str = Field(..., min_length=6)
+    confirm_password: str
+
+    @validator('new_password')
+    def validate_password(cls, v):
+        if len(v) < 6:
+            raise ValueError('Password must be at least 6 characters')
+        return v
+
+    @validator('confirm_password')
+    def passwords_match(cls, v, values, **kwargs):
+        if 'new_password' in values and v != values['new_password']:
+            raise ValueError('Passwords do not match')
+        return v
+
+class PasswordResetResponse(BaseModel):
+    message: str
+    success: bool
+
+class VerificationStatusResponse(BaseModel):
+    is_verified: bool
+    email: str
+    username: str
 
 class UpdateUsernameRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)

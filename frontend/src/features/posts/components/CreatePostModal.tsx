@@ -23,7 +23,7 @@ const ALLOWED_MEDIA_TYPES = [
   'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo',
 ];
 
-const MAX_CONTENT_LENGTH = 2000;
+const MAX_CONTENT_LENGTH = 5000;
 
 type Visibility = 'public' | 'friends' | 'section' | 'private';
 

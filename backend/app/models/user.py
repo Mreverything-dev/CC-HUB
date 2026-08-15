@@ -32,7 +32,13 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
-    role = Column(String(50), default='student')  # Changed from Enum
+    verification_token = Column(String(255), nullable=True)  # ✅ Token for verification
+    verification_token_expires = Column(DateTime, nullable=True)  # ✅ Token expiration
+    # The users.role column is a plain varchar in the live DB (never migrated
+    # to a native enum), so the model must match that - a native Enum() here
+    # makes SQLAlchemy bind an explicit ::user_roles cast that Postgres
+    # rejects against a varchar column (UndefinedFunctionError).
+    role = Column(String(50), default='student')
     last_login = Column(UTCDateTime)
     last_seen = Column(UTCDateTime)  # updated on WS connect/disconnect - see app/websocket/manager.py
     created_at = Column(UTCDateTime, default=datetime.utcnow)

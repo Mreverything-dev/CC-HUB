@@ -1,13 +1,15 @@
 ﻿# backend/app/api/v1/endpoints/auth.py
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.services.auth_service import AuthService
 from app.schemas.auth import (
-    LoginRequest, RegisterRequest, TokenResponse, 
-    RefreshTokenRequest, ChangePasswordRequest, UserResponse
+    LoginRequest, RegisterRequest, TokenResponse, RegisterResponse,
+    RefreshTokenRequest, ChangePasswordRequest, UserResponse,
+    ResendVerificationRequest, VerifyEmailResponse,
+    ForgotPasswordRequest, ResetPasswordRequest, PasswordResetResponse
 )
 from app.dependencies.auth import get_current_user
 from app.models.user import User
@@ -16,7 +18,11 @@ from app.schemas.auth import UpdateUsernameRequest
 
 router = APIRouter()
 
-@router.post("/register", response_model=TokenResponse)
+# ============================================
+# AUTHENTICATION ENDPOINTS
+# ============================================
+
+@router.post("/register", response_model=RegisterResponse)
 async def register(
     request: RegisterRequest,
     db: AsyncSession = Depends(get_db)
@@ -70,12 +76,13 @@ async def change_password(
     """Change user password"""
     service = AuthService(db)
     return await service.change_password(str(current_user.id), request)
+
 @router.put("/update-username")
 async def update_username(
     request: UpdateUsernameRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
-):
+) -> Any:
     """Update current user's username"""
     # Check if username is taken
     result = await db.execute(
@@ -98,3 +105,64 @@ async def update_username(
         "message": "Username updated successfully",
         "username": current_user.username
     }
+
+# ============================================
+# ✅ EMAIL VERIFICATION ENDPOINTS
+# ============================================
+
+@router.get("/verify-email", response_model=VerifyEmailResponse)
+async def verify_email(
+    token: str = Query(..., description="Verification token from email"),
+    db: AsyncSession = Depends(get_db)
+) -> Any:
+    """
+    Verify user email with token from email link
+    
+    - **token**: Verification token received in email
+    - Returns verification status
+    """
+    service = AuthService(db)
+    return await service.verify_email(token)
+
+@router.post("/resend-verification")
+async def resend_verification(
+    request: ResendVerificationRequest,
+    db: AsyncSession = Depends(get_db)
+) -> Any:
+    """
+    Resend verification email
+    
+    - **email**: Email address to resend verification to
+    - Returns success message
+    """
+    service = AuthService(db)
+    return await service.resend_verification(request.email)
+
+@router.get("/verification-status")
+async def check_verification_status(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+) -> Any:
+    """
+    Check if current user is verified
+    
+    - Returns verification status
+    """
+    service = AuthService(db)
+    return await service.check_verification_status(str(current_user.id))
+
+@router.post("/forgot-password", response_model=PasswordResetResponse)
+async def forgot_password(
+    request: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db)
+) -> Any:
+    service = AuthService(db)
+    return await service.forgot_password(request.email)
+
+@router.post("/reset-password", response_model=PasswordResetResponse)
+async def reset_password(
+    request: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db)
+) -> Any:
+    service = AuthService(db)
+    return await service.reset_password(request.token, request.new_password)

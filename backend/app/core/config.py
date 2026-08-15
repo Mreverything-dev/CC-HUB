@@ -10,9 +10,26 @@ class Settings(BaseSettings):
     DATABASE_POOL_SIZE: int = 20
     DATABASE_MAX_OVERFLOW: int = 40
     DATABASE_POOL_TIMEOUT: int = 30
+
+    # Email Settings (for fastapi-mail) - sourced from .env only; no real
+    # credentials are hardcoded here so nothing sensitive lives in source.
+    MAIL_USERNAME: str = ""
+    MAIL_PASSWORD: str = ""
+    MAIL_FROM: str = "noreply@ccshub.edu.com"
+    MAIL_FROM_NAME: str = "CCS HUB"
+    MAIL_PORT: int = 587
+    MAIL_SERVER: str = "smtp.gmail.com"
+    MAIL_STARTTLS: bool = True
+    MAIL_SSL_TLS: bool = False
+    USE_CREDENTIALS: bool = True
+    VALIDATE_CERTS: bool = True
     
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
+
+    # Verification Settings
+    VERIFICATION_TOKEN_EXPIRE_MINUTES: int = 60
+    FRONTEND_URL: str = "http://localhost:3000"
     
     # Security
     SECRET_KEY: str = "your-super-secret-key-here"

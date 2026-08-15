@@ -73,10 +73,13 @@ export function Register() {
     try {
       await registerUser(formData);
       setSuccess(true);
-      
+
+      // Not logged in yet - the account is unverified until the emailed
+      // link is clicked, so send them to the verification page instead of
+      // any dashboard.
       setTimeout(() => {
-        navigate('/dashboard');
-      }, 1500);
+        navigate(`/verify-email?email=${encodeURIComponent(formData.email)}`);
+      }, 1200);
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Registration failed');
     }
@@ -172,7 +175,7 @@ export function Register() {
               {success && (
                 <div className="flex items-start gap-2 rounded-2xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-400">
                   <CheckCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span>Registration successful! Redirecting...</span>
+                  <span>Account created! Check your email to verify your account...</span>
                 </div>
               )}
 
@@ -350,7 +353,7 @@ export function Register() {
                 ) : success ? (
                   <span className="flex items-center justify-center gap-2">
                     <CheckCircle className="h-5 w-5" />
-                    Registered!
+                    Check your email!
                   </span>
                 ) : (
                   "Sign Up"

@@ -40,6 +40,14 @@ export interface AuthResponse {
   user: User;
 }
 
+// Registration no longer logs the user in - the account is unverified until
+// the emailed link is clicked, so no tokens are issued here at all.
+export interface RegisterResponse {
+  message: string;
+  user: User;
+  requires_verification: boolean;
+}
+
 export interface RefreshTokenRequest {
   refresh_token: string;
 }
@@ -48,4 +56,19 @@ export interface ChangePasswordRequest {
   current_password: string;
   new_password: string;
   confirm_password: string;
+}
+
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ResetPasswordRequest {
+  token: string;
+  new_password: string;
+  confirm_password: string;
+}
+
+export interface VerificationResponse {
+  message: string;
+  verified: boolean;
 }
