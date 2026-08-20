@@ -1,10 +1,11 @@
 # backend/app/api/v1/endpoints/admin.py
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
+from app.core.security import get_password_hash
 from app.dependencies.auth import get_current_user
 from app.models.user import User
 from app.models.post import Post
@@ -13,12 +14,17 @@ from app.models.livestream import Livestream, StreamStatus
 from app.models.profile import StudentProfile, ProfessorProfile, AdminProfile
 from app.models.section import Section, SectionMember
 from app.websocket.manager import manager
+from app.services.auth_service import AuthService
 from app.schemas.admin import (
     AdminDashboardStats, EngagementTotals, StatMetric,
     AdminUserListItem, AdminUserListResponse, AdminUserCounts, UpdateUserStatusRequest,
+    AdminCreateUserRequest, AdminCreateUserResponse,
+    GenerateProfessorCodeRequest, ProfessorCodeResponse,
 )
 
 router = APIRouter()
+
+VALIDITY_TO_HOURS = {"1h": 1, "1d": 24, "1w": 24 * 7}
 
 
 def _require_admin(current_user: User):
@@ -331,3 +337,121 @@ async def update_user_status(
         is_online=str(target.id) in online_ids,
         created_at=target.created_at,
     )
+
+
+# ============================================
+# ADMIN: CREATE USER (Student / Professor / Admin)
+# ============================================
+
+@router.post("/users", response_model=AdminCreateUserResponse, status_code=status.HTTP_201_CREATED)
+async def admin_create_user(
+    data: AdminCreateUserRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin creates a user account directly - no invitation code and no
+    email verification step, since the admin's own authority is what
+    vouches for the account. Reuses the existing password hashing
+    (get_password_hash) and per-role profile tables exactly like the public
+    registration flow (AuthService.register) does."""
+    _require_admin(current_user)
+
+    if data.role not in ("student", "professor", "admin"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Role must be student, professor, or admin")
+
+    existing_email = await db.execute(select(User).where(User.email == data.email))
+    if existing_email.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
+
+    existing_username = await db.execute(select(User).where(User.username == data.username))
+    if existing_username.scalar_one_or_none():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username already taken")
+
+    first_name = last_name = None
+    if data.full_name and data.full_name.strip():
+        parts = data.full_name.strip().split(maxsplit=1)
+        first_name = parts[0]
+        last_name = parts[1] if len(parts) > 1 else None
+
+    user = User(
+        email=data.email,
+        username=data.username,
+        password_hash=get_password_hash(data.password),
+        role=data.role,
+        is_active=True,
+        is_verified=True,
+    )
+    db.add(user)
+    await db.flush()
+
+    if data.role == "student":
+        db.add(StudentProfile(user_id=user.id, first_name=first_name, last_name=last_name))
+    elif data.role == "professor":
+        db.add(ProfessorProfile(user_id=user.id, first_name=first_name, last_name=last_name))
+    elif data.role == "admin":
+        db.add(AdminProfile(user_id=user.id, first_name=first_name, last_name=last_name))
+
+    await db.commit()
+    await db.refresh(user)
+
+    return AdminCreateUserResponse(
+        id=str(user.id),
+        username=user.username,
+        email=user.email,
+        role=user.role,
+        full_name=data.full_name,
+    )
+
+
+# ============================================
+# ADMIN: PROFESSOR REGISTRATION CODES
+# ============================================
+
+@router.post("/professor-codes", response_model=ProfessorCodeResponse, status_code=status.HTTP_201_CREATED)
+async def generate_professor_code(
+    data: GenerateProfessorCodeRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate a single-use, time-limited professor registration code.
+    Reuses AuthService.create_invitation_code (the same mechanism the public
+    registration flow already validates against) rather than a second code
+    system."""
+    _require_admin(current_user)
+    service = AuthService(db)
+    result = await service.create_invitation_code(
+        str(current_user.id),
+        role="professor",
+        expires_in_hours=VALIDITY_TO_HOURS[data.validity],
+        code_prefix="CCS-PROF-",
+    )
+    return result
+
+
+@router.get("/professor-codes", response_model=List[ProfessorCodeResponse])
+async def list_professor_codes(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Active (unused, unexpired) professor codes only - used/expired codes
+    are never shown as active, and expired rows are opportunistically
+    deleted on every call."""
+    _require_admin(current_user)
+    service = AuthService(db)
+    codes = await service.get_invitation_codes(str(current_user.id), role="professor")
+    return [
+        ProfessorCodeResponse(code=c.code, role=c.role, expires_at=c.expires_at, created_at=c.created_at)
+        for c in codes
+    ]
+
+
+@router.delete("/professor-codes/{code}")
+async def delete_professor_code(
+    code: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Manually revoke/delete an unused professor code."""
+    _require_admin(current_user)
+    service = AuthService(db)
+    return await service.delete_invitation_code(str(current_user.id), code)

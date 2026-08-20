@@ -5,9 +5,7 @@ import { CodeXml } from 'lucide-react';
 import { CreatePost } from '@/features/posts/components/CreatePost';
 import { PostCard } from '@/features/posts/components/PostCard';
 import { useFeed } from '@/features/posts/hooks/useFeed';
-import { AnnouncementCard } from '@/features/announcements/components/AnnouncementCard';
-import { AnnouncementFilterBar } from '@/features/announcements/components/AnnouncementFilterBar';
-import { AnnouncementCategory, matchesAnnouncementFilters } from '@/features/announcements/constants';
+import AnnouncementFeedBody from '@/features/announcements/components/AnnouncementFeedBody';
 import { useAnnouncements } from '@/features/announcements/hooks/useAnnouncements';
 import { useSections } from '@/features/sections/hooks/useSections';
 import SectionDashboard from '@/features/sections/components/SectionDashboard';
@@ -32,8 +30,6 @@ export default function StudentDashboard() {
   );
   const [feedFilter, setFeedFilter] = useState<FeedFilter>('all');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [announcementSearch, setAnnouncementSearch] = useState('');
-  const [announcementCategory, setAnnouncementCategory] = useState<'all' | AnnouncementCategory>('all');
 
   // Posts
   const {
@@ -187,46 +183,10 @@ export default function StudentDashboard() {
             </div>
           )}
 
-          {activeSection === 'announcements' && (
-            <div className="max-w-2xl mx-auto space-y-4">
-              <h2 className="text-lg font-semibold text-[#F1F5F9] mb-2">Announcements</h2>
-              <AnnouncementFilterBar
-                search={announcementSearch}
-                onSearchChange={setAnnouncementSearch}
-                category={announcementCategory}
-                onCategoryChange={setAnnouncementCategory}
-              />
-              {announcementsLoading ? (
-                <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] p-8 text-center text-[#94A3B8]">
-                  Loading announcements...
-                </div>
-              ) : announcementList.length === 0 ? (
-                <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] p-8 text-center text-[#94A3B8]">
-                  No announcements for your sections yet.
-                </div>
-              ) : (
-                (() => {
-                  const filtered = announcementList.filter((a) =>
-                    matchesAnnouncementFilters(a, announcementSearch, announcementCategory)
-                  );
-                  return filtered.length === 0 ? (
-                    <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] p-8 text-center text-[#94A3B8]">
-                      No announcements match your filters.
-                    </div>
-                  ) : (
-                    filtered.map((announcement) => (
-                      <AnnouncementCard key={announcement.id} announcement={announcement} />
-                    ))
-                  );
-                })()
-              )}
-            </div>
-          )}
+          {activeSection === 'announcements' && <AnnouncementFeedBody />}
 
           {activeSection === 'sections' && (
             <SectionDashboard
-              onNavigateToAnnouncements={() => setActiveSection('announcements')}
-              onNavigateToChat={() => setActiveSection('chat')}
             />
           )}
 

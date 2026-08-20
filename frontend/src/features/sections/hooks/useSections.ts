@@ -44,6 +44,13 @@ export function useSections() {
     return response.data;
   };
 
+  // Gets (or lazily creates) the section's dedicated group conversation -
+  // reuses the existing Chat Conversation model, not a separate system.
+  const getSectionConversation = async (sectionId: string) => {
+    const response = await sectionApi.getSectionConversation(sectionId);
+    return response.data;
+  };
+
   // Create section
   const createSection = useMutation({
     mutationFn: (data: SectionCreate) => sectionApi.createSection(data),
@@ -176,6 +183,7 @@ export function useSections() {
     refetch,
     getSection,
     browseSections,
+    getSectionConversation,
     createSection: createSection.mutateAsync,
     updateSection: updateSectionMutation.mutateAsync,
     deleteSection: deleteSection.mutateAsync,

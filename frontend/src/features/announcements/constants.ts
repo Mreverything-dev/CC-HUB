@@ -16,9 +16,9 @@ export const CATEGORY_META: Record<
   general: {
     label: 'General',
     icon: MegaphoneIcon,
-    color: 'text-[#00d4ff]',
-    bg: 'bg-[#00d4ff]/10',
-    border: 'border-[#00d4ff]/30',
+    color: 'text-[#00C8FF]',
+    bg: 'bg-[#00C8FF]/10',
+    border: 'border-[#00C8FF]/30',
   },
   academic: {
     label: 'Academic',

@@ -258,6 +258,15 @@ class SectionService:
         await self.db.refresh(section)
         assignments = await self._get_teaching_assignments_for_section(str(section.id))
 
+        # ✅ Provision the section's group chat - reuses the existing
+        # Conversation/ConversationMember tables via SectionConversationService.
+        # Never let a chat-provisioning failure block section creation itself.
+        try:
+            from app.services.section_conversation_service import SectionConversationService
+            await SectionConversationService(self.db).get_or_create(str(section.id))
+        except Exception:
+            logger.exception(f"Failed to auto-provision group chat for new section {section.id}")
+
         return {
             "id": str(section.id),
             "name": section.name,
@@ -562,6 +571,14 @@ class SectionService:
         await self.db.refresh(member)
         logger.info(f"✅ Member added with ID: {member.id}")
 
+        # ✅ Keep the section's group chat in sync - lazily creates it (seeded
+        # with every current member) if this section doesn't have one yet.
+        try:
+            from app.services.section_conversation_service import SectionConversationService
+            await SectionConversationService(self.db).get_or_create(section_id, ensure_user_id=user_id)
+        except Exception:
+            logger.exception(f"Failed to sync group chat membership for user {user_id} joining section {section_id}")
+
         first_name, last_name = await self._get_profile_names(str(user.id), user.role)
         return {
             "id": str(member.id),
@@ -598,6 +615,13 @@ class SectionService:
         
         await self.db.delete(member)
         await self.db.commit()
+
+        try:
+            from app.services.section_conversation_service import SectionConversationService
+            await SectionConversationService(self.db).remove_member(section_id, user_id)
+        except Exception:
+            logger.exception(f"Failed to remove user {user_id} from section {section_id}'s group chat")
+
         return {"message": "Member removed successfully"}
 
     # ============================================

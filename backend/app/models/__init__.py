@@ -1,7 +1,7 @@
 ﻿# backend/app/models/__init__.py
 from app.models.user import User, Role, Permission
 from app.models.profile import StudentProfile, ProfessorProfile, AdminProfile
-from app.models.section import Section, SectionMember
+from app.models.section import Section, SectionMember, SectionConversation
 from app.models.teaching_assignment import TeachingAssignment
 from app.models.announcement import Announcement, AnnouncementTarget, AnnouncementReaction, AnnouncementBookmark
 from app.models.post import Post, PostMedia
@@ -23,6 +23,7 @@ __all__ = [
     "AdminProfile",
     "Section",
     "SectionMember",
+    "SectionConversation",
     "TeachingAssignment",
     "Post",
     "PostMedia",

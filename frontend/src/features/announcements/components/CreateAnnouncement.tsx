@@ -45,7 +45,7 @@ const PRIORITY_OPTIONS: { value: AnnouncementCreate['priority']; label: string; 
 ];
 
 const inputClassName =
-  'w-full px-3 py-2 rounded-xl border border-[#2a2a2a] bg-[#0f0f0f] text-sm text-white placeholder-[#6b6b6b] focus:ring-1 focus:ring-[#00d4ff] focus:border-[#00d4ff] focus:outline-none transition';
+  'w-full px-3 py-2 rounded-xl border border-[#1E3447] bg-[#0A111A] text-sm text-[#F1F5F9] placeholder-[#64748B] focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] focus:outline-none transition';
 
 export function CreateAnnouncement({ onClose, defaultSectionId }: CreateAnnouncementProps) {
   const { createAnnouncement, isCreating } = useAnnouncements();
@@ -194,12 +194,12 @@ export function CreateAnnouncement({ onClose, defaultSectionId }: CreateAnnounce
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-      <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-[#2a2a2a] bg-[#141414] shadow-2xl themed-scrollbar">
+      <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-[#1E3447] bg-[#111E2B] shadow-[0_0_40px_rgba(0,200,255,0.06)] themed-scrollbar">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-5 border-b border-[#2a2a2a]">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-[#1E3447]">
           <div>
-            <h2 className="text-lg font-bold text-white">Create Announcement</h2>
-            <p className="text-xs text-[#6b6b6b] mt-0.5">
+            <h2 className="text-lg font-bold text-[#F1F5F9]">Create Announcement</h2>
+            <p className="text-xs text-[#64748B] mt-0.5">
               {user.role === 'admin'
                 ? 'Share an update with everyone'
                 : isOfficer
@@ -209,7 +209,7 @@ export function CreateAnnouncement({ onClose, defaultSectionId }: CreateAnnounce
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-[#a0a0a0] hover:text-white rounded-full hover:bg-white/5 transition"
+            className="p-1.5 text-[#94A3B8] hover:text-[#F1F5F9] rounded-full hover:bg-white/5 transition"
           >
             <XMarkIcon className="h-5 w-5" />
           </button>
@@ -224,7 +224,7 @@ export function CreateAnnouncement({ onClose, defaultSectionId }: CreateAnnounce
         <form onSubmit={handleSubmit} className="px-6 py-5 space-y-5">
           {/* Title */}
           <div>
-            <label htmlFor="announcement-title" className="block text-sm font-medium text-[#a0a0a0] mb-1.5">
+            <label htmlFor="announcement-title" className="block text-sm font-medium text-[#94A3B8] mb-1.5">
               Title <span className="text-red-400">*</span>
             </label>
             <input
@@ -241,7 +241,7 @@ export function CreateAnnouncement({ onClose, defaultSectionId }: CreateAnnounce
 
           {/* Content */}
           <div>
-            <label htmlFor="announcement-content" className="block text-sm font-medium text-[#a0a0a0] mb-1.5">
+            <label htmlFor="announcement-content" className="block text-sm font-medium text-[#94A3B8] mb-1.5">
               Content <span className="text-red-400">*</span>
             </label>
             <textarea
@@ -258,9 +258,9 @@ export function CreateAnnouncement({ onClose, defaultSectionId }: CreateAnnounce
 
           {/* Image */}
           <div>
-            <label className="block text-sm font-medium text-[#a0a0a0] mb-1.5">Image (Optional)</label>
+            <label className="block text-sm font-medium text-[#94A3B8] mb-1.5">Image (Optional)</label>
             {imagePreview ? (
-              <div className="relative rounded-xl overflow-hidden border border-[#2a2a2a] bg-[#0f0f0f]">
+              <div className="relative rounded-xl overflow-hidden border border-[#1E3447] bg-[#0A111A]">
                 <img src={imagePreview} alt="Announcement attachment preview" className="w-full max-h-64 object-cover" />
                 <button
                   type="button"
@@ -274,7 +274,7 @@ export function CreateAnnouncement({ onClose, defaultSectionId }: CreateAnnounce
             ) : (
               <label
                 htmlFor="announcement-image"
-                className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-[#2a2a2a] bg-[#0f0f0f] py-6 text-sm text-[#6b6b6b] hover:border-[#3a3a3a] hover:text-[#a0a0a0] cursor-pointer transition"
+                className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-[#1E3447] bg-[#0A111A] py-6 text-sm text-[#64748B] hover:border-[#00C8FF]/30 hover:text-[#94A3B8] cursor-pointer transition"
               >
                 <PhotoIcon className="h-5 w-5" />
                 Click to attach an image
@@ -291,7 +291,7 @@ export function CreateAnnouncement({ onClose, defaultSectionId }: CreateAnnounce
 
           {/* Type */}
           <div>
-            <label className="block text-sm font-medium text-[#a0a0a0] mb-1.5">Type</label>
+            <label className="block text-sm font-medium text-[#94A3B8] mb-1.5">Type</label>
             <div className="grid grid-cols-4 gap-2">
               {TYPE_OPTIONS.map(({ value, label, icon: Icon }) => {
                 const isActive = formData.type === value;
@@ -302,8 +302,8 @@ export function CreateAnnouncement({ onClose, defaultSectionId }: CreateAnnounce
                     onClick={() => setFormData({ ...formData, type: value })}
                     className={`flex flex-col items-center gap-1.5 rounded-xl border py-2.5 text-xs font-medium transition ${
                       isActive
-                        ? 'border-[#00d4ff]/50 bg-[#00d4ff]/10 text-[#00d4ff]'
-                        : 'border-[#2a2a2a] bg-[#0f0f0f] text-[#a0a0a0] hover:border-[#3a3a3a] hover:text-white'
+                        ? 'border-[#00C8FF]/50 bg-[#00C8FF]/10 text-[#00C8FF]'
+                        : 'border-[#1E3447] bg-[#0A111A] text-[#94A3B8] hover:border-[#00C8FF]/30 hover:text-[#F1F5F9]'
                     }`}
                   >
                     <Icon className="h-4 w-4" />
@@ -316,7 +316,7 @@ export function CreateAnnouncement({ onClose, defaultSectionId }: CreateAnnounce
 
           {/* Priority */}
           <div>
-            <label className="block text-sm font-medium text-[#a0a0a0] mb-1.5">Priority</label>
+            <label className="block text-sm font-medium text-[#94A3B8] mb-1.5">Priority</label>
             <div className="grid grid-cols-4 gap-2">
               {PRIORITY_OPTIONS.map(({ value, label, icon: Icon }) => {
                 const isActive = formData.priority === value;
@@ -327,8 +327,8 @@ export function CreateAnnouncement({ onClose, defaultSectionId }: CreateAnnounce
                     onClick={() => setFormData({ ...formData, priority: value })}
                     className={`flex flex-col items-center gap-1.5 rounded-xl border py-2.5 text-xs font-medium transition ${
                       isActive
-                        ? 'border-[#00d4ff]/50 bg-[#00d4ff]/10 text-[#00d4ff]'
-                        : 'border-[#2a2a2a] bg-[#0f0f0f] text-[#a0a0a0] hover:border-[#3a3a3a] hover:text-white'
+                        ? 'border-[#00C8FF]/50 bg-[#00C8FF]/10 text-[#00C8FF]'
+                        : 'border-[#1E3447] bg-[#0A111A] text-[#94A3B8] hover:border-[#00C8FF]/30 hover:text-[#F1F5F9]'
                     }`}
                   >
                     <Icon className="h-4 w-4" />
@@ -341,18 +341,18 @@ export function CreateAnnouncement({ onClose, defaultSectionId }: CreateAnnounce
 
           {/* Publish & Expiry */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <label className="flex items-center gap-2 text-sm font-medium text-[#a0a0a0] cursor-pointer">
+            <label className="flex items-center gap-2 text-sm font-medium text-[#94A3B8] cursor-pointer">
               <input
                 type="checkbox"
                 checked={formData.is_published}
                 onChange={(e) => setFormData({ ...formData, is_published: e.target.checked })}
-                className="h-4 w-4 rounded border-[#2a2a2a] bg-[#0f0f0f] text-[#00d4ff] focus:ring-[#00d4ff] focus:ring-offset-0"
+                className="h-4 w-4 rounded border-[#1E3447] bg-[#0A111A] text-[#00C8FF] focus:ring-[#00C8FF] focus:ring-offset-0"
               />
               Publish immediately
             </label>
 
             <div>
-              <label htmlFor="announcement-expires-at" className="block text-sm font-medium text-[#a0a0a0] mb-1.5">
+              <label htmlFor="announcement-expires-at" className="block text-sm font-medium text-[#94A3B8] mb-1.5">
                 Expires At (Optional)
               </label>
               <input
@@ -368,24 +368,24 @@ export function CreateAnnouncement({ onClose, defaultSectionId }: CreateAnnounce
 
           {/* ✅ Section Selection for Professors and section mayors/officers */}
           {(user.role === 'professor' || isOfficer) && (
-            <div className="rounded-xl border border-[#2a2a2a] bg-[#0f0f0f]/60 p-4">
+            <div className="rounded-xl border border-[#1E3447] bg-[#0A111A]/60 p-4">
               <div className="flex items-center justify-between mb-3">
-                <label className="block text-sm font-medium text-[#a0a0a0]">
+                <label className="block text-sm font-medium text-[#94A3B8]">
                   Target Sections
                 </label>
                 <div className="flex items-center gap-2 text-xs">
                   <button
                     type="button"
                     onClick={selectAllSections}
-                    className="text-[#00d4ff] hover:text-white transition"
+                    className="text-[#00C8FF] hover:text-[#F1F5F9] transition"
                   >
                     Select All
                   </button>
-                  <span className="text-[#2a2a2a]">|</span>
+                  <span className="text-[#1E3447]">|</span>
                   <button
                     type="button"
                     onClick={deselectAllSections}
-                    className="text-[#6b6b6b] hover:text-white transition"
+                    className="text-[#64748B] hover:text-[#F1F5F9] transition"
                   >
                     Deselect All
                   </button>
@@ -393,7 +393,7 @@ export function CreateAnnouncement({ onClose, defaultSectionId }: CreateAnnounce
               </div>
 
               {sectionsLoading ? (
-                <p className="text-sm text-[#6b6b6b] py-2">Loading sections...</p>
+                <p className="text-sm text-[#64748B] py-2">Loading sections...</p>
               ) : postableSections.length === 0 ? (
                 <p className="text-sm text-amber-400">
                   You don't have any sections yet. Create a section first.
@@ -410,36 +410,36 @@ export function CreateAnnouncement({ onClose, defaultSectionId }: CreateAnnounce
                           onClick={() => handleSectionToggle(section.id)}
                           className={`flex items-center gap-3 rounded-xl border p-3 text-left transition ${
                             isSelected
-                              ? 'border-[#00d4ff]/50 bg-[#00d4ff]/5'
-                              : 'border-[#2a2a2a] bg-[#0f0f0f] hover:border-[#3a3a3a]'
+                              ? 'border-[#00C8FF]/50 bg-[#00C8FF]/5'
+                              : 'border-[#1E3447] bg-[#0A111A] hover:border-[#00C8FF]/30'
                           }`}
                         >
-                          <span className="h-9 w-9 flex-shrink-0 rounded-lg bg-gradient-to-br from-[#00d4ff] to-[#0099cc] flex items-center justify-center text-xs font-bold text-[#0a0a0a]">
+                          <span className="h-9 w-9 flex-shrink-0 rounded-lg bg-gradient-to-br from-[#00C8FF] to-[#0090CC] flex items-center justify-center text-xs font-bold text-[#060B12]">
                             {section.name.slice(0, 2).toUpperCase()}
                           </span>
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-white truncate">{section.name}</p>
+                            <p className="text-sm font-medium text-[#F1F5F9] truncate">{section.name}</p>
                             {section.course && (
-                              <p className="text-xs text-[#6b6b6b] truncate">{section.course}</p>
+                              <p className="text-xs text-[#64748B] truncate">{section.course}</p>
                             )}
                           </div>
                           {section.member_count !== undefined && (
-                            <span className="flex-shrink-0 text-[10px] font-semibold text-[#a0a0a0] bg-white/5 border border-[#2a2a2a] rounded-full px-2 py-0.5">
+                            <span className="flex-shrink-0 text-[10px] font-semibold text-[#94A3B8] bg-white/5 border border-[#1E3447] rounded-full px-2 py-0.5">
                               {section.member_count} students
                             </span>
                           )}
                           <span
                             className={`flex-shrink-0 h-4 w-4 rounded border flex items-center justify-center ${
-                              isSelected ? 'bg-[#00d4ff] border-[#00d4ff]' : 'border-[#3a3a3a]'
+                              isSelected ? 'bg-[#00C8FF] border-[#00C8FF]' : 'border-[#00C8FF]/30'
                             }`}
                           >
-                            {isSelected && <CheckIcon className="h-3 w-3 text-[#0a0a0a]" />}
+                            {isSelected && <CheckIcon className="h-3 w-3 text-[#060B12]" />}
                           </span>
                         </button>
                       );
                     })}
                   </div>
-                  <p className="text-xs text-[#6b6b6b] mt-2">
+                  <p className="text-xs text-[#64748B] mt-2">
                     {formData.target_sections?.length === 0 || !formData.target_sections?.length
                       ? 'No sections selected - announcement will go to ALL your sections'
                       : `${formData.target_sections.length} section(s) selected`}
@@ -451,24 +451,24 @@ export function CreateAnnouncement({ onClose, defaultSectionId }: CreateAnnounce
 
           {/* Admin Note */}
           {user.role === 'admin' && (
-            <div className="text-sm text-[#a0a0a0] bg-[#00d4ff]/5 border border-[#00d4ff]/20 p-3 rounded-xl">
+            <div className="text-sm text-[#94A3B8] bg-[#00C8FF]/5 border border-[#00C8FF]/20 p-3 rounded-xl">
               Admin announcements are visible to ALL users.
             </div>
           )}
 
           {/* Buttons */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#2a2a2a]">
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-[#1E3447]">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-[#a0a0a0] hover:text-white hover:bg-white/5 rounded-xl transition"
+              className="px-4 py-2 text-sm font-medium text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5 rounded-xl transition"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isCreating || isUploadingImage}
-              className="px-6 py-2 text-sm font-semibold bg-gradient-to-br from-[#00d4ff] to-[#0099cc] text-[#0a0a0a] rounded-xl hover:opacity-90 transition disabled:opacity-50"
+              className="px-6 py-2 text-sm font-semibold bg-gradient-to-br from-[#00C8FF] to-[#0090CC] text-[#060B12] rounded-xl hover:opacity-90 transition disabled:opacity-50"
             >
               {isUploadingImage ? 'Uploading image...' : isCreating ? 'Creating...' : 'Create Announcement'}
             </button>

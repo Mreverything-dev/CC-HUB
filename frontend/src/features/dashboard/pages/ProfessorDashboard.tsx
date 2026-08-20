@@ -2,14 +2,10 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { CodeXml } from 'lucide-react';
-import { PlusIcon } from '@heroicons/react/24/outline';
 import { CreatePost } from '@/features/posts/components/CreatePost';
 import { PostCard } from '@/features/posts/components/PostCard';
 import { useFeed } from '@/features/posts/hooks/useFeed';
-import { AnnouncementCard } from '@/features/announcements/components/AnnouncementCard';
-import { CreateAnnouncement } from '@/features/announcements/components/CreateAnnouncement';
-import { AnnouncementFilterBar } from '@/features/announcements/components/AnnouncementFilterBar';
-import { AnnouncementCategory, matchesAnnouncementFilters } from '@/features/announcements/constants';
+import AnnouncementFeedBody from '@/features/announcements/components/AnnouncementFeedBody';
 import { useAnnouncements } from '@/features/announcements/hooks/useAnnouncements';
 import { useSections } from '@/features/sections/hooks/useSections';
 import SectionDashboard from '@/features/sections/components/SectionDashboard';
@@ -36,9 +32,6 @@ export default function ProfessorDashboard() {
   );
   const [feedFilter, setFeedFilter] = useState<FeedFilter>('all');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [showCreateAnnouncement, setShowCreateAnnouncement] = useState(false);
-  const [announcementSearch, setAnnouncementSearch] = useState('');
-  const [announcementCategory, setAnnouncementCategory] = useState<'all' | AnnouncementCategory>('all');
   // Professors land on "My Teaching Assignments" first; the per-section
   // "Manage" button hands off to the existing SectionDashboard for that section.
   const [selectedTeachingSectionId, setSelectedTeachingSectionId] = useState<string | null>(null);
@@ -58,8 +51,6 @@ export default function ProfessorDashboard() {
   const {
     announcements = [],
     isLoading: announcementsLoading,
-    deleteAnnouncement,
-    togglePublish,
     refetch: refetchAnnouncements,
   } = useAnnouncements();
 
@@ -77,7 +68,6 @@ export default function ProfessorDashboard() {
       .catch(() => setAvatarUrl(null));
   }, []);
 
-  const canCreateAnnouncement = user?.role === 'professor' || user?.role === 'admin';
   const postList = Array.isArray(posts) ? posts : [];
   const announcementList = Array.isArray(announcements) ? announcements : [];
   const sectionList = Array.isArray(sections) ? sections : [];
@@ -195,67 +185,7 @@ export default function ProfessorDashboard() {
             </div>
           )}
 
-          {activeSection === 'announcements' && (
-            <div className="max-w-2xl mx-auto space-y-4">
-              <h2 className="text-lg font-semibold text-[#F1F5F9] mb-2">Announcements</h2>
-
-              <AnnouncementFilterBar
-                search={announcementSearch}
-                onSearchChange={setAnnouncementSearch}
-                category={announcementCategory}
-                onCategoryChange={setAnnouncementCategory}
-                actionSlot={
-                  canCreateAnnouncement && (
-                    <button
-                      onClick={() => setShowCreateAnnouncement(true)}
-                      className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#00C8FF]/10 text-[#00C8FF] hover:bg-[#00C8FF]/20 transition font-medium text-sm whitespace-nowrap"
-                    >
-                      <PlusIcon className="h-4 w-4" />
-                      New Announcement
-                    </button>
-                  )
-                }
-              />
-
-              {announcementsLoading ? (
-                <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] p-8 text-center text-[#94A3B8]">
-                  Loading announcements...
-                </div>
-              ) : announcementList.length === 0 ? (
-                <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] p-8 text-center">
-                  <p className="text-[#94A3B8]">No announcements yet.</p>
-                  {canCreateAnnouncement && (
-                    <button
-                      onClick={() => setShowCreateAnnouncement(true)}
-                      className="mt-3 text-sm text-[#00C8FF] hover:underline font-medium"
-                    >
-                      Create your first announcement
-                    </button>
-                  )}
-                </div>
-              ) : (
-                (() => {
-                  const filtered = announcementList.filter((a) =>
-                    matchesAnnouncementFilters(a, announcementSearch, announcementCategory)
-                  );
-                  return filtered.length === 0 ? (
-                    <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] p-8 text-center text-[#94A3B8]">
-                      No announcements match your filters.
-                    </div>
-                  ) : (
-                    filtered.map((announcement) => (
-                      <AnnouncementCard
-                        key={announcement.id}
-                        announcement={announcement}
-                        onDelete={() => deleteAnnouncement(announcement.id)}
-                        onTogglePublish={(id, isPublished) => togglePublish({ id, isPublished })}
-                      />
-                    ))
-                  );
-                })()
-              )}
-            </div>
-          )}
+          {activeSection === 'announcements' && <AnnouncementFeedBody />}
 
           {activeSection === 'sections' && (
             selectedTeachingSectionId ? (
@@ -269,8 +199,6 @@ export default function ProfessorDashboard() {
                 </button>
                 <SectionDashboard
                   initialSectionId={selectedTeachingSectionId}
-                  onNavigateToAnnouncements={() => setActiveSection('announcements')}
-                  onNavigateToChat={() => setActiveSection('chat')}
                 />
               </div>
             ) : (
@@ -283,11 +211,6 @@ export default function ProfessorDashboard() {
           {activeSection === 'chat' && <ChatPanel fullHeight={false} />}
         </main>
       </div>
-
-      {/* Create Announcement Modal */}
-      {showCreateAnnouncement && (
-        <CreateAnnouncement onClose={() => setShowCreateAnnouncement(false)} />
-      )}
     </div>
   );
 }

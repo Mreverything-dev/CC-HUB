@@ -27,7 +27,7 @@ class Section(Base):
 
 class SectionMember(Base):
     __tablename__ = "section_members"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     section_id = Column(UUID(as_uuid=True), ForeignKey("sections.id", ondelete="CASCADE"))
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
@@ -35,7 +35,24 @@ class SectionMember(Base):
     is_officer = Column(Boolean, default=False)
     is_mayor = Column(Boolean, default=False)
     joined_at = Column(UTCDateTime, default=datetime.utcnow)
-    
+
     # ✅ Relationships
     section = relationship("Section", back_populates="members")
     user = relationship("User")
+
+
+class SectionConversation(Base):
+    """Links a Section to its dedicated group Conversation (reusing the
+    existing chat Conversation/ConversationMember tables - not a parallel
+    messaging system). Both FKs are unique, so a section can never end up
+    with more than one linked conversation, and a conversation can never be
+    shared between sections."""
+    __tablename__ = "section_conversations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    section_id = Column(UUID(as_uuid=True), ForeignKey("sections.id", ondelete="CASCADE"), nullable=False, unique=True)
+    conversation_id = Column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, unique=True)
+    created_at = Column(UTCDateTime, default=datetime.utcnow)
+
+    section = relationship("Section")
+    conversation = relationship("Conversation")

@@ -78,6 +78,32 @@ export interface AdminUserListParams {
   online?: AdminUserOnlineFilter;
 }
 
+export interface AdminCreateUserRequest {
+  full_name?: string;
+  username: string;
+  email: string;
+  password: string;
+  confirm_password: string;
+  role: AdminUserRole;
+}
+
+export interface AdminCreateUserResponse {
+  id: string;
+  username: string;
+  email: string;
+  role: AdminUserRole;
+  full_name: string | null;
+}
+
+export type ProfessorCodeValidity = '1h' | '1d' | '1w';
+
+export interface ProfessorCodeResponse {
+  code: string;
+  role: string;
+  expires_at: string;
+  created_at: string;
+}
+
 export const adminService = {
   getDashboardStats: () => api.get<AdminDashboardStats>('/admin/dashboard-stats'),
   getUserGrowth: (range: UserGrowthRange = 'week') =>
@@ -86,4 +112,10 @@ export const adminService = {
     api.get<AdminUserListResponse>('/admin/users', { params }),
   updateUserStatus: (userId: string, isActive: boolean) =>
     api.patch<AdminUserListItem>(`/admin/users/${userId}/status`, { is_active: isActive }),
+  createUser: (data: AdminCreateUserRequest) =>
+    api.post<AdminCreateUserResponse>('/admin/users', data),
+  generateProfessorCode: (validity: ProfessorCodeValidity) =>
+    api.post<ProfessorCodeResponse>('/admin/professor-codes', { validity }),
+  getProfessorCodes: () => api.get<ProfessorCodeResponse[]>('/admin/professor-codes'),
+  deleteProfessorCode: (code: string) => api.delete(`/admin/professor-codes/${code}`),
 };

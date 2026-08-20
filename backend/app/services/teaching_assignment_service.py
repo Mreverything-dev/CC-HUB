@@ -155,6 +155,16 @@ class TeachingAssignmentService:
         self.db.add(assignment)
         await self.db.commit()
         await self.db.refresh(assignment)
+
+        # ✅ Keep the section's group chat in sync - lazily creates it (seeded
+        # with every current member/professor) if this section doesn't have
+        # one yet. Never let a chat-provisioning failure block the assignment.
+        try:
+            from app.services.section_conversation_service import SectionConversationService
+            await SectionConversationService(self.db).get_or_create(section_id, ensure_user_id=professor_id)
+        except Exception:
+            logger.exception(f"Failed to sync group chat membership for professor {professor_id} in section {section_id}")
+
         return await self._enrich(assignment)
 
     async def list_for_section(self, section_id: str) -> List[dict]:
@@ -210,10 +220,33 @@ class TeachingAssignmentService:
                 detail="You don't have permission to remove this teaching assignment",
             )
 
+        section_id = str(assignment.section_id)
+        professor_id = str(assignment.professor_id)
+
         # Deletes only this one row. TeachingAssignment.section_id is a FK
         # pointing AT Section, never the reverse, so this can never cascade
         # into deleting the section, its students, mayor, officer, or any
         # other professor's assignment.
         await self.db.delete(assignment)
         await self.db.commit()
+
+        # ✅ Only drop the professor from the section's group chat if they
+        # have no other reason to be there (no other active assignment in
+        # this section, and they're not the legacy sole advisor).
+        try:
+            from app.services.section_conversation_service import SectionConversationService
+            remaining = await self.db.execute(
+                select(TeachingAssignment.id).where(
+                    TeachingAssignment.section_id == section_id,
+                    TeachingAssignment.professor_id == professor_id,
+                    TeachingAssignment.status == "active",
+                )
+            )
+            section = await self._get_section(section_id)
+            still_advisor = str(section.advisor_id) == professor_id
+            if not remaining.first() and not still_advisor:
+                await SectionConversationService(self.db).remove_member(section_id, professor_id)
+        except Exception:
+            logger.exception(f"Failed to remove professor {professor_id} from section {section_id}'s group chat")
+
         return {"message": "Teaching assignment removed successfully"}

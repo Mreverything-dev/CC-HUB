@@ -1,5 +1,7 @@
 // frontend/src/features/sections/components/SectionDashboard.tsx
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import {
   UserGroupIcon,
   AcademicCapIcon,
@@ -23,13 +25,10 @@ import { Section, SectionMember, TeachingAssignment } from '@/types/section.type
 import AddStudentModal from './AddStudentModal';
 import CreateSectionModal from './CreateSectionModal';
 import SectionDetailModal from './SectionDetailModal';
-import ProfessorDetailPanel from './ProfessorDetailPanel';
 import { TeachingAssignmentOnboardingBanner } from './TeachingAssignmentOnboardingBanner';
 import { CreateAnnouncement } from '@/features/announcements/components/CreateAnnouncement';
 
 interface SectionDashboardProps {
-  onNavigateToAnnouncements: () => void;
-  onNavigateToChat: () => void;
   /** Pre-select a section instead of defaulting to the first one - used when
    * entering from the professor's "My Teaching Assignments" hub via its
    * per-section "Manage" button. Omit for the default (student) behavior of
@@ -37,7 +36,17 @@ interface SectionDashboardProps {
   initialSectionId?: string;
 }
 
-type StudentFilter = 'all' | 'officers' | 'students';
+const STUDENTS_PAGE_SIZE = 10;
+
+// "HH:MM:SS" (the backend's Time column) -> "2:30 PM" - a schedule-string
+// formatter, distinct from lib/formatters.ts's formatTime which formats a
+// full Date/timestamp, not a bare time-of-day string.
+function formatScheduleTime(t: string) {
+  const [h, m] = t.split(':').map(Number);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hour12}:${String(m).padStart(2, '0')} ${period}`;
+}
 
 function CrownIcon({ className }: { className?: string }) {
   return (
@@ -55,19 +64,21 @@ function ShieldIcon({ className }: { className?: string }) {
   );
 }
 
-export default function SectionDashboard({ onNavigateToAnnouncements, onNavigateToChat, initialSectionId }: SectionDashboardProps) {
+export default function SectionDashboard({ initialSectionId }: SectionDashboardProps) {
   const { user } = useAuthStore();
-  const { sections, isLoading, getSection, refetch } = useSections();
-  const { createDirectConversation, openWidget } = useChat();
+  const navigate = useNavigate();
+  const { sections, isLoading, getSection, refetch, getSectionConversation } = useSections();
+  const { createDirectConversation, openWidget, setCurrentConversation, refetchConversations } = useChat();
 
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(initialSectionId || null);
   const [showSectionSwitcher, setShowSectionSwitcher] = useState(false);
   const [section, setSection] = useState<Section | null>(null);
   const [sectionLoading, setSectionLoading] = useState(false);
   const [sectionError, setSectionError] = useState<string | null>(null);
+  const [openingChat, setOpeningChat] = useState(false);
   const [selectedProfessorId, setSelectedProfessorId] = useState<string | null>(null);
+  const [showProfessorSwitcher, setShowProfessorSwitcher] = useState(false);
   const [search, setSearch] = useState('');
-  const [studentFilter, setStudentFilter] = useState<StudentFilter>('all');
   const [showAllStudents, setShowAllStudents] = useState(false);
   const [messagingUserId, setMessagingUserId] = useState<string | null>(null);
 
@@ -124,12 +135,33 @@ export default function SectionDashboard({ onNavigateToAnnouncements, onNavigate
     }
     return Array.from(map.values());
   }, [activeAssignments]);
-  const selectedProfessorAssignments = selectedProfessorId
-    ? professorGroups.find((g) => g[0]?.professor_id === selectedProfessorId) || null
-    : null;
+
+  // Only one professor is shown at a time (main card + "Professor Details"
+  // sidebar, kept in sync) - defaults to the first one whenever the
+  // available set changes (new section selected, or the current pick is no
+  // longer in the list).
+  useEffect(() => {
+    if (professorGroups.length === 0) {
+      if (selectedProfessorId !== null) setSelectedProfessorId(null);
+      return;
+    }
+    const stillValid = professorGroups.some((g) => g[0]?.professor_id === selectedProfessorId);
+    if (!stillValid) setSelectedProfessorId(professorGroups[0][0].professor_id);
+  }, [professorGroups, selectedProfessorId]);
+
+  const selectedProfessorAssignments =
+    professorGroups.find((g) => g[0]?.professor_id === selectedProfessorId) || professorGroups[0] || null;
+  const otherProfessorGroups = professorGroups.filter(
+    (g) => g[0]?.professor_id !== selectedProfessorAssignments?.[0]?.professor_id
+  );
+
   const mayor = members.find((m) => m.is_mayor) || null;
   const officer = members.find((m) => m.is_officer && !m.is_mayor) || null;
   const regularStudents = members.filter((m) => !m.is_mayor);
+  // Total section membership (students + Mayor + Officer), not just the
+  // students shown in the grid below - the Mayor has their own dedicated
+  // card and is intentionally left out of that grid, but must still count.
+  const totalStudentCount = section?.member_count ?? members.length;
 
   const isTeachingProfessor = activeAssignments.some((ta) => ta.professor_id === user?.id);
 
@@ -147,19 +179,24 @@ export default function SectionDashboard({ onNavigateToAnnouncements, onNavigate
 
   const filteredStudents = useMemo(() => {
     let list = regularStudents;
-    if (studentFilter === 'officers') list = list.filter((m) => m.is_officer);
-    if (studentFilter === 'students') list = list.filter((m) => !m.is_officer);
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      list = list.filter(
-        (m) => m.user_username?.toLowerCase().includes(q) || m.user_email?.toLowerCase().includes(q)
-      );
+      list = list.filter((m) => {
+        const fullName = m.user_first_name
+          ? `${m.user_first_name} ${m.user_last_name || ''}`.trim().toLowerCase()
+          : '';
+        return (
+          fullName.includes(q) ||
+          m.user_username?.toLowerCase().includes(q) ||
+          m.user_email?.toLowerCase().includes(q)
+        );
+      });
     }
     return list;
-  }, [regularStudents, studentFilter, search]);
+  }, [regularStudents, search]);
 
   const visibleStudents =
-    showAllStudents || search.trim() || studentFilter !== 'all' ? filteredStudents : filteredStudents.slice(0, 8);
+    showAllStudents || search.trim() ? filteredStudents : filteredStudents.slice(0, STUDENTS_PAGE_SIZE);
 
   const handleMessage = async (userId: string) => {
     if (userId === user?.id) return;
@@ -177,6 +214,25 @@ export default function SectionDashboard({ onNavigateToAnnouncements, onNavigate
     const fresh = await getSection(selectedSectionId);
     setSection(fresh);
     refetch();
+  };
+
+  // Opens the section's own dedicated group conversation (never the generic
+  // chat list) - reuses the existing chat widget/API, gets-or-lazily-creates
+  // the group on the backend so this works even for sections created before
+  // this feature existed.
+  const handleOpenSectionChat = async () => {
+    if (!section || openingChat) return;
+    setOpeningChat(true);
+    try {
+      const conversation = await getSectionConversation(section.id);
+      setCurrentConversation(conversation);
+      openWidget();
+      refetchConversations();
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || "Couldn't open the section chat. Please try again.");
+    } finally {
+      setOpeningChat(false);
+    }
   };
 
   if (isLoading && sections.length === 0) {
@@ -312,45 +368,39 @@ export default function SectionDashboard({ onNavigateToAnnouncements, onNavigate
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
           {/* Main content */}
           <div className="xl:col-span-2 space-y-5 min-w-0">
-            {/* Professors */}
+            {/* Professor */}
             <div className="rounded-2xl border border-[#00C8FF]/20 bg-[#0D1722] shadow-[0_0_30px_rgba(0,200,255,0.05)] p-5">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[#64748B] mb-3">
                 <AcademicCapIcon className="h-4 w-4" />
-                Professors
+                Professor
               </div>
-              {professorGroups.length > 0 ? (
-                <div className="space-y-3">
-                  {professorGroups.map((group) => {
-                    const first = group[0];
-                    const fullName = first.professor_first_name
-                      ? `${first.professor_first_name} ${first.professor_last_name || ''}`.trim()
-                      : first.professor_username || 'Professor';
-                    return (
-                      <button
-                        key={first.professor_id}
-                        onClick={() => setSelectedProfessorId(first.professor_id)}
-                        className="w-full flex flex-col sm:flex-row sm:items-center gap-4 text-left p-2 -m-2 rounded-xl hover:bg-white/5 transition"
-                      >
+              {selectedProfessorAssignments ? (
+                (() => {
+                  const first = selectedProfessorAssignments[0];
+                  const fullName = first.professor_first_name
+                    ? `${first.professor_first_name} ${first.professor_last_name || ''}`.trim()
+                    : first.professor_username || 'Professor';
+                  const subjectLine = selectedProfessorAssignments.map((ta) => ta.subject).join(' • ');
+                  return (
+                    <div>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                         <Avatar src={first.professor_avatar} name={fullName} size="lg" />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="text-base font-semibold text-[#F1F5F9] truncate">Prof. {fullName}</p>
                             <RoleBadge role="professor" />
                           </div>
-                          <p className="text-sm text-[#94A3B8] mt-0.5 truncate">
-                            {group.map((ta) => ta.subject).join(' • ')}
-                          </p>
-                          <p className="text-xs text-[#64748B] mt-0.5">
-                            Teaching {section.name}
-                            {section.course ? ` • ${section.course}` : ''}
-                          </p>
+                          <p className="text-sm text-[#94A3B8] mt-0.5 truncate">Subject: {subjectLine}</p>
+                          {first.schedule_days.length > 0 && first.schedule_start && first.schedule_end && (
+                            <p className="text-xs text-[#64748B] mt-0.5">
+                              Schedule: {first.schedule_days.join(', ')} {formatScheduleTime(first.schedule_start)}-
+                              {formatScheduleTime(first.schedule_end)}
+                            </p>
+                          )}
                         </div>
                         {first.professor_id !== user?.id && (
                           <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleMessage(first.professor_id);
-                            }}
+                            onClick={() => handleMessage(first.professor_id)}
                             disabled={messagingUserId === first.professor_id}
                             className="flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-semibold border border-[#00C8FF]/30 bg-[#00C8FF]/10 text-[#00C8FF] rounded-xl hover:bg-[#00C8FF]/20 transition disabled:opacity-50 flex-shrink-0"
                           >
@@ -358,10 +408,56 @@ export default function SectionDashboard({ onNavigateToAnnouncements, onNavigate
                             Message
                           </button>
                         )}
-                      </button>
-                    );
-                  })}
-                </div>
+                      </div>
+
+                      {otherProfessorGroups.length > 0 && (
+                        <div className="relative mt-4 pt-4 border-t border-[#1E3447]">
+                          <button
+                            onClick={() => setShowProfessorSwitcher((v) => !v)}
+                            className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-[#00C8FF] hover:bg-white/5 rounded-xl transition"
+                          >
+                            <span>View other professors ({otherProfessorGroups.length})</span>
+                            <ChevronDownIcon
+                              className={`h-4 w-4 flex-shrink-0 transition-transform ${showProfessorSwitcher ? 'rotate-180' : ''}`}
+                            />
+                          </button>
+
+                          {showProfessorSwitcher && (
+                            <>
+                              <div className="fixed inset-0 z-10" onClick={() => setShowProfessorSwitcher(false)} />
+                              <div className="relative z-20 mt-1.5 rounded-xl border border-[#1E3447] bg-[#111E2B] shadow-xl overflow-hidden max-h-64 overflow-y-auto themed-scrollbar">
+                                {otherProfessorGroups.map((group) => {
+                                  const p = group[0];
+                                  const name = p.professor_first_name
+                                    ? `${p.professor_first_name} ${p.professor_last_name || ''}`.trim()
+                                    : p.professor_username || 'Professor';
+                                  return (
+                                    <button
+                                      key={p.professor_id}
+                                      onClick={() => {
+                                        setSelectedProfessorId(p.professor_id);
+                                        setShowProfessorSwitcher(false);
+                                      }}
+                                      className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-white/5 transition"
+                                    >
+                                      <Avatar src={p.professor_avatar} name={name} size="sm" />
+                                      <div className="min-w-0 flex-1">
+                                        <p className="text-sm font-medium text-[#F1F5F9] truncate">Prof. {name}</p>
+                                        <p className="text-xs text-[#64748B] truncate">
+                                          {group.map((ta) => ta.subject).join(' • ')}
+                                        </p>
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()
               ) : (
                 <p className="text-sm text-[#64748B]">No professor assigned to this section.</p>
               )}
@@ -451,10 +547,10 @@ export default function SectionDashboard({ onNavigateToAnnouncements, onNavigate
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                 <div className="flex items-center gap-2">
                   <UsersIcon className="h-5 w-5 text-[#00C8FF]" />
-                  <h3 className="font-semibold text-[#F1F5F9]">Students ({regularStudents.length})</h3>
+                  <h3 className="font-semibold text-[#F1F5F9]">Students ({totalStudentCount})</h3>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="relative flex-1 sm:w-52">
+                  <div className="relative flex-1 sm:w-56">
                     <MagnifyingGlassIcon className="h-4 w-4 text-[#64748B] absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
@@ -464,22 +560,14 @@ export default function SectionDashboard({ onNavigateToAnnouncements, onNavigate
                       className="w-full pl-9 pr-3 py-2 rounded-xl border border-[#1E3447] bg-[#0A111A] text-sm text-[#F1F5F9] placeholder-[#64748B] focus:outline-none focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition"
                     />
                   </div>
-                  <select
-                    value={studentFilter}
-                    onChange={(e) => setStudentFilter(e.target.value as StudentFilter)}
-                    className="px-3 py-2 rounded-xl border border-[#1E3447] bg-[#0A111A] text-sm text-[#F1F5F9] focus:outline-none focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition"
-                  >
-                    <option value="all">All</option>
-                    <option value="officers">Officers</option>
-                    <option value="students">Students</option>
-                  </select>
                   {canManage && (
                     <button
                       onClick={() => setShowAddStudent(true)}
                       title="Add Student"
-                      className="p-2 rounded-xl border border-[#00C8FF]/30 bg-[#00C8FF]/10 text-[#00C8FF] hover:bg-[#00C8FF]/20 transition flex-shrink-0"
+                      className="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-xl border border-[#00C8FF]/30 bg-[#00C8FF]/10 text-[#00C8FF] hover:bg-[#00C8FF]/20 transition flex-shrink-0"
                     >
                       <PlusIcon className="h-4 w-4" />
+                      <span className="hidden sm:inline">Add Student</span>
                     </button>
                   )}
                 </div>
@@ -494,41 +582,58 @@ export default function SectionDashboard({ onNavigateToAnnouncements, onNavigate
               ) : (
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                    {visibleStudents.map((member: SectionMember) => (
-                      <div
-                        key={member.id}
-                        className="rounded-xl border border-[#1E3447] bg-[#0A111A] hover:border-[#00C8FF]/30 transition p-3"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <Avatar src={member.user_avatar} name={member.user_username || undefined} size="sm" />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-[#F1F5F9] truncate">{member.user_username}</p>
-                            <span className="text-[10px] font-medium text-[#94A3B8] bg-white/5 border border-[#1E3447] rounded-full px-1.5 py-0.5">
-                              {member.is_officer ? 'Officer' : 'Student'}
-                            </span>
+                    {visibleStudents.map((member: SectionMember) => {
+                      const fullName = member.user_first_name
+                        ? `${member.user_first_name} ${member.user_last_name || ''}`.trim()
+                        : member.user_username || 'Student';
+                      return (
+                        <div
+                          key={member.id}
+                          onClick={() => navigate(`/profile/${member.user_id}`)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              navigate(`/profile/${member.user_id}`);
+                            }
+                          }}
+                          className="rounded-xl border border-[#1E3447] bg-[#0A111A] hover:border-[#00C8FF]/30 transition p-3 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00C8FF]/60"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <Avatar src={member.user_avatar} name={fullName} size="sm" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-[#F1F5F9] truncate">{fullName}</p>
+                              <span className="text-[10px] font-medium text-[#94A3B8] bg-white/5 border border-[#1E3447] rounded-full px-1.5 py-0.5">
+                                {member.is_officer ? 'Officer' : 'Student'}
+                              </span>
+                            </div>
+                            {member.user_id !== user?.id && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleMessage(member.user_id);
+                                }}
+                                disabled={messagingUserId === member.user_id}
+                                title="Message"
+                                className="p-1.5 text-[#64748B] hover:text-[#00C8FF] hover:bg-white/5 rounded-lg transition disabled:opacity-50 flex-shrink-0"
+                              >
+                                <ChatBubbleLeftIcon className="h-4 w-4" />
+                              </button>
+                            )}
                           </div>
-                          {member.user_id !== user?.id && (
-                            <button
-                              onClick={() => handleMessage(member.user_id)}
-                              disabled={messagingUserId === member.user_id}
-                              title="Message"
-                              className="p-1.5 text-[#64748B] hover:text-[#00C8FF] hover:bg-white/5 rounded-lg transition disabled:opacity-50 flex-shrink-0"
-                            >
-                              <ChatBubbleLeftIcon className="h-4 w-4" />
-                            </button>
-                          )}
+                          <p className="text-xs text-[#64748B] truncate mt-1.5">{member.user_email}</p>
                         </div>
-                        <p className="text-xs text-[#64748B] truncate mt-1.5">{member.user_email}</p>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
-                  {!showAllStudents && !search.trim() && studentFilter === 'all' && filteredStudents.length > 8 && (
+                  {!search.trim() && filteredStudents.length > STUDENTS_PAGE_SIZE && (
                     <button
-                      onClick={() => setShowAllStudents(true)}
+                      onClick={() => setShowAllStudents((v) => !v)}
                       className="w-full mt-3 py-2 text-sm font-medium text-[#00C8FF] hover:bg-white/5 rounded-xl transition"
                     >
-                      View all students
+                      {showAllStudents ? 'Show Less' : `View All (${filteredStudents.length})`}
                     </button>
                   )}
                 </>
@@ -547,7 +652,7 @@ export default function SectionDashboard({ onNavigateToAnnouncements, onNavigate
                   { icon: AcademicCapIcon, label: 'Program', value: section.course || '—' },
                   { icon: CalendarIcon, label: 'Year', value: section.year_level ? `Year ${section.year_level}` : '—' },
                   { icon: CalendarIcon, label: 'School Year', value: section.academic_year || '—' },
-                  { icon: UsersIcon, label: 'Total Students', value: String(section.member_count ?? regularStudents.length) },
+                  { icon: UsersIcon, label: 'Total Students', value: String(totalStudentCount) },
                 ].map(({ icon: Icon, label, value }) => (
                   <div key={label} className="flex items-start gap-2.5">
                     <Icon className="h-4 w-4 text-[#64748B] mt-0.5 flex-shrink-0" />
@@ -560,53 +665,60 @@ export default function SectionDashboard({ onNavigateToAnnouncements, onNavigate
               </dl>
             </div>
 
-            {/* Class Officers */}
+            {/* Professor Details - kept in sync with the professor selected
+                in the main Professor card's dropdown above. */}
             <div className="rounded-2xl border border-[#1E3447] bg-[#0D1722] p-4">
-              <h3 className="font-semibold text-[#F1F5F9]">Class Officers</h3>
-              <p className="text-xs text-[#64748B] mt-0.5 mb-3">Your leaders are here to help.</p>
-              {!mayor && !officer ? (
-                <p className="text-sm text-[#64748B] py-2">No officers assigned yet.</p>
+              <h3 className="font-semibold text-[#F1F5F9]">Professor Details</h3>
+              {!selectedProfessorAssignments ? (
+                <p className="text-sm text-[#64748B] py-2 mt-1">No professor assigned yet.</p>
               ) : (
-                <div className="space-y-2">
-                  {mayor && (
-                    <div className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-white/5 transition">
-                      <Avatar src={mayor.user_avatar} name={mayor.user_username || undefined} size="sm" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-[#F1F5F9] truncate">{mayor.user_username}</p>
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[#F5B82E] bg-[#F5B82E]/10 border border-[#F5B82E]/30 rounded-full px-1.5 py-0.5">
-                          Mayor
-                        </span>
+                (() => {
+                  const first = selectedProfessorAssignments[0];
+                  const fullName = first.professor_first_name
+                    ? `${first.professor_first_name} ${first.professor_last_name || ''}`.trim()
+                    : first.professor_username || 'Professor';
+                  return (
+                    <div className="mt-3">
+                      <div className="flex items-center gap-2.5">
+                        <Avatar src={first.professor_avatar} name={fullName} size="md" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-[#F1F5F9] truncate">Prof. {fullName}</p>
+                          <RoleBadge role="professor" className="mt-0.5" />
+                        </div>
                       </div>
-                      {mayor.user_id !== user?.id && (
+
+                      <p className="text-xs font-semibold uppercase tracking-wide text-[#64748B] mt-4 mb-2">
+                        Subjects
+                      </p>
+                      <div className="space-y-2">
+                        {selectedProfessorAssignments.map((ta) => (
+                          <div key={ta.id} className="rounded-xl border border-[#1E3447] bg-[#0A111A] p-2.5">
+                            <p className="text-sm font-medium text-[#F1F5F9]">{ta.subject}</p>
+                            {ta.schedule_days.length > 0 && ta.schedule_start && ta.schedule_end ? (
+                              <p className="text-xs text-[#94A3B8] mt-0.5">
+                                {ta.schedule_days.join(', ')} &middot; {formatScheduleTime(ta.schedule_start)}-
+                                {formatScheduleTime(ta.schedule_end)}
+                              </p>
+                            ) : (
+                              <p className="text-xs text-[#64748B] mt-0.5">Schedule not set</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      {first.professor_id !== user?.id && (
                         <button
-                          onClick={() => handleMessage(mayor.user_id)}
-                          className="p-1.5 text-[#64748B] hover:text-[#F5B82E] hover:bg-white/5 rounded-lg transition flex-shrink-0"
+                          onClick={() => handleMessage(first.professor_id)}
+                          disabled={messagingUserId === first.professor_id}
+                          className="w-full mt-3 flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-semibold border border-[#00C8FF]/30 bg-[#00C8FF]/10 text-[#00C8FF] rounded-xl hover:bg-[#00C8FF]/20 transition disabled:opacity-50"
                         >
                           <ChatBubbleLeftIcon className="h-4 w-4" />
+                          Message
                         </button>
                       )}
                     </div>
-                  )}
-                  {officer && (
-                    <div className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-white/5 transition">
-                      <Avatar src={officer.user_avatar} name={officer.user_username || undefined} size="sm" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-[#F1F5F9] truncate">{officer.user_username}</p>
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-[#3B9EFF] bg-[#3B9EFF]/10 border border-[#3B9EFF]/30 rounded-full px-1.5 py-0.5">
-                          Officer
-                        </span>
-                      </div>
-                      {officer.user_id !== user?.id && (
-                        <button
-                          onClick={() => handleMessage(officer.user_id)}
-                          className="p-1.5 text-[#64748B] hover:text-[#3B9EFF] hover:bg-white/5 rounded-lg transition flex-shrink-0"
-                        >
-                          <ChatBubbleLeftIcon className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
+                  );
+                })()
               )}
             </div>
 
@@ -627,8 +739,9 @@ export default function SectionDashboard({ onNavigateToAnnouncements, onNavigate
                   </button>
                 )}
                 <button
-                  onClick={onNavigateToAnnouncements}
-                  className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-[#F1F5F9] hover:bg-white/5 rounded-xl transition"
+                  onClick={() => section && navigate(`/announcements?section=${section.id}`)}
+                  disabled={!section}
+                  className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-[#F1F5F9] hover:bg-white/5 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                 >
                   <span className="flex items-center gap-2">
                     <SpeakerWaveIcon className="h-4 w-4 text-[#00C8FF]" />
@@ -637,12 +750,13 @@ export default function SectionDashboard({ onNavigateToAnnouncements, onNavigate
                   <ChevronDownIcon className="h-3.5 w-3.5 text-[#64748B] -rotate-90" />
                 </button>
                 <button
-                  onClick={onNavigateToChat}
-                  className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-[#F1F5F9] hover:bg-white/5 rounded-xl transition"
+                  onClick={handleOpenSectionChat}
+                  disabled={!section || openingChat}
+                  className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-[#F1F5F9] hover:bg-white/5 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                 >
                   <span className="flex items-center gap-2">
                     <ChatBubbleLeftIcon className="h-4 w-4 text-[#00C8FF]" />
-                    Section Chat
+                    {openingChat ? 'Opening Section Chat...' : 'Section Chat'}
                   </span>
                   <ChevronDownIcon className="h-3.5 w-3.5 text-[#64748B] -rotate-90" />
                 </button>
@@ -662,16 +776,6 @@ export default function SectionDashboard({ onNavigateToAnnouncements, onNavigate
             </div>
           </div>
         </div>
-      )}
-
-      {selectedProfessorAssignments && section && (
-        <ProfessorDetailPanel
-          assignments={selectedProfessorAssignments}
-          sectionName={section.name}
-          onClose={() => setSelectedProfessorId(null)}
-          isMessaging={messagingUserId === selectedProfessorId}
-          onMessage={() => selectedProfessorId && handleMessage(selectedProfessorId)}
-        />
       )}
 
       {showAddStudent && section && (

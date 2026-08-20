@@ -1,4 +1,5 @@
 # backend/app/api/v1/endpoints/sections.py
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
@@ -6,6 +7,7 @@ from app.dependencies.auth import get_current_user
 from app.models.user import User
 from app.services.section_service import SectionService
 from app.services.teaching_assignment_service import TeachingAssignmentService
+from app.services.section_conversation_service import SectionConversationService
 from app.schemas.section import (
     SectionCreate, SectionUpdate, SectionResponse,
     SectionMemberCreate, SectionMemberUpdate, SectionMemberResponse,
@@ -14,6 +16,7 @@ from app.schemas.section import (
 from typing import List, Optional
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # ============================================
 # SECTION ENDPOINTS
@@ -206,3 +209,32 @@ async def get_section_teaching_assignments(
     """List all professors teaching a section, via their teaching assignments"""
     service = TeachingAssignmentService(db)
     return await service.list_for_section(section_id)
+
+# ============================================
+# SECTION GROUP CHAT
+# ============================================
+
+@router.get("/{section_id}/conversation")
+async def get_section_conversation(
+    section_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get (or lazily create) the section's dedicated group conversation -
+    reuses the existing Chat Conversation/ConversationMember tables. Gated by
+    the same view-access check as GET /sections/{id} (admin, one of the
+    section's professors, or any of its members)."""
+    section_service = SectionService(db)
+    await section_service.get_section(section_id, str(current_user.id))  # permission check (404/403)
+
+    conversation_service = SectionConversationService(db)
+    try:
+        return await conversation_service.get_or_create(section_id, ensure_user_id=str(current_user.id))
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception(f"Failed to get/create conversation for section {section_id}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Couldn't open this section's group chat. Please try again.",
+        )

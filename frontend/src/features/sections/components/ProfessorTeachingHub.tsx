@@ -8,10 +8,12 @@ import {
   XCircleIcon,
   UserGroupIcon,
   Cog6ToothIcon,
+  TrashIcon,
 } from '@heroicons/react/24/outline';
 import { useSections } from '../hooks/useSections';
 import { useTeachingAssignments } from '../hooks/useTeachingAssignments';
 import { Avatar } from '@/features/dashboard/components/Avatar';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Section, SectionMember, TeachingAssignment } from '@/types/section.types';
 import JoinSectionModal from './JoinSectionModal';
 import AddSubjectModal from './AddSubjectModal';
@@ -55,7 +57,7 @@ function memberFullName(member: SectionMember): string {
  * joining/creating sections are the only section-level actions here.
  */
 export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeachingHubProps) {
-  const { sections, isLoading: sectionsLoading } = useSections();
+  const { sections, isLoading: sectionsLoading, deleteSection } = useSections();
   const { mine, isLoading: assignmentsLoading } = useTeachingAssignments();
 
   const [showJoin, setShowJoin] = useState(false);
@@ -63,6 +65,8 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
   const [addSubjectFor, setAddSubjectFor] = useState<SectionGroup | null>(null);
   const [editTarget, setEditTarget] = useState<TeachingAssignment | null>(null);
   const [selectedStudent, setSelectedStudent] = useState<StudentRecordTarget | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<SectionGroup | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
@@ -114,6 +118,17 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
       );
     });
   }, [searchPool, search]);
+
+  const handleDeleteSection = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      await deleteSection(deleteTarget.sectionId);
+      setDeleteTarget(null);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const openStudentRecord = (member: SectionMember, section: Section) => {
     setSelectedStudent({
@@ -167,13 +182,22 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
                     <h3 className="text-base font-semibold text-[#F1F5F9]">{group.sectionName}</h3>
                     {group.yearLevel && <p className="text-xs text-[#64748B] mt-0.5">Year {group.yearLevel}</p>}
                   </div>
-                  <button
-                    onClick={() => onManageSection(group.sectionId)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold border border-[#00C8FF]/30 bg-[#00C8FF]/10 text-[#00C8FF] rounded-xl hover:bg-[#00C8FF]/20 transition flex-shrink-0"
-                  >
-                    <Cog6ToothIcon className="h-3.5 w-3.5" />
-                    Manage
-                  </button>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <button
+                      onClick={() => onManageSection(group.sectionId)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold border border-[#00C8FF]/30 bg-[#00C8FF]/10 text-[#00C8FF] rounded-xl hover:bg-[#00C8FF]/20 transition"
+                    >
+                      <Cog6ToothIcon className="h-3.5 w-3.5" />
+                      Manage
+                    </button>
+                    <button
+                      onClick={() => setDeleteTarget(group)}
+                      title="Delete Section"
+                      className="p-2 text-[#64748B] hover:text-[#EF4444] hover:bg-[#EF4444]/10 rounded-xl transition"
+                    >
+                      <TrashIcon className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -307,6 +331,25 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
       )}
       {editTarget && <EditTeachingAssignmentModal assignment={editTarget} onClose={() => setEditTarget(null)} />}
       {selectedStudent && <StudentRecordModal student={selectedStudent} onClose={() => setSelectedStudent(null)} />}
+
+      {deleteTarget && (
+        <ConfirmDialog
+          title="Delete Section"
+          message={
+            <>
+              Permanently delete <span className="font-semibold text-[#F1F5F9]">{deleteTarget.sectionName}</span>?
+              This removes the section for <span className="font-semibold text-[#F1F5F9]">everyone</span> -
+              all students, the Mayor and Officer, every professor's teaching assignments in it, and its
+              group chat. This cannot be undone.
+            </>
+          }
+          confirmLabel="Delete Section"
+          danger
+          isLoading={isDeleting}
+          onConfirm={handleDeleteSection}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      )}
     </div>
   );
 }

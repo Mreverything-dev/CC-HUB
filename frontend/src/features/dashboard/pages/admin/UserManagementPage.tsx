@@ -1,6 +1,5 @@
 // frontend/src/features/dashboard/pages/admin/UserManagementPage.tsx
 import { useEffect, useState } from 'react';
-import toast from 'react-hot-toast';
 import {
   MagnifyingGlassIcon,
   FunnelIcon,
@@ -8,6 +7,7 @@ import {
   ArrowPathIcon,
   UsersIcon,
   CheckIcon,
+  KeyIcon,
 } from '@heroicons/react/24/outline';
 import { Avatar } from '@/features/dashboard/components/Avatar';
 import { RoleBadge } from '@/features/dashboard/components/RoleBadge';
@@ -17,6 +17,9 @@ import { AdminUserListItem, AdminUserOnlineFilter, AdminUserRole } from '@/servi
 import { useAdminUsers, useDebouncedValue } from '../../hooks/useAdminUsers';
 import { UserActionsMenu } from '../../components/admin/users/UserActionsMenu';
 import { Pagination } from '../../components/admin/users/Pagination';
+import AddUserModal from '../../components/admin/users/AddUserModal';
+import GenerateProfessorCodeModal from '../../components/admin/users/GenerateProfessorCodeModal';
+import { ProfessorCodesPanel } from '../../components/admin/users/ProfessorCodesPanel';
 
 type TabId = 'all' | 'students' | 'professors' | 'admins' | 'suspended';
 
@@ -64,6 +67,8 @@ export default function UserManagementPage() {
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [onlineFilter, setOnlineFilter] = useState<AdminUserOnlineFilter | undefined>(undefined);
   const [confirmTarget, setConfirmTarget] = useState<AdminUserListItem | null>(null);
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [showGenerateCodeModal, setShowGenerateCodeModal] = useState(false);
 
   const role: AdminUserRole | undefined =
     activeTab === 'students' ? 'student' : activeTab === 'professors' ? 'professor' : activeTab === 'admins' ? 'admin' : undefined;
@@ -190,7 +195,15 @@ export default function UserManagementPage() {
             )}
           </div>
           <button
-            onClick={() => toast('Adding users from the admin panel is coming soon')}
+            onClick={() => setShowGenerateCodeModal(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border border-[#1E3447] bg-[rgba(10,20,30,0.75)] text-sm font-medium text-[#94A3B8] hover:text-[#00C8FF] hover:border-[#00C8FF]/30 transition"
+          >
+            <KeyIcon className="h-4 w-4" />
+            <span className="hidden md:inline">Generate Professor Code</span>
+            <span className="md:hidden">Code</span>
+          </button>
+          <button
+            onClick={() => setShowAddUserModal(true)}
             className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-br from-[#00C8FF] to-[#3B82F6] text-[#060B12] text-sm font-semibold hover:opacity-90 transition"
           >
             <PlusIcon className="h-4 w-4" />
@@ -198,6 +211,8 @@ export default function UserManagementPage() {
           </button>
         </div>
       </div>
+
+      <ProfessorCodesPanel />
 
       {/* Table / cards */}
       {isLoading ? (
@@ -306,6 +321,9 @@ export default function UserManagementPage() {
           onCancel={() => setConfirmTarget(null)}
         />
       )}
+
+      {showAddUserModal && <AddUserModal onClose={() => setShowAddUserModal(false)} />}
+      {showGenerateCodeModal && <GenerateProfessorCodeModal onClose={() => setShowGenerateCodeModal(false)} />}
     </div>
   );
 }

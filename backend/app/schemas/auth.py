@@ -52,6 +52,14 @@ class UserResponse(BaseModel):
     def serialize_created_at(self, value: datetime) -> str:
         return value.isoformat()
 
+class UserSearchResult(UserResponse):
+    """UserResponse plus display info from the user's role-specific profile
+    (first/last name, avatar) - kept separate from UserResponse itself so
+    auth flows (login/register) are completely unaffected."""
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    avatar_url: Optional[str] = None
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str

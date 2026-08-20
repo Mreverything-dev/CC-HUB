@@ -1,40 +1,42 @@
 // frontend/src/features/announcements/components/AnnouncementFeed.tsx
-import { useMemo, useState } from 'react';
-import { useAnnouncements } from '../hooks/useAnnouncements';
-import { AnnouncementCard } from './AnnouncementCard';
-import { CreateAnnouncement } from './CreateAnnouncement';
-import { AnnouncementFilterBar } from './AnnouncementFilterBar';
-import { AnnouncementCategory, matchesAnnouncementFilters } from '../constants';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/features/auth/store/auth.store';
-import { PlusIcon } from '@heroicons/react/24/outline';
+import { Sidebar, SidebarSection } from '@/features/dashboard/components/Sidebar';
+import { Topbar } from '@/features/dashboard/components/Topbar';
+import { profileService } from '@/services/api/profile.service';
+import AnnouncementFeedBody from './AnnouncementFeedBody';
 
+/**
+ * Standalone /announcements route. Wraps the shared AnnouncementFeedBody
+ * with the same Sidebar/Topbar shell every dashboard uses, so this page
+ * feels like a natural part of CCS HUB rather than a separate mini-app.
+ * Clicking any OTHER sidebar item hands off to that role's dashboard with
+ * the target tab pre-selected - the same navigate(path, { state: { section } })
+ * pattern ProfilePage already uses to deep-link back into a dashboard tab.
+ */
 export default function AnnouncementFeed() {
-  const { announcements, isLoading, deleteAnnouncement, togglePublish } = useAnnouncements();
   const { user } = useAuthStore();
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [search, setSearch] = useState('');
-  const [category, setCategory] = useState<'all' | AnnouncementCategory>('all');
+  const navigate = useNavigate();
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
-  const canCreate = user?.role === 'professor' || user?.role === 'admin';
+  useEffect(() => {
+    profileService
+      .getMyProfile()
+      .then((res) => setAvatarUrl((res.data.profile as any)?.avatar_url || null))
+      .catch(() => setAvatarUrl(null));
+  }, []);
 
-  // ✅ Ensure announcements is an array
-  const announcementList = Array.isArray(announcements) ? announcements : [];
+  const dashboardPath =
+    user?.role === 'admin' ? '/admin/dashboard' : user?.role === 'professor' ? '/professor/dashboard' : '/student/dashboard';
 
-  const filteredAnnouncements = useMemo(
-    () => announcementList.filter((a) => matchesAnnouncementFilters(a, search, category)),
-    [announcementList, search, category]
-  );
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#060B12] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00C8FF]"></div>
-      </div>
-    );
-  }
+  const handleNavigate = (section: SidebarSection) => {
+    if (section === 'announcements') return;
+    navigate(dashboardPath, { state: { section } });
+  };
 
   return (
-    <div className="min-h-screen bg-[#060B12] text-[#F1F5F9]">
+    <div className="min-h-screen bg-[#07111A] text-[#F1F5F9] flex">
       {/* Subtle grid background */}
       <div
         className="pointer-events-none fixed inset-0 opacity-[0.15]"
@@ -45,65 +47,15 @@ export default function AnnouncementFeed() {
         }}
       />
 
-      <div className="relative max-w-4xl mx-auto p-4 py-8">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-[#F1F5F9]">Announcements</h2>
-          {canCreate && (
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-gradient-to-br from-[#00C8FF] to-[#0090CC] text-[#060B12] rounded-xl hover:opacity-90 transition"
-            >
-              <PlusIcon className="h-4 w-4" />
-              Create Announcement
-            </button>
-          )}
-        </div>
+      <Sidebar activeSection="announcements" onNavigate={handleNavigate} />
 
-        <div className="mb-6">
-          <AnnouncementFilterBar
-            search={search}
-            onSearchChange={setSearch}
-            category={category}
-            onCategoryChange={setCategory}
-          />
-        </div>
+      <div className="flex-1 min-w-0 flex flex-col">
+        <Topbar avatarUrl={avatarUrl} onOpenFriends={() => handleNavigate('friends')} />
 
-        {/* Announcements List */}
-        {filteredAnnouncements.length === 0 ? (
-          <div className="text-center py-12 rounded-2xl border border-[#1E3447] bg-[#0D1722]/60 backdrop-blur-xl">
-            <p className="text-[#94A3B8]">
-              {announcementList.length === 0 ? 'No announcements yet' : 'No announcements match your filters'}
-            </p>
-            {canCreate && announcementList.length === 0 && (
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="mt-4 text-sm text-[#00C8FF] hover:underline font-medium"
-              >
-                Create the first announcement
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {filteredAnnouncements.map((announcement) => (
-              <AnnouncementCard
-                key={announcement.id}
-                announcement={announcement}
-                onDelete={() => deleteAnnouncement(announcement.id)}
-                onTogglePublish={(id, isPublished) =>
-                  togglePublish({ id, isPublished })
-                }
-              />
-            ))}
-          </div>
-        )}
+        <main className="relative flex-1 max-w-7xl w-full mx-auto px-4 py-6 sm:px-6 lg:px-8">
+          <AnnouncementFeedBody />
+        </main>
       </div>
-
-      {/* Create Modal */}
-      {showCreateModal && (
-        <CreateAnnouncement onClose={() => setShowCreateModal(false)} />
-      )}
     </div>
   );
 }

@@ -22,19 +22,19 @@ export function AnnouncementFilterBar({
   return (
     <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
       <div className="relative w-full sm:w-56">
-        <MagnifyingGlassIcon className="h-4 w-4 text-[#6b6b6b] absolute left-3 top-1/2 -translate-y-1/2" />
+        <MagnifyingGlassIcon className="h-4 w-4 text-[#64748B] absolute left-3 top-1/2 -translate-y-1/2" />
         <input
           type="text"
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search announcements..."
-          className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-[#2a2a2a] bg-[#0f0f0f] text-sm text-white placeholder-[#6b6b6b] focus:ring-1 focus:ring-[#00d4ff] focus:border-[#00d4ff] focus:outline-none transition"
+          className="w-full pl-9 pr-3 py-2 rounded-xl border border-[#1E3447] bg-[#0A111A] text-sm text-[#F1F5F9] placeholder-[#64748B] focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] focus:outline-none transition"
         />
       </div>
       <select
         value={category}
         onChange={(e) => onCategoryChange(e.target.value as 'all' | AnnouncementCategory)}
-        className="px-3 py-1.5 rounded-xl border border-[#2a2a2a] bg-[#0f0f0f] text-sm text-white focus:ring-1 focus:ring-[#00d4ff] focus:border-[#00d4ff] focus:outline-none transition sm:w-40"
+        className="px-3 py-2 rounded-xl border border-[#1E3447] bg-[#0A111A] text-sm text-[#F1F5F9] focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] focus:outline-none transition sm:w-40"
       >
         {CATEGORY_FILTER_OPTIONS.map((opt) => (
           <option key={opt.value} value={opt.value}>

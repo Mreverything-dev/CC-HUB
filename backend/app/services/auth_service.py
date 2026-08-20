@@ -1,6 +1,6 @@
 ﻿# backend/app/services/auth_service.py
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from app.models.user import User, Role
 from app.models.invitation_code import InvitationCode
 from app.models.profile import StudentProfile, ProfessorProfile, AdminProfile
@@ -9,12 +9,31 @@ from app.core.security import verify_password, get_password_hash, create_access_
 from app.services.email_service import email_service
 from app.services.redis_service import redis_service
 from fastapi import HTTPException, status
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 import secrets
 import string
 
 logger = logging.getLogger(__name__)
+
+
+def _utc_now() -> datetime:
+    """Timezone-aware "now", used everywhere an invitation code's
+    expires_at (read back via UTCDateTime, always tz-aware) is compared -
+    a naive datetime.utcnow() on one side of that comparison is exactly
+    what raises "can't compare offset-naive and offset-aware datetimes"."""
+    return datetime.now(timezone.utc)
+
+
+def _ensure_utc(value: datetime) -> datetime:
+    """Normalize a datetime to timezone-aware UTC without blindly
+    stripping an existing offset: a naive value is assumed to already mean
+    UTC (matching every write path in this file), an aware value is
+    converted to UTC rather than re-labeled."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
 
 class AuthService:
     def __init__(self, db: AsyncSession):
@@ -53,33 +72,50 @@ class AuthService:
 
             # --- INVITATION CODE VALIDATION (Professor/Admin only) ---
             if request.role in ["professor", "admin"]:
+                noun = "professor registration code" if request.role == "professor" else "registration code"
+
                 if not request.invitation_code:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail=f"Invitation code required for {request.role} registration"
                     )
-                
-                code_result = await self.db.execute(
-                    select(InvitationCode).where(
+
+                # Pre-check purely for a specific, helpful error message. It
+                # never itself grants access - the atomic DELETE below is the
+                # real, race-safe gate (two simultaneous registrations with
+                # the same code must never both succeed).
+                precheck_result = await self.db.execute(
+                    select(InvitationCode).where(InvitationCode.code == request.invitation_code)
+                )
+                precheck = precheck_result.scalar_one_or_none()
+
+                if not precheck or precheck.role != request.role:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid {noun}.")
+                if precheck.is_used:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"This {noun} has already been used.")
+                if _ensure_utc(precheck.expires_at) <= _utc_now():
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"This {noun} has expired.")
+
+                # Atomically consume the code: only one concurrent request can
+                # delete this row. The full validity conditions are repeated
+                # here (not just the code) so a request that raced past the
+                # pre-check above still can't consume an already-used/expired
+                # row. If we deleted 0 rows despite the pre-check looking
+                # valid, someone else won the race in the meantime.
+                consume_result = await self.db.execute(
+                    delete(InvitationCode).where(
                         InvitationCode.code == request.invitation_code,
                         InvitationCode.role == request.role,
                         InvitationCode.is_used == False,
-                        InvitationCode.expires_at > datetime.utcnow()
+                        InvitationCode.expires_at > _utc_now(),
                     )
                 )
-                invitation = code_result.scalar_one_or_none()
-                
-                if not invitation:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="Invalid or expired invitation code"
-                    )
-                
-                logger.info(f"✅ Valid invitation code found for {request.role}")
-                
-                # Mark invitation code as used
-                invitation.is_used = True
+                if consume_result.rowcount == 0:
+                    await self.db.rollback()
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"This {noun} has already been used.")
+
                 await self.db.commit()
+                logger.info(f"✅ Invitation code consumed for {request.role} registration")
             else:
                 logger.info("✅ Student registration - no invitation code required")
 
@@ -146,11 +182,6 @@ class AuthService:
                 ))
             await self.db.commit()
             logger.info(f"✅ Profile row created for user: {user.id}")
-
-            # --- Update invitation code with the user who used it ---
-            if request.role in ["professor", "admin"] and invitation:
-                invitation.used_by = user.id
-                await self.db.commit()
 
             # --- ✅ Send verification email (Non-blocking) ---
             try:
@@ -462,40 +493,46 @@ class AuthService:
     # ============================================
     # CREATE INVITATION CODE (Admin only)
     # ============================================
-    async def create_invitation_code(self, admin_id: str, role: str, expires_in_days: int = 7) -> dict:
-        """Create an invitation code for professor or admin (Admin only)"""
+    async def create_invitation_code(
+        self, admin_id: str, role: str, expires_in_hours: int = 168, code_prefix: str = ""
+    ) -> dict:
+        """Create a single-use invitation code for professor or admin
+        registration (Admin only). Uses `secrets` (cryptographically secure),
+        never a predictable generator. expires_in_hours defaults to 168 (7
+        days) to match the previous default duration."""
         if role not in ["professor", "admin"]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Role must be 'professor' or 'admin'"
             )
-        
-        # Generate unique code
-        code = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(8))
-        
-        # Check if code already exists
+
+        def _generate() -> str:
+            return code_prefix + ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(8))
+
+        # Generate a unique code (collisions are astronomically unlikely at
+        # 8 random alphanumeric characters, but check anyway).
+        code = _generate()
         result = await self.db.execute(
             select(InvitationCode).where(InvitationCode.code == code)
         )
         while result.scalar_one_or_none():
-            code = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(8))
+            code = _generate()
             result = await self.db.execute(
                 select(InvitationCode).where(InvitationCode.code == code)
             )
-        
-        # Create invitation
+
         invitation = InvitationCode(
             code=code,
             role=role,
             created_by=admin_id,
-            expires_at=datetime.utcnow() + timedelta(days=expires_in_days)
+            expires_at=_utc_now() + timedelta(hours=expires_in_hours)
         )
         self.db.add(invitation)
         await self.db.commit()
         await self.db.refresh(invitation)
-        
+
         logger.info(f"✅ Invitation code created: {code} for role: {role}")
-        
+
         return {
             "code": invitation.code,
             "role": invitation.role,
@@ -506,11 +543,22 @@ class AuthService:
     # ============================================
     # GET ALL INVITATION CODES (Admin only)
     # ============================================
-    async def get_invitation_codes(self, admin_id: str) -> list:
-        """Get all invitation codes (Admin only)"""
-        result = await self.db.execute(
-            select(InvitationCode).order_by(InvitationCode.created_at.desc())
+    async def get_invitation_codes(self, admin_id: str, role: str = None) -> list:
+        """Get active (unused, unexpired) invitation codes, optionally
+        scoped to one role (Admin only). Opportunistically deletes any
+        already-expired rows on every call - a simple, self-contained
+        cleanup that needs no separate background job/Redis infrastructure,
+        since this list is the only place expired codes would otherwise
+        linger and be visible."""
+        await self.db.execute(
+            delete(InvitationCode).where(InvitationCode.expires_at <= _utc_now())
         )
+        await self.db.commit()
+
+        query = select(InvitationCode).where(InvitationCode.is_used == False).order_by(InvitationCode.created_at.desc())
+        if role:
+            query = query.where(InvitationCode.role == role)
+        result = await self.db.execute(query)
         return result.scalars().all()
 
     # ============================================
