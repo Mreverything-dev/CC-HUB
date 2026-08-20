@@ -7,6 +7,7 @@ from app.models.livestream import Livestream, StreamViewer, StreamStatus, Stream
 from app.models.user import User
 from app.models.friend import Friend
 from app.models.section import Section, SectionMember
+from app.models.teaching_assignment import TeachingAssignment
 from app.schemas.livestream import LivestreamCreate, LivestreamUpdate
 from fastapi import HTTPException, status
 from typing import List, Optional
@@ -41,12 +42,22 @@ class LivestreamService:
                     detail="Section IDs required for section visibility"
                 )
             
-            # Verify professor owns the sections
+            # Verify professor is the advisor OR has an active teaching
+            # assignment (co-professor) on the section
             for section_id in data.target_section_ids:
                 result = await self.db.execute(
                     select(Section).where(
                         Section.id == section_id,
-                        Section.advisor_id == user_id
+                        or_(
+                            Section.advisor_id == user_id,
+                            Section.id.in_(
+                                select(TeachingAssignment.section_id).where(
+                                    TeachingAssignment.section_id == section_id,
+                                    TeachingAssignment.professor_id == user_id,
+                                    TeachingAssignment.status == "active",
+                                )
+                            ),
+                        ),
                     )
                 )
                 if not result.scalar_one_or_none():

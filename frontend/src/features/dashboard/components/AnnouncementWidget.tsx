@@ -20,7 +20,7 @@ export function AnnouncementWidget({ announcements, isLoading, onViewAll }: Anno
   const latest = announcements.slice(0, 4);
 
   return (
-    <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-4 transition hover:border-[#00C8FF]/30">
+    <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-4 sm:p-5 transition hover:border-[#00C8FF]/30">
       <div className="flex items-center justify-between mb-3">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-[#F1F5F9]">
           <MegaphoneIcon className="h-4 w-4 text-[#00C8FF]" />

@@ -1,7 +1,8 @@
 # backend/app/services/section_service.py
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func, or_, exists
 from app.models.section import Section, SectionMember
+from app.models.teaching_assignment import TeachingAssignment
 from app.models.user import User
 from app.models.profile import StudentProfile, ProfessorProfile, AdminProfile
 from app.schemas.section import SectionCreate, SectionUpdate
@@ -33,6 +34,49 @@ class SectionService:
         )
         return result.scalar_one_or_none()
 
+    async def _get_profile_names(self, user_id: str, role: str) -> tuple[Optional[str], Optional[str]]:
+        """First/last name from a user's role-specific profile, for search/display
+        (e.g. a professor searching students by full name) - mirrors _get_avatar_url's
+        per-role profile lookup pattern, kept separate so existing avatar callers
+        are untouched."""
+        model = {
+            "student": StudentProfile,
+            "professor": ProfessorProfile,
+            "admin": AdminProfile,
+        }.get(role)
+        if not model:
+            return None, None
+        result = await self.db.execute(
+            select(model.first_name, model.last_name).where(model.user_id == user_id)
+        )
+        row = result.first()
+        return (row[0], row[1]) if row else (None, None)
+
+    async def _check_section_view_access(self, section: Section, user_id: str) -> bool:
+        """Whether user_id may view this section's details/members at all -
+        admin, one of its professors (advisor or active teaching assignment),
+        or any of its members (student/mayor/officer). Used to stop a user
+        from reading another section's roster by guessing its ID; every
+        legitimate caller already only ever requests a section already in
+        their own scoped `get_sections` list, so this is pure hardening."""
+        user_result = await self.db.execute(select(User).where(User.id == user_id))
+        user = user_result.scalar_one_or_none()
+        if user and user.role == "admin":
+            return True
+
+        section_id = str(section.id)
+        if str(section.advisor_id) == user_id:
+            return True
+        if await self._is_active_teaching_professor(section_id, user_id):
+            return True
+        if await self._get_member(section_id, user_id):
+            return True
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to view this section"
+        )
+
     async def _get_section(self, section_id: str) -> Section:
         """Get a section by ID"""
         result = await self.db.execute(
@@ -45,6 +89,55 @@ class SectionService:
                 detail="Section not found"
             )
         return section
+
+    async def _is_active_teaching_professor(self, section_id: str, user_id: str) -> bool:
+        """Whether user_id has an active TeachingAssignment on this section -
+        the co-professor equivalent of "is the advisor", used everywhere the
+        advisor_id check is widened to support many professors per section.
+        A professor can have several active assignments here (multiple
+        subjects in the same section), so this is a pure existence check -
+        scalar_one_or_none() would raise MultipleResultsFound as soon as a
+        professor had a second subject in the section."""
+        result = await self.db.execute(
+            select(
+                exists().where(
+                    TeachingAssignment.section_id == section_id,
+                    TeachingAssignment.professor_id == user_id,
+                    TeachingAssignment.status == "active",
+                )
+            )
+        )
+        return bool(result.scalar())
+
+    async def _get_teaching_assignments_for_section(self, section_id: str) -> List[dict]:
+        """Enriched teaching-assignment list for a section's response dict,
+        mirroring how member responses embed user_email/user_username/user_avatar
+        to avoid the frontend needing a separate profile fetch per professor."""
+        result = await self.db.execute(
+            select(TeachingAssignment, User, ProfessorProfile)
+            .join(User, TeachingAssignment.professor_id == User.id)
+            .outerjoin(ProfessorProfile, ProfessorProfile.user_id == User.id)
+            .where(TeachingAssignment.section_id == section_id)
+        )
+        assignments = []
+        for ta, user_obj, profile in result:
+            assignments.append({
+                "id": str(ta.id),
+                "section_id": str(ta.section_id),
+                "professor_id": str(ta.professor_id),
+                "subject": ta.subject,
+                "schedule_days": ta.schedule_days or [],
+                "schedule_start": ta.schedule_start,
+                "schedule_end": ta.schedule_end,
+                "status": ta.status,
+                "created_at": ta.created_at,
+                "updated_at": ta.updated_at,
+                "professor_username": user_obj.username,
+                "professor_first_name": profile.first_name if profile else None,
+                "professor_last_name": profile.last_name if profile else None,
+                "professor_avatar": profile.avatar_url if profile else None,
+            })
+        return assignments
 
     async def _get_member(self, section_id: str, user_id: str) -> Optional[SectionMember]:
         """Get a member by section and user ID"""
@@ -81,7 +174,12 @@ class SectionService:
         if str(section.advisor_id) == user_id:
             logger.info(f"✅ Advisor {user_id} has permission")
             return True
-        
+
+        # ✅ Allow a co-professor with an active teaching assignment
+        if await self._is_active_teaching_professor(section_id, user_id):
+            logger.info(f"✅ Teaching-assignment professor {user_id} has permission")
+            return True
+
         # ✅ Allow mayor or officer
         member = await self._get_member(section_id, user_id)
         if member and (member.is_mayor or member.is_officer):
@@ -95,11 +193,12 @@ class SectionService:
         )
 
     async def _check_promotion_permission(self, section_id: str, user_id: str):
-        """Stricter check for promoting/demoting Mayor or Officer - only the
-        section's advisor (professor) or an admin may do this. Unlike
-        _check_section_permission, a Mayor/Officer is NOT allowed here: they
-        can manage day-to-day section membership, but must not be able to
-        appoint/remove each other, which would let them bypass the advisor."""
+        """Stricter check for promoting/demoting Mayor or Officer - only one
+        of the section's professors (advisor, or an active teaching
+        assignment) or an admin may do this. Unlike _check_section_permission,
+        a Mayor/Officer is NOT allowed here: they can manage day-to-day
+        section membership, but must not be able to appoint/remove each
+        other, which would let them bypass the professors."""
         section = await self._get_section(section_id)
 
         user_result = await self.db.execute(select(User).where(User.id == user_id))
@@ -110,9 +209,12 @@ class SectionService:
         if user.role == "admin" or str(section.advisor_id) == user_id:
             return True
 
+        if await self._is_active_teaching_professor(section_id, user_id):
+            return True
+
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the section's professor or an admin can promote or demote members"
+            detail="Only one of the section's professors or an admin can promote or demote members"
         )
 
     # ============================================
@@ -120,7 +222,9 @@ class SectionService:
     # ============================================
     
     async def create_section(self, data: SectionCreate, user_id: str):
-        """Create a new section"""
+        """Create a new section. If subject/schedule are provided, also
+        creates the creating professor's initial TeachingAssignment - purely
+        additive, omitting them behaves exactly as before."""
         section = Section(
             name=data.name,
             course=data.course,
@@ -130,9 +234,30 @@ class SectionService:
             advisor_id=user_id
         )
         self.db.add(section)
+        await self.db.flush()
+
+        assignments = []
+        if data.subject and data.schedule_start is not None and data.schedule_end is not None:
+            from app.services.teaching_assignment_service import TeachingAssignmentService
+            ta_service = TeachingAssignmentService(self.db)
+            await ta_service._check_schedule_conflict(
+                user_id, data.schedule_days or [], data.schedule_start, data.schedule_end
+            )
+            assignment = TeachingAssignment(
+                professor_id=user_id,
+                section_id=section.id,
+                subject=data.subject,
+                schedule_days=data.schedule_days or [],
+                schedule_start=data.schedule_start,
+                schedule_end=data.schedule_end,
+                status="active",
+            )
+            self.db.add(assignment)
+
         await self.db.commit()
         await self.db.refresh(section)
-        
+        assignments = await self._get_teaching_assignments_for_section(str(section.id))
+
         return {
             "id": str(section.id),
             "name": section.name,
@@ -143,7 +268,8 @@ class SectionService:
             "description": section.description,
             "created_at": section.created_at,
             "updated_at": section.updated_at,
-            "member_count": 0
+            "member_count": 0,
+            "teaching_assignments": assignments,
         }
 
     async def get_sections(self, user_id: str, skip: int = 0, limit: int = 100):
@@ -165,7 +291,8 @@ class SectionService:
             )
             sections = result.scalars().all()
         else:
-            # Get sections where user is advisor or member
+            # Get sections where user is advisor, a member, or has an active
+            # teaching assignment (co-professor)
             result = await self.db.execute(
                 select(Section)
                 .where(
@@ -174,6 +301,12 @@ class SectionService:
                         Section.id.in_(
                             select(SectionMember.section_id).where(
                                 SectionMember.user_id == user_id
+                            )
+                        ),
+                        Section.id.in_(
+                            select(TeachingAssignment.section_id).where(
+                                TeachingAssignment.professor_id == user_id,
+                                TeachingAssignment.status == "active",
                             )
                         )
                     )
@@ -198,6 +331,7 @@ class SectionService:
             
             members = []
             for member, user_obj in members_result:
+                first_name, last_name = await self._get_profile_names(str(user_obj.id), user_obj.role)
                 members.append({
                     "id": str(member.id),
                     "section_id": str(member.section_id),
@@ -208,7 +342,9 @@ class SectionService:
                     "joined_at": member.joined_at,
                     "user_email": user_obj.email,
                     "user_username": user_obj.username,
-                    "user_avatar": await self._get_avatar_url(str(user_obj.id), user_obj.role)
+                    "user_avatar": await self._get_avatar_url(str(user_obj.id), user_obj.role),
+                    "user_first_name": first_name,
+                    "user_last_name": last_name,
                 })
 
             response.append({
@@ -222,24 +358,68 @@ class SectionService:
                 "created_at": section.created_at,
                 "updated_at": section.updated_at,
                 "member_count": member_count or 0,
-                "members": members
+                "members": members,
+                "teaching_assignments": await self._get_teaching_assignments_for_section(str(section.id)),
             })
-        
+
         return response
+
+    async def browse_sections(
+        self, user_id: str, year_level: Optional[int] = None, name: Optional[str] = None
+    ):
+        """Platform-wide, lightweight section listing for the "Join Existing
+        Section" flow - unlike get_sections, this is NOT scoped to the
+        requester's own sections, since the whole point is discovering
+        sections they're not yet part of."""
+        query = select(Section)
+        if year_level is not None:
+            query = query.where(Section.year_level == year_level)
+        if name:
+            query = query.where(func.lower(Section.name).contains(name.lower()))
+
+        result = await self.db.execute(query.order_by(Section.name))
+        sections = result.scalars().all()
+
+        items = []
+        for section in sections:
+            member_count_result = await self.db.execute(
+                select(func.count()).where(SectionMember.section_id == section.id)
+            )
+            professor_count_result = await self.db.execute(
+                select(func.count(func.distinct(TeachingAssignment.professor_id))).where(
+                    TeachingAssignment.section_id == section.id,
+                    TeachingAssignment.status == "active",
+                )
+            )
+            already_teaching = await self._is_active_teaching_professor(str(section.id), user_id)
+
+            items.append({
+                "id": str(section.id),
+                "name": section.name,
+                "course": section.course,
+                "year_level": section.year_level,
+                "academic_year": section.academic_year,
+                "member_count": member_count_result.scalar() or 0,
+                "professor_count": professor_count_result.scalar() or 0,
+                "already_teaching": already_teaching,
+            })
+        return items
 
     async def get_section(self, section_id: str, user_id: str):
         """Get a section by ID with member details"""
         section = await self._get_section(section_id)
-        
+        await self._check_section_view_access(section, user_id)
+
         # Get members with user details
         members_result = await self.db.execute(
             select(SectionMember, User)
             .join(User, SectionMember.user_id == User.id)
             .where(SectionMember.section_id == section_id)
         )
-        
+
         members = []
         for member, user_obj in members_result:
+            first_name, last_name = await self._get_profile_names(str(user_obj.id), user_obj.role)
             members.append({
                 "id": str(member.id),
                 "section_id": str(member.section_id),
@@ -250,7 +430,9 @@ class SectionService:
                 "joined_at": member.joined_at,
                 "user_email": user_obj.email,
                 "user_username": user_obj.username,
-                "user_avatar": await self._get_avatar_url(str(user_obj.id), user_obj.role)
+                "user_avatar": await self._get_avatar_url(str(user_obj.id), user_obj.role),
+                "user_first_name": first_name,
+                "user_last_name": last_name,
             })
 
         return {
@@ -264,19 +446,24 @@ class SectionService:
             "created_at": section.created_at,
             "updated_at": section.updated_at,
             "member_count": len(members),
-            "members": members
+            "members": members,
+            "teaching_assignments": await self._get_teaching_assignments_for_section(section_id),
         }
 
     async def update_section(self, section_id: str, data: SectionUpdate, user_id: str):
         """Update a section"""
         section = await self._get_section(section_id)
-        
+
         user = await self.db.execute(
             select(User).where(User.id == user_id)
         )
         user = user.scalar_one_or_none()
-        
-        if str(section.advisor_id) != user_id and user.role != "admin":
+
+        is_professor = (
+            str(section.advisor_id) == user_id
+            or await self._is_active_teaching_professor(section_id, user_id)
+        )
+        if not is_professor and user.role != "admin":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to update this section"
@@ -304,13 +491,17 @@ class SectionService:
     async def delete_section(self, section_id: str, user_id: str):
         """Delete a section"""
         section = await self._get_section(section_id)
-        
+
         user = await self.db.execute(
             select(User).where(User.id == user_id)
         )
         user = user.scalar_one_or_none()
-        
-        if str(section.advisor_id) != user_id and user.role != "admin":
+
+        is_professor = (
+            str(section.advisor_id) == user_id
+            or await self._is_active_teaching_professor(section_id, user_id)
+        )
+        if not is_professor and user.role != "admin":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to delete this section"
@@ -370,7 +561,8 @@ class SectionService:
         await self.db.commit()
         await self.db.refresh(member)
         logger.info(f"✅ Member added with ID: {member.id}")
-        
+
+        first_name, last_name = await self._get_profile_names(str(user.id), user.role)
         return {
             "id": str(member.id),
             "section_id": str(member.section_id),
@@ -381,7 +573,9 @@ class SectionService:
             "joined_at": member.joined_at,
             "user_email": user.email,
             "user_username": user.username,
-            "user_avatar": await self._get_avatar_url(str(user.id), user.role)
+            "user_avatar": await self._get_avatar_url(str(user.id), user.role),
+            "user_first_name": first_name,
+            "user_last_name": last_name,
         }
 
     async def remove_member(self, section_id: str, user_id: str, current_user_id: str):

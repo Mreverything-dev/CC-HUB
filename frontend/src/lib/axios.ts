@@ -3,7 +3,13 @@ import axios from 'axios';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { authApi } from '@/features/auth/api/auth.api';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+// If VITE_API_URL isn't set, derive it from whatever host the page was
+// loaded from - this makes the same dev build work both at
+// http://localhost:3000 (-> localhost:8000) and, for LAN testing (e.g. a
+// phone on the same Wi-Fi), at http://<computer-LAN-IP>:3000 (->
+// <computer-LAN-IP>:8000) with zero per-network config, since a build-time
+// env var can't know which host a given device will use to reach it.
+const API_URL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000/api/v1`;
 
 const api = axios.create({
   baseURL: API_URL,

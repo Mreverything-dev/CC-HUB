@@ -5,11 +5,13 @@ from app.core.database import get_db
 from app.dependencies.auth import get_current_user
 from app.models.user import User
 from app.services.section_service import SectionService
+from app.services.teaching_assignment_service import TeachingAssignmentService
 from app.schemas.section import (
     SectionCreate, SectionUpdate, SectionResponse,
-    SectionMemberCreate, SectionMemberUpdate, SectionMemberResponse
+    SectionMemberCreate, SectionMemberUpdate, SectionMemberResponse,
+    SectionBrowseItem, TeachingAssignmentCreate, TeachingAssignmentResponse
 )
-from typing import List
+from typing import List, Optional
 
 router = APIRouter()
 
@@ -27,6 +29,25 @@ async def get_sections(
     """Get all sections for the current user"""
     service = SectionService(db)
     return await service.get_sections(str(current_user.id), skip, limit)
+
+# NOTE: registered before GET /{section_id} - a path param matches any single
+# segment, so "browse" would otherwise be swallowed as a section_id lookup.
+@router.get("/browse", response_model=List[SectionBrowseItem])
+async def browse_sections(
+    year_level: Optional[int] = Query(None, ge=1, le=6),
+    name: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Platform-wide section listing for the Join Existing Section flow and
+    the Create Section duplicate-name check (professors and admins only)"""
+    if current_user.role not in ["professor", "admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only professors and admins can browse sections"
+        )
+    service = SectionService(db)
+    return await service.browse_sections(str(current_user.id), year_level, name)
 
 @router.get("/{section_id}", response_model=SectionResponse)
 async def get_section(
@@ -159,3 +180,29 @@ async def demote_mayor(
     """Demote a mayor back to student"""
     service = SectionService(db)
     return await service.demote_mayor(section_id, user_id, str(current_user.id))
+
+# ============================================
+# TEACHING ASSIGNMENT ENDPOINTS (nested under a section)
+# ============================================
+
+@router.post("/{section_id}/teaching-assignments", response_model=TeachingAssignmentResponse, status_code=status.HTTP_201_CREATED)
+async def join_section(
+    section_id: str,
+    data: TeachingAssignmentCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a teaching assignment - a professor joining an existing
+    section (or an admin assigning one on a professor's behalf)"""
+    service = TeachingAssignmentService(db)
+    return await service.create_assignment(section_id, data, current_user)
+
+@router.get("/{section_id}/teaching-assignments", response_model=List[TeachingAssignmentResponse])
+async def get_section_teaching_assignments(
+    section_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """List all professors teaching a section, via their teaching assignments"""
+    service = TeachingAssignmentService(db)
+    return await service.list_for_section(section_id)

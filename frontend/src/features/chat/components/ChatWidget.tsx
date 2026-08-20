@@ -17,13 +17,19 @@ export function ChatWidget() {
   const { isWidgetOpen, closeWidget, conversations, currentConversation, setCurrentConversation } = useChat();
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
 
-  // When the widget opens, jump straight to whatever conversation was set as
-  // "current" elsewhere (e.g. a profile's "Message" button) instead of the list.
+  // Jump straight to whatever conversation was set as "current" elsewhere
+  // (e.g. a "Message Professor" button) instead of the list. Depending only
+  // on isWidgetOpen missed this whenever the widget was already open (e.g.
+  // left open on the conversation list, or on a different conversation) -
+  // openWidget() is a no-op state change in that case, so the effect never
+  // re-ran and the widget silently kept showing the wrong thing. Depending
+  // on currentConversation too means picking a new "Message" target always
+  // jumps to it, regardless of whether the widget was already open.
   useEffect(() => {
     if (isWidgetOpen && currentConversation) {
       setSelectedConversationId(currentConversation.id);
     }
-  }, [isWidgetOpen]);
+  }, [isWidgetOpen, currentConversation]);
 
   if (!isAuthenticated || !isWidgetOpen) return null;
 

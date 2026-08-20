@@ -82,10 +82,17 @@ export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalPro
   const isAdmin = user?.role === 'admin';
   const canTargetSection = isProfessor || isAdmin;
 
-  // Professors only ever see sections they actually advise; admins keep
-  // seeing every section (matches the backend's own get_sections rule) -
-  // this is a defensive UI-layer filter only, the backend still enforces it.
-  const availableSections = (sections || []).filter((s) => isAdmin || s.advisor_id === user?.id);
+  // Professors only ever see sections they actually teach - either as the
+  // legacy sole advisor or via an active teaching assignment (co-professor);
+  // admins keep seeing every section (matches the backend's own
+  // get_sections rule) - this is a defensive UI-layer filter only, the
+  // backend still enforces it.
+  const availableSections = (sections || []).filter(
+    (s) =>
+      isAdmin ||
+      s.advisor_id === user?.id ||
+      s.teaching_assignments?.some((ta) => ta.professor_id === user?.id && ta.status === 'active')
+  );
 
   useEffect(() => {
     refetchSections();

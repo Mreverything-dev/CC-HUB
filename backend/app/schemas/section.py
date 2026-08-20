@@ -1,7 +1,7 @@
 # backend/app/schemas/section.py
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, time
 import uuid
 
 class SectionBase(BaseModel):
@@ -12,7 +12,13 @@ class SectionBase(BaseModel):
     description: Optional[str] = None
 
 class SectionCreate(SectionBase):
-    pass
+    # Optional - if provided, an initial TeachingAssignment is created for
+    # the creating professor alongside the section. Omitting these leaves
+    # section creation behaving exactly as before.
+    subject: Optional[str] = Field(None, max_length=150)
+    schedule_days: Optional[List[str]] = None
+    schedule_start: Optional[time] = None
+    schedule_end: Optional[time] = None
 
 class SectionUpdate(SectionBase):
     pass
@@ -29,9 +35,10 @@ class SectionResponse(BaseModel):
     updated_at: datetime
     member_count: Optional[int] = 0
     members: Optional[List['SectionMemberResponse']] = None
-    
+    teaching_assignments: Optional[List['TeachingAssignmentResponse']] = None
+
     model_config = ConfigDict(from_attributes=True)
-    
+
     @field_validator('id', 'advisor_id', mode='before')
     @classmethod
     def convert_uuid_to_str(cls, v):
@@ -65,10 +72,74 @@ class SectionMemberResponse(BaseModel):
     user_email: Optional[str] = None
     user_username: Optional[str] = None
     user_avatar: Optional[str] = None
+    user_first_name: Optional[str] = None
+    user_last_name: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
     @field_validator('id', 'section_id', 'user_id', mode='before')
+    @classmethod
+    def convert_uuid_to_str(cls, v):
+        if isinstance(v, uuid.UUID):
+            return str(v)
+        return v
+
+class TeachingAssignmentCreate(BaseModel):
+    subject: str = Field(..., min_length=1, max_length=150)
+    schedule_days: List[str] = Field(default_factory=list)
+    schedule_start: time
+    schedule_end: time
+    # Admin-only: assign a specific professor on their behalf. Professors
+    # calling this endpoint may only ever create assignments for themselves;
+    # the service layer enforces that, this field is simply ignored for them.
+    professor_id: Optional[str] = None
+
+class TeachingAssignmentUpdate(BaseModel):
+    subject: Optional[str] = Field(None, min_length=1, max_length=150)
+    schedule_days: Optional[List[str]] = None
+    schedule_start: Optional[time] = None
+    schedule_end: Optional[time] = None
+    status: Optional[str] = None
+
+class TeachingAssignmentResponse(BaseModel):
+    id: str
+    section_id: str
+    professor_id: str
+    subject: str
+    schedule_days: List[str] = Field(default_factory=list)
+    schedule_start: time
+    schedule_end: time
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    professor_username: Optional[str] = None
+    professor_first_name: Optional[str] = None
+    professor_last_name: Optional[str] = None
+    professor_avatar: Optional[str] = None
+    section_name: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator('id', 'section_id', 'professor_id', mode='before')
+    @classmethod
+    def convert_uuid_to_str(cls, v):
+        if isinstance(v, uuid.UUID):
+            return str(v)
+        return v
+
+class SectionBrowseItem(BaseModel):
+    id: str
+    name: str
+    course: Optional[str] = None
+    year_level: Optional[int] = None
+    academic_year: Optional[str] = None
+    member_count: int = 0
+    professor_count: int = 0
+    already_teaching: bool = False
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator('id', mode='before')
     @classmethod
     def convert_uuid_to_str(cls, v):
         if isinstance(v, uuid.UUID):

@@ -12,6 +12,7 @@ from app.models.announcement import Announcement, AnnouncementTarget, Announceme
 from app.models.user import User
 from app.models.profile import StudentProfile, ProfessorProfile, AdminProfile
 from app.models.section import Section, SectionMember
+from app.models.teaching_assignment import TeachingAssignment
 from app.models.notification import Notification
 from app.schemas.announcement import AnnouncementCreate, AnnouncementUpdate
 
@@ -144,9 +145,20 @@ class AnnouncementService:
         return [str(section) for section in sections]
 
     async def get_professor_sections(self, user_id: str) -> List[dict]:
-        """Get all sections where user is the advisor (professor) with details"""
+        """Get all sections where user is the advisor OR has an active
+        teaching assignment (co-professor) with details"""
         result = await self.db.execute(
-            select(Section).where(Section.advisor_id == user_id)
+            select(Section).where(
+                or_(
+                    Section.advisor_id == user_id,
+                    Section.id.in_(
+                        select(TeachingAssignment.section_id).where(
+                            TeachingAssignment.professor_id == user_id,
+                            TeachingAssignment.status == "active",
+                        )
+                    ),
+                )
+            )
         )
         sections = result.scalars().all()
         

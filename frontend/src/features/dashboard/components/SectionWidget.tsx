@@ -11,7 +11,7 @@ interface SectionWidgetProps {
 
 export function SectionWidget({ section, isLoading, onGoToSection }: SectionWidgetProps) {
   return (
-    <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-4 transition hover:border-[#00C8FF]/30">
+    <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-4 sm:p-5 transition hover:border-[#00C8FF]/30">
       <h3 className="flex items-center gap-2 text-sm font-semibold text-[#F1F5F9] mb-3">
         <UsersIcon className="h-4 w-4 text-[#00C8FF]" />
         Your Section
@@ -25,19 +25,33 @@ export function SectionWidget({ section, isLoading, onGoToSection }: SectionWidg
         </p>
       ) : (
         <div>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-semibold text-[#F1F5F9]">{section.name}</p>
-              {section.course && <p className="text-xs text-[#64748B]">{section.course}</p>}
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-[#F1F5F9] truncate">{section.name}</p>
+              {section.course && <p className="text-xs text-[#64748B] truncate">{section.course}</p>}
             </div>
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-[#10B981] bg-[#10B981]/10 border border-[#10B981]/30 rounded-full px-2 py-0.5">
+            <span className="flex-shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[#10B981] bg-[#10B981]/10 border border-[#10B981]/30 rounded-full px-2 py-0.5">
               Active
             </span>
           </div>
 
-          {section.advisor_id && (
-            <p className="text-xs text-[#94A3B8] mt-2">Advisor assigned</p>
-          )}
+          {(() => {
+            const professorCount = new Set(
+              (section.teaching_assignments || [])
+                .filter((ta) => ta.status === 'active')
+                .map((ta) => ta.professor_id)
+            ).size;
+            if (professorCount > 0) {
+              return (
+                <p className="text-xs text-[#94A3B8] mt-2">
+                  {professorCount} professor{professorCount === 1 ? '' : 's'} assigned
+                </p>
+              );
+            }
+            return section.advisor_id ? (
+              <p className="text-xs text-[#94A3B8] mt-2">Advisor assigned</p>
+            ) : null;
+          })()}
 
           {section.members && section.members.length > 0 && (
             <div className="flex items-center mt-3 -space-x-2">

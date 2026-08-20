@@ -103,22 +103,22 @@ export default function StudentDashboard() {
       <div className="flex-1 min-w-0 flex flex-col">
         <Topbar avatarUrl={avatarUrl} onOpenFriends={() => setActiveSection('friends')} />
 
-        <main className="relative flex-1 max-w-6xl w-full mx-auto px-4 py-6 lg:px-8">
+        <main className="relative flex-1 max-w-7xl w-full mx-auto px-4 py-6 sm:px-6 lg:px-8">
           {activeSection === 'feed' && (
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6">
               {/* Center - Feed */}
-              <div className="xl:col-span-2 space-y-6 min-w-0">
+              <div className="space-y-6 min-w-0">
                 {/* Greeting */}
-                <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-6 flex items-center justify-between">
-                  <div>
-                    <h1 className="text-xl font-semibold text-[#F1F5F9]">
-                      Good morning, <span className="text-[#00C8FF]">{user?.username || 'Student'}</span>! 👋
+                <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="min-w-0">
+                    <h1 className="text-xl font-semibold text-[#F1F5F9] break-words">
+                      Welcome to CCS HUB, <span className="text-[#00C8FF]">{user?.username || 'Student'}</span>! 👋
                     </h1>
                     <p className="text-sm text-[#94A3B8] mt-1">
-                      Stay updated with your classes, peers, and announcements.
+                      Stay informed, connected, and up to date with the College of Computer Studies.
                     </p>
                   </div>
-                  <div className="hidden sm:flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-[#00C8FF]/30 bg-[#00C8FF]/10 shadow-[0_0_16px_rgba(0,200,245,0.12)]">
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-[#00C8FF]/30 bg-[#00C8FF]/10 shadow-[0_0_16px_rgba(0,200,245,0.12)]">
                     <CodeXml className="h-5 w-5 text-[#00C8FF]" />
                   </div>
                 </div>

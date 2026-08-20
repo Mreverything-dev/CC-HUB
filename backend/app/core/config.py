@@ -39,6 +39,18 @@ class Settings(BaseSettings):
     
     # CORS
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
+    # Additionally allow any origin on a private LAN (192.168.x.x, 10.x.x.x,
+    # 172.16-31.x.x) hitting the Vite dev ports - lets a phone on the same
+    # Wi-Fi reach this API via the computer's local IP without having to
+    # hardcode that IP (which changes across networks/DHCP leases) into
+    # CORS_ORIGINS. Private ranges are never publicly routable, so this
+    # can't be reached from the open internet.
+    CORS_ORIGIN_REGEX: Optional[str] = (
+        r"^http://(localhost|127\.0\.0\.1|"
+        r"192\.168\.\d{1,3}\.\d{1,3}|"
+        r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
+        r"172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}):(3000|5173)$"
+    )
     
     MINIO_ENDPOINT: str = "localhost:9000"
     MINIO_ACCESS_KEY: str = "minioadmin"

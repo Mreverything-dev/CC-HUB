@@ -13,6 +13,8 @@ import { AnnouncementCategory, matchesAnnouncementFilters } from '@/features/ann
 import { useAnnouncements } from '@/features/announcements/hooks/useAnnouncements';
 import { useSections } from '@/features/sections/hooks/useSections';
 import SectionDashboard from '@/features/sections/components/SectionDashboard';
+import ProfessorTeachingHub from '@/features/sections/components/ProfessorTeachingHub';
+import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { profileService } from '@/services/api/profile.service';
 import { Sidebar, SidebarSection } from '@/features/dashboard/components/Sidebar';
@@ -37,6 +39,9 @@ export default function ProfessorDashboard() {
   const [showCreateAnnouncement, setShowCreateAnnouncement] = useState(false);
   const [announcementSearch, setAnnouncementSearch] = useState('');
   const [announcementCategory, setAnnouncementCategory] = useState<'all' | AnnouncementCategory>('all');
+  // Professors land on "My Teaching Assignments" first; the per-section
+  // "Manage" button hands off to the existing SectionDashboard for that section.
+  const [selectedTeachingSectionId, setSelectedTeachingSectionId] = useState<string | null>(null);
 
   // Posts
   const {
@@ -106,22 +111,22 @@ export default function ProfessorDashboard() {
       <div className="flex-1 min-w-0 flex flex-col">
         <Topbar avatarUrl={avatarUrl} onOpenFriends={() => setActiveSection('friends')} />
 
-        <main className="relative flex-1 max-w-6xl w-full mx-auto px-4 py-6 lg:px-8">
+        <main className="relative flex-1 max-w-7xl w-full mx-auto px-4 py-6 sm:px-6 lg:px-8">
           {activeSection === 'feed' && (
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6">
               {/* Center - Feed */}
-              <div className="xl:col-span-2 space-y-6 min-w-0">
+              <div className="space-y-6 min-w-0">
                 {/* Greeting */}
-                <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-6 flex items-center justify-between">
-                  <div>
-                    <h1 className="text-xl font-semibold text-[#F1F5F9]">
+                <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="min-w-0">
+                    <h1 className="text-xl font-semibold text-[#F1F5F9] break-words">
                       Good morning, <span className="text-[#00C8FF]">{user?.username || 'Professor'}</span>! 👋
                     </h1>
                     <p className="text-sm text-[#94A3B8] mt-1">
                       Manage your classes, posts, and announcements.
                     </p>
                   </div>
-                  <div className="hidden sm:flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-[#00C8FF]/30 bg-[#00C8FF]/10 shadow-[0_0_16px_rgba(0,200,245,0.12)]">
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-[#00C8FF]/30 bg-[#00C8FF]/10 shadow-[0_0_16px_rgba(0,200,245,0.12)]">
                     <CodeXml className="h-5 w-5 text-[#00C8FF]" />
                   </div>
                 </div>
@@ -253,10 +258,24 @@ export default function ProfessorDashboard() {
           )}
 
           {activeSection === 'sections' && (
-            <SectionDashboard
-              onNavigateToAnnouncements={() => setActiveSection('announcements')}
-              onNavigateToChat={() => setActiveSection('chat')}
-            />
+            selectedTeachingSectionId ? (
+              <div>
+                <button
+                  onClick={() => setSelectedTeachingSectionId(null)}
+                  className="flex items-center gap-1.5 mb-4 text-sm font-medium text-[#94A3B8] hover:text-[#00C8FF] transition"
+                >
+                  <ArrowLeftIcon className="h-4 w-4" />
+                  Back to My Teaching Assignments
+                </button>
+                <SectionDashboard
+                  initialSectionId={selectedTeachingSectionId}
+                  onNavigateToAnnouncements={() => setActiveSection('announcements')}
+                  onNavigateToChat={() => setActiveSection('chat')}
+                />
+              </div>
+            ) : (
+              <ProfessorTeachingHub onManageSection={setSelectedTeachingSectionId} />
+            )
           )}
 
           {activeSection === 'friends' && <FriendsPage />}

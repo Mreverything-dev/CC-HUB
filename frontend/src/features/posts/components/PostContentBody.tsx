@@ -46,7 +46,7 @@ export function PostContentBody({ content, compact = false, className = '' }: Po
   // Plain text with no code fence at all - render exactly as before.
   if (segments.length === 1 && segments[0].type === 'text') {
     return (
-      <p className={`whitespace-pre-wrap break-words ${compact ? 'line-clamp-3' : ''} ${className}`}>
+      <p className={`whitespace-pre-wrap [overflow-wrap:anywhere] ${compact ? 'line-clamp-3' : ''} ${className}`}>
         {content}
       </p>
     );

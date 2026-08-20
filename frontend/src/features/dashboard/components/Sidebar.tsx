@@ -117,7 +117,7 @@ export function Sidebar({ activeSection, onNavigate }: SidebarProps) {
   };
 
   return (
-    <aside className="hidden lg:flex lg:flex-col w-64 h-screen sticky top-0 border-r border-[rgba(0,200,245,0.1)] bg-[#070D13]/95 backdrop-blur-xl">
+    <aside className="hidden lg:flex lg:flex-col w-[280px] h-screen sticky top-0 border-r border-[rgba(0,200,245,0.1)] bg-[#070D13]/95 backdrop-blur-xl">
       {/* Logo */}
       <div className="flex items-center gap-3 px-5 py-5 border-b border-[rgba(0,200,245,0.1)]">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#00C8FF]/40 bg-[#00C8FF]/10 shadow-[0_0_20px_rgba(0,200,245,0.15)]">
@@ -132,7 +132,7 @@ export function Sidebar({ activeSection, onNavigate }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5 themed-scrollbar">
+      <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-0.5 themed-scrollbar">
         {NAV_ITEMS.filter((item) => !item.adminOnly || user?.role === 'admin').map((item) => {
           const isActive = item.section && item.section === activeSection;
           const Icon = item.icon;

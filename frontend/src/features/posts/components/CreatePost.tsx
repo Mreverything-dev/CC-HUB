@@ -50,19 +50,19 @@ export function CreatePost({ onCreatePost, isLoading = false, dark = false, avat
             </span>
           </button>
 
-          <div className="flex items-center gap-1.5 mt-3 pt-3 border-t border-[#1E3447]">
+          <div className="flex items-center flex-wrap gap-1.5 mt-3 pt-3 border-t border-[#1E3447]">
             <button
               type="button"
               onClick={() => setShowModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-[#94A3B8] hover:text-[#00C8FF] hover:bg-[#00C8FF]/10 rounded-xl transition"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-sm font-medium text-[#94A3B8] hover:text-[#00C8FF] hover:bg-[#00C8FF]/10 rounded-xl transition"
             >
               <PhotoIcon className="h-4 w-4" />
-              Image
+              Upload
             </button>
             <button
               type="button"
               onClick={() => setShowModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-[#94A3B8] hover:text-[#00C8FF] hover:bg-[#00C8FF]/10 rounded-xl transition"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-sm font-medium text-[#94A3B8] hover:text-[#00C8FF] hover:bg-[#00C8FF]/10 rounded-xl transition"
             >
               <FaceSmileIcon className="h-4 w-4" />
               Emoji
@@ -70,7 +70,7 @@ export function CreatePost({ onCreatePost, isLoading = false, dark = false, avat
             <button
               type="button"
               onClick={() => setShowModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-[#94A3B8] hover:text-[#00C8FF] hover:bg-[#00C8FF]/10 rounded-xl transition"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-sm font-medium text-[#94A3B8] hover:text-[#00C8FF] hover:bg-[#00C8FF]/10 rounded-xl transition"
             >
               <CodeBracketIcon className="h-4 w-4" />
               Code Snippet

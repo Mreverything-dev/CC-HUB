@@ -36,7 +36,7 @@ interface EventCardListProps {
 
 export function EventCardList({ events = SAMPLE_EVENTS }: EventCardListProps) {
   return (
-    <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-4 transition hover:border-[#00C8FF]/30">
+    <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-4 sm:p-5 transition hover:border-[#00C8FF]/30">
       <div className="flex items-center justify-between mb-3">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-[#F1F5F9]">
           <SparklesIcon className="h-4 w-4 text-[#00C8FF]" />
@@ -60,10 +60,10 @@ export function EventCardList({ events = SAMPLE_EVENTS }: EventCardListProps) {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm text-[#F1F5F9] font-medium truncate">{event.title}</p>
-                <p className="text-xs text-[#64748B] mt-0.5">{event.dateLabel}</p>
+                <p className="text-xs text-[#64748B] mt-0.5 truncate">{event.dateLabel}</p>
                 <p className="text-xs text-[#64748B] flex items-center gap-1 mt-0.5">
-                  <MapPinIcon className="h-3 w-3" />
-                  {event.location}
+                  <MapPinIcon className="h-3 w-3 flex-shrink-0" />
+                  <span className="truncate">{event.location}</span>
                 </p>
               </div>
             </div>

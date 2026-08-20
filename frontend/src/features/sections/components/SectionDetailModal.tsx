@@ -44,9 +44,16 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
   const [error, setError] = useState<string | null>(null);
   const [removeTarget, setRemoveTarget] = useState<SectionMember | null>(null);
 
+  // A user counts as "one of the section's professors" via the legacy
+  // single advisor_id OR an active teaching assignment - never just one.
+  const isTeachingProfessor = section.teaching_assignments?.some(
+    (ta) => ta.professor_id === user?.id && ta.status === 'active'
+  );
+
   // ✅ Check if user can manage this section
   const canManage = user?.role === 'admin' ||
                     user?.id === section.advisor_id ||
+                    isTeachingProfessor ||
                     // ✅ Check if user is a member with officer/mayor role
                     section.members?.some(m =>
                       m.user_id === user?.id && (m.is_officer || m.is_mayor)
@@ -96,6 +103,7 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
   // appoint or remove another Mayor/Officer.
   const canPromote = user?.role === 'admin' ||
                      user?.id === section.advisor_id ||
+                     isTeachingProfessor ||
                      isMayor;
 
   const handlePromoteOfficer = async (userId: string) => {
@@ -322,8 +330,8 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
                         {/* Actions - Show for users with promote permission (Mayor/Advisor/Admin) */}
                         {canPromote && canManageMember && (
                           <div className="flex items-center gap-2 flex-wrap sm:flex-shrink-0 sm:justify-end">
-                            {/* Mayor Actions - Only Advisor/Admin can manage Mayor */}
-                            {(user?.role === 'admin' || user?.id === section.advisor_id) && (
+                            {/* Mayor Actions - Only a section professor/Admin can manage Mayor */}
+                            {(user?.role === 'admin' || user?.id === section.advisor_id || isTeachingProfessor) && (
                               <>
                                 {member.is_mayor ? (
                                   <button
@@ -345,8 +353,8 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
                               </>
                             )}
 
-                            {/* Officer Actions - Only Advisor/Admin can manage Officer (Mayor cannot) */}
-                            {(user?.role === 'admin' || user?.id === section.advisor_id) && !member.is_mayor && (
+                            {/* Officer Actions - Only a section professor/Admin can manage Officer (Mayor cannot) */}
+                            {(user?.role === 'admin' || user?.id === section.advisor_id || isTeachingProfessor) && !member.is_mayor && (
                               <>
                                 {member.is_officer ? (
                                   <button

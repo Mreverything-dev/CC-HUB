@@ -1,6 +1,6 @@
 // frontend/src/services/api/section.service.ts
 import { api } from '@/lib/axios';
-import { Section, SectionCreate, SectionUpdate, SectionMember } from '@/types/section.types';
+import { Section, SectionCreate, SectionUpdate, SectionMember, SectionBrowseItem } from '@/types/section.types';
 
 export const sectionApi = {
   // Sections
@@ -9,6 +9,8 @@ export const sectionApi = {
   createSection: (data: SectionCreate) => api.post<Section>('/sections/', data),
   updateSection: (id: string, data: SectionUpdate) => api.put<Section>(`/sections/${id}`, data),
   deleteSection: (id: string) => api.delete(`/sections/${id}`),
+  browseSections: (params: { year_level?: number; name?: string }) =>
+    api.get<SectionBrowseItem[]>('/sections/browse', { params }),
   
   // Members
   getSectionMembers: (sectionId: string) => api.get<SectionMember[]>(`/sections/${sectionId}/members`),

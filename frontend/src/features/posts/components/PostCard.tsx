@@ -177,7 +177,7 @@ export function PostCard({
   };
 
   const cardClassName = dark
-    ? 'rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-6 hover:border-[#00C8FF]/35 transition-all duration-200'
+    ? 'rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-4 sm:p-6 hover:border-[#00C8FF]/35 transition-all duration-200'
     : 'glass rounded-xl p-6 transition-all duration-200 hover:shadow-lg hover:border-cyan-500/30';
 
   return (
@@ -188,11 +188,11 @@ export function PostCard({
       >
         <div className={cardClassName}>
           {/* Header */}
-          <div className="flex items-start justify-between mb-3">
-            <div className="flex items-center space-x-3">
+          <div className="flex items-start justify-between mb-3 gap-2">
+            <div className="flex items-center space-x-3 min-w-0 flex-1">
               <div
                 onClick={goToAuthorProfile}
-                className={`w-10 h-10 rounded-full flex items-center justify-center hover:opacity-80 transition cursor-pointer overflow-hidden ${
+                className={`w-10 h-10 rounded-full flex items-center justify-center hover:opacity-80 transition cursor-pointer overflow-hidden flex-shrink-0 ${
                   dark ? 'bg-gradient-to-br from-[#00C8FF] to-[#3B82F6]' : 'bg-gray-200'
                 }`}
               >
@@ -204,11 +204,11 @@ export function PostCard({
                   </span>
                 )}
               </div>
-              <div>
+              <div className="min-w-0 flex-1">
                 <div className="flex items-center space-x-2">
                   <p
                     onClick={goToAuthorProfile}
-                    className={`font-medium hover:underline cursor-pointer ${dark ? 'text-[#F1F5F9]' : 'text-gray-800'}`}
+                    className={`font-medium hover:underline cursor-pointer truncate ${dark ? 'text-[#F1F5F9]' : 'text-gray-800'}`}
                   >
                     {username}
                   </p>
@@ -220,7 +220,7 @@ export function PostCard({
                     </Badge>
                   )}
                 </div>
-                <div className={`flex items-center space-x-2 text-xs ${dark ? 'text-[#64748B]' : 'text-gray-400'}`}>
+                <div className={`flex items-center space-x-2 text-xs truncate ${dark ? 'text-[#64748B]' : 'text-gray-400'}`}>
                   <span>{formatRelativeTime(created_at)}</span>
                   <span>•</span>
                   <span>{visibilityLabels[visibility as keyof typeof visibilityLabels]}</span>
@@ -229,7 +229,7 @@ export function PostCard({
             </div>
 
             {(is_owned_by_current_user || user?.role === 'admin') && (
-              <div className="relative" onClick={(e) => e.stopPropagation()}>
+              <div className="relative flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                 <button
                   onClick={() => setShowMenu(!showMenu)}
                   className={`p-1.5 rounded-xl transition ${dark ? 'text-[#64748B] hover:text-[#F1F5F9] hover:bg-white/5' : 'hover:bg-gray-100'}`}

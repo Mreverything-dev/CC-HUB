@@ -5,6 +5,7 @@ import { MagnifyingGlassIcon, UserPlusIcon, CheckIcon } from '@heroicons/react/2
 import { useUsers } from '@/features/users/hooks/useUsers';
 import { FriendAvatar } from './FriendAvatar';
 
+
 interface FindPeoplePanelProps {
   friendIds: Set<string>;
   pendingSentIds: Set<string>;
@@ -57,7 +58,7 @@ export function FindPeoplePanel({ friendIds, pendingSentIds, sendingTo, onSendRe
                   onClick={() => navigate(`/profile/${user.id}`)}
                   className="flex items-center gap-3 flex-1 min-w-0 text-left rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00C8FF]/60"
                 >
-                  <FriendAvatar avatar={null} name={user.username} size="md" />
+                  <FriendAvatar avatar={user.avatar_url} name={user.username} size="md" />
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-[#F1F5F9] truncate">{user.username}</p>
                     <p className="text-xs text-[#64748B] truncate">{user.email}</p>

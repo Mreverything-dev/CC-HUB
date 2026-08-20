@@ -443,7 +443,7 @@ export default function CreatePostModal({ onClose, onCreatePost, isLoading = fal
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-[#94A3B8] hover:text-[#00C8FF] hover:bg-[#00C8FF]/10 rounded-xl transition"
             >
               <PhotoIcon className="h-4 w-4" />
-              Image
+              Media
             </button>
             <EmojiPicker onSelect={handleEmojiSelect} align="left" />
             <button

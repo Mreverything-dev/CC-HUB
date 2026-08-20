@@ -1,5 +1,5 @@
 // frontend/src/features/sections/components/SectionDashboard.tsx
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   UserGroupIcon,
   AcademicCapIcon,
@@ -12,23 +12,29 @@ import {
   Cog6ToothIcon,
   MegaphoneIcon,
   SpeakerWaveIcon,
+  ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { useSections } from '../hooks/useSections';
 import { useChat } from '@/features/chat/hooks/useChat';
-import { profileService } from '@/services/api/profile.service';
 import { Avatar } from '@/features/dashboard/components/Avatar';
 import { RoleBadge } from '@/features/dashboard/components/RoleBadge';
-import { Section, SectionMember } from '@/types/section.types';
-import { ProfessorProfile } from '@/types/profile.types';
+import { Section, SectionMember, TeachingAssignment } from '@/types/section.types';
 import AddStudentModal from './AddStudentModal';
 import CreateSectionModal from './CreateSectionModal';
 import SectionDetailModal from './SectionDetailModal';
+import ProfessorDetailPanel from './ProfessorDetailPanel';
+import { TeachingAssignmentOnboardingBanner } from './TeachingAssignmentOnboardingBanner';
 import { CreateAnnouncement } from '@/features/announcements/components/CreateAnnouncement';
 
 interface SectionDashboardProps {
   onNavigateToAnnouncements: () => void;
   onNavigateToChat: () => void;
+  /** Pre-select a section instead of defaulting to the first one - used when
+   * entering from the professor's "My Teaching Assignments" hub via its
+   * per-section "Manage" button. Omit for the default (student) behavior of
+   * defaulting to the first section in the list. */
+  initialSectionId?: string;
 }
 
 type StudentFilter = 'all' | 'officers' | 'students';
@@ -49,16 +55,17 @@ function ShieldIcon({ className }: { className?: string }) {
   );
 }
 
-export default function SectionDashboard({ onNavigateToAnnouncements, onNavigateToChat }: SectionDashboardProps) {
+export default function SectionDashboard({ onNavigateToAnnouncements, onNavigateToChat, initialSectionId }: SectionDashboardProps) {
   const { user } = useAuthStore();
   const { sections, isLoading, getSection, refetch } = useSections();
   const { createDirectConversation, openWidget } = useChat();
 
-  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
+  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(initialSectionId || null);
   const [showSectionSwitcher, setShowSectionSwitcher] = useState(false);
   const [section, setSection] = useState<Section | null>(null);
   const [sectionLoading, setSectionLoading] = useState(false);
-  const [advisorProfile, setAdvisorProfile] = useState<ProfessorProfile | null>(null);
+  const [sectionError, setSectionError] = useState<string | null>(null);
+  const [selectedProfessorId, setSelectedProfessorId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [studentFilter, setStudentFilter] = useState<StudentFilter>('all');
   const [showAllStudents, setShowAllStudents] = useState(false);
@@ -78,46 +85,64 @@ export default function SectionDashboard({ onNavigateToAnnouncements, onNavigate
     }
   }, [sections, selectedSectionId]);
 
-  // Fetch full member details for the selected section.
+  // Fetch full member details for the selected section. Surfaces a real
+  // error + retry instead of silently swallowing failures (e.g. a 403 from
+  // the backend's view-access check, or a network error) - previously the
+  // catch discarded the error entirely, so a failed fetch left the skeleton
+  // loading state on screen forever with no way to tell what happened.
+  const loadSection = useCallback((sectionId: string) => {
+    setSectionLoading(true);
+    setSectionError(null);
+    getSection(sectionId)
+      .then((data) => setSection(data))
+      .catch((err) => {
+        console.error('Failed to load section:', err);
+        setSection(null);
+        setSectionError(err?.response?.data?.detail || 'Failed to load this section. Please try again.');
+      })
+      .finally(() => setSectionLoading(false));
+  }, [getSection]);
+
   useEffect(() => {
     if (!selectedSectionId) {
       setSection(null);
+      setSectionError(null);
       return;
     }
-    setSectionLoading(true);
-    getSection(selectedSectionId)
-      .then(setSection)
-      .catch(() => setSection(null))
-      .finally(() => setSectionLoading(false));
+    loadSection(selectedSectionId);
   }, [selectedSectionId]);
 
-  // Enrich the advisor with real profile data (name/avatar/department) -
-  // Section only stores advisor_id, so reuse the existing generic
-  // GET /profiles/{userId} endpoint already used by ProfilePage.
-  useEffect(() => {
-    if (!section?.advisor_id) {
-      setAdvisorProfile(null);
-      return;
-    }
-    profileService
-      .getUserProfile(section.advisor_id)
-      .then((res) => setAdvisorProfile((res.data.profile as ProfessorProfile) || null))
-      .catch(() => setAdvisorProfile(null));
-  }, [section?.advisor_id]);
-
   const members = section?.members || [];
+  const activeAssignments = (section?.teaching_assignments || []).filter((ta) => ta.status === 'active');
+  // Group by professor - a professor can teach multiple subjects in the
+  // same section, and must appear as exactly one card, not one per subject.
+  const professorGroups = useMemo(() => {
+    const map = new Map<string, TeachingAssignment[]>();
+    for (const ta of activeAssignments) {
+      if (!map.has(ta.professor_id)) map.set(ta.professor_id, []);
+      map.get(ta.professor_id)!.push(ta);
+    }
+    return Array.from(map.values());
+  }, [activeAssignments]);
+  const selectedProfessorAssignments = selectedProfessorId
+    ? professorGroups.find((g) => g[0]?.professor_id === selectedProfessorId) || null
+    : null;
   const mayor = members.find((m) => m.is_mayor) || null;
   const officer = members.find((m) => m.is_officer && !m.is_mayor) || null;
   const regularStudents = members.filter((m) => !m.is_mayor);
 
+  const isTeachingProfessor = activeAssignments.some((ta) => ta.professor_id === user?.id);
+
   const canManage =
     user?.role === 'admin' ||
     user?.id === section?.advisor_id ||
+    isTeachingProfessor ||
     members.some((m) => m.user_id === user?.id && (m.is_mayor || m.is_officer));
 
   const canPostAnnouncement =
     user?.role === 'admin' ||
     user?.id === section?.advisor_id ||
+    isTeachingProfessor ||
     members.some((m) => m.user_id === user?.id && (m.is_mayor || m.is_officer));
 
   const filteredStudents = useMemo(() => {
@@ -135,10 +160,6 @@ export default function SectionDashboard({ onNavigateToAnnouncements, onNavigate
 
   const visibleStudents =
     showAllStudents || search.trim() || studentFilter !== 'all' ? filteredStudents : filteredStudents.slice(0, 8);
-
-  const advisorName = advisorProfile?.first_name
-    ? `${advisorProfile.first_name} ${advisorProfile.last_name || ''}`.trim()
-    : null;
 
   const handleMessage = async (userId: string) => {
     if (userId === user?.id) return;
@@ -176,6 +197,9 @@ export default function SectionDashboard({ onNavigateToAnnouncements, onNavigate
       <div className="max-w-3xl mx-auto">
         <h1 className="text-2xl font-bold text-[#F1F5F9]">Section</h1>
         <p className="text-[#94A3B8] mt-1 text-sm">Manage and connect with your class community.</p>
+        <div className="mt-5">
+          <TeachingAssignmentOnboardingBanner />
+        </div>
         <div className="mt-6 rounded-2xl border border-[#1E3447] bg-[#0D1722] py-16 text-center">
           <UserGroupIcon className="h-12 w-12 mx-auto text-[#1E3447]" />
           <p className="text-[#94A3B8] mt-3">
@@ -199,7 +223,7 @@ export default function SectionDashboard({ onNavigateToAnnouncements, onNavigate
     <div className="max-w-6xl mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-5">
-        <div>
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold text-[#F1F5F9]">Section</h1>
           <p className="text-[#94A3B8] mt-1 text-sm">Manage and connect with your class community.</p>
         </div>
@@ -261,7 +285,22 @@ export default function SectionDashboard({ onNavigateToAnnouncements, onNavigate
         </div>
       </div>
 
-      {sectionLoading || !section ? (
+      <TeachingAssignmentOnboardingBanner />
+
+      {sectionError ? (
+        <div className="rounded-2xl border border-[#EF4444]/30 bg-[#EF4444]/10 p-6 flex items-start gap-3">
+          <ExclamationTriangleIcon className="h-5 w-5 text-[#EF4444] flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm text-[#F1F5F9]">{sectionError}</p>
+            <button
+              onClick={() => selectedSectionId && loadSection(selectedSectionId)}
+              className="text-xs font-medium text-[#EF4444] hover:underline mt-1.5"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      ) : sectionLoading || !section ? (
         <div className="space-y-4">
           <div className="h-32 rounded-2xl bg-[#0D1722] animate-pulse" />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -273,40 +312,55 @@ export default function SectionDashboard({ onNavigateToAnnouncements, onNavigate
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
           {/* Main content */}
           <div className="xl:col-span-2 space-y-5 min-w-0">
-            {/* Professor card */}
+            {/* Professors */}
             <div className="rounded-2xl border border-[#00C8FF]/20 bg-[#0D1722] shadow-[0_0_30px_rgba(0,200,255,0.05)] p-5">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[#64748B] mb-3">
                 <AcademicCapIcon className="h-4 w-4" />
-                Professor
+                Professors
               </div>
-              {section.advisor_id ? (
-                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                  <Avatar src={advisorProfile?.avatar_url} name={advisorName || 'Professor'} size="lg" />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-base font-semibold text-[#F1F5F9] truncate">
-                        {advisorName ? `Prof. ${advisorName}` : 'Professor'}
-                      </p>
-                      <RoleBadge role="professor" />
-                    </div>
-                    {advisorProfile?.department && (
-                      <p className="text-sm text-[#94A3B8] mt-0.5">{advisorProfile.department}</p>
-                    )}
-                    <p className="text-xs text-[#64748B] mt-0.5">
-                      Teaching {section.name}
-                      {section.course ? ` • ${section.course}` : ''}
-                    </p>
-                  </div>
-                  {section.advisor_id !== user?.id && (
-                    <button
-                      onClick={() => handleMessage(section.advisor_id!)}
-                      disabled={messagingUserId === section.advisor_id}
-                      className="flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-semibold border border-[#00C8FF]/30 bg-[#00C8FF]/10 text-[#00C8FF] rounded-xl hover:bg-[#00C8FF]/20 transition disabled:opacity-50 flex-shrink-0"
-                    >
-                      <ChatBubbleLeftIcon className="h-4 w-4" />
-                      Message
-                    </button>
-                  )}
+              {professorGroups.length > 0 ? (
+                <div className="space-y-3">
+                  {professorGroups.map((group) => {
+                    const first = group[0];
+                    const fullName = first.professor_first_name
+                      ? `${first.professor_first_name} ${first.professor_last_name || ''}`.trim()
+                      : first.professor_username || 'Professor';
+                    return (
+                      <button
+                        key={first.professor_id}
+                        onClick={() => setSelectedProfessorId(first.professor_id)}
+                        className="w-full flex flex-col sm:flex-row sm:items-center gap-4 text-left p-2 -m-2 rounded-xl hover:bg-white/5 transition"
+                      >
+                        <Avatar src={first.professor_avatar} name={fullName} size="lg" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-base font-semibold text-[#F1F5F9] truncate">Prof. {fullName}</p>
+                            <RoleBadge role="professor" />
+                          </div>
+                          <p className="text-sm text-[#94A3B8] mt-0.5 truncate">
+                            {group.map((ta) => ta.subject).join(' • ')}
+                          </p>
+                          <p className="text-xs text-[#64748B] mt-0.5">
+                            Teaching {section.name}
+                            {section.course ? ` • ${section.course}` : ''}
+                          </p>
+                        </div>
+                        {first.professor_id !== user?.id && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMessage(first.professor_id);
+                            }}
+                            disabled={messagingUserId === first.professor_id}
+                            className="flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-semibold border border-[#00C8FF]/30 bg-[#00C8FF]/10 text-[#00C8FF] rounded-xl hover:bg-[#00C8FF]/20 transition disabled:opacity-50 flex-shrink-0"
+                          >
+                            <ChatBubbleLeftIcon className="h-4 w-4" />
+                            Message
+                          </button>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               ) : (
                 <p className="text-sm text-[#64748B]">No professor assigned to this section.</p>
@@ -608,6 +662,16 @@ export default function SectionDashboard({ onNavigateToAnnouncements, onNavigate
             </div>
           </div>
         </div>
+      )}
+
+      {selectedProfessorAssignments && section && (
+        <ProfessorDetailPanel
+          assignments={selectedProfessorAssignments}
+          sectionName={section.name}
+          onClose={() => setSelectedProfessorId(null)}
+          isMessaging={messagingUserId === selectedProfessorId}
+          onMessage={() => selectedProfessorId && handleMessage(selectedProfessorId)}
+        />
       )}
 
       {showAddStudent && section && (

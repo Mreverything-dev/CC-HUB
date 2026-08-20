@@ -22,7 +22,9 @@ class SocketService {
 
   connect() {
     const token = useAuthStore.getState().token || localStorage.getItem('token');
-    const WS_URL = import.meta.env.VITE_WS_URL || 'http://localhost:8000';
+    // Same host-derived fallback as lib/axios.ts, so chat/live WebSocket
+    // connections also work automatically over LAN, not just the REST API.
+    const WS_URL = import.meta.env.VITE_WS_URL || `http://${window.location.hostname}:8000`;
 
     if (!token) {
       console.error('❌ No token found for WebSocket connection');

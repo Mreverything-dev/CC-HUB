@@ -37,6 +37,13 @@ export function useSections() {
     return response.data;
   };
 
+  // Platform-wide section discovery for the Join Existing Section flow and
+  // the Create Section duplicate-name check - not scoped to "my sections".
+  const browseSections = async (params: { year_level?: number; name?: string }) => {
+    const response = await sectionApi.browseSections(params);
+    return response.data;
+  };
+
   // Create section
   const createSection = useMutation({
     mutationFn: (data: SectionCreate) => sectionApi.createSection(data),
@@ -168,6 +175,7 @@ export function useSections() {
     isLoading,
     refetch,
     getSection,
+    browseSections,
     createSection: createSection.mutateAsync,
     updateSection: updateSectionMutation.mutateAsync,
     deleteSection: deleteSection.mutateAsync,

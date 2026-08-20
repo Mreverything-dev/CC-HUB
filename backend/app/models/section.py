@@ -23,6 +23,7 @@ class Section(Base):
     # ✅ Relationships
     advisor = relationship("User", foreign_keys=[advisor_id])
     members = relationship("SectionMember", back_populates="section", cascade="all, delete-orphan")
+    teaching_assignments = relationship("TeachingAssignment", back_populates="section", cascade="all, delete-orphan")
 
 class SectionMember(Base):
     __tablename__ = "section_members"
