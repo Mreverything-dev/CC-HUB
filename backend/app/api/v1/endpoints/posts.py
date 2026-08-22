@@ -11,7 +11,7 @@ from app.models.post import Post
 from app.models.like import Like
 from app.models.share import Share
 from app.services.post_service import PostService
-from app.schemas.post import PostCreate, PostUpdate, PostResponse, FeedResponse
+from app.schemas.post import PostCreate, PostUpdate, PostResponse, FeedResponse, ReactionRequest
 
 router = APIRouter()
 
@@ -128,6 +128,7 @@ async def get_post(
 
     service = PostService(db)
     role = post.user.role if post.user else "student"
+    reactions_by_post = await service._get_reactions_by_post([post_id])
 
     return {
         "id": str(post.id),
@@ -146,7 +147,8 @@ async def get_post(
         "updated_at": post.updated_at,
         "is_liked_by_current_user": is_liked,
         "is_shared_by_current_user": is_shared,
-        "is_owned_by_current_user": str(post.user_id) == str(current_user.id)
+        "is_owned_by_current_user": str(post.user_id) == str(current_user.id),
+        **service._reaction_fields(reactions_by_post.get(post_id, []), str(current_user.id)),
     }
 
 # ============================================
@@ -238,6 +240,39 @@ async def toggle_like(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Like or unlike a post"""
+    """Like or unlike a post - kept exactly as-is for backward compatibility.
+    New clients should use POST /{post_id}/react instead."""
     service = PostService(db)
     return await service.toggle_like(post_id, str(current_user.id))
+
+# ============================================
+# MULTI-EMOJI REACTIONS
+# ============================================
+
+@router.post("/{post_id}/react")
+async def react_to_post(
+    post_id: str,
+    data: ReactionRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Add/change/remove the caller's emoji reaction on a post. Broadcasts
+    the resulting reaction state to everyone currently viewing this post."""
+    service = PostService(db)
+    return await service.react_to_post(post_id, str(current_user.id), data.reaction)
+
+# ============================================
+# A USER'S SHARED POSTS (Profile "Shares" tab)
+# ============================================
+
+@router.get("/user/{user_id}/shares", response_model=FeedResponse)
+async def get_user_shares(
+    user_id: str,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Posts a user has shared, filtered to what the current user can see"""
+    service = PostService(db)
+    return await service.get_user_shares(user_id, str(current_user.id), page, limit)

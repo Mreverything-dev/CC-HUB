@@ -57,7 +57,13 @@ export default function NotificationBell({ onNavigateFriends }: NotificationBell
         <>
           <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
 
-          <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-100 z-50 overflow-hidden">
+          {/* Anchored to the viewport (not the bell button) below sm: - the
+              bell sits well left of the screen's right edge on mobile (other
+              action buttons/avatar follow it), so a dropdown anchored via
+              `right-0` to the button itself, at a fixed 320px width, was
+              extending past the left edge of the screen and causing
+              horizontal overflow on narrow phones. */}
+          <div className="fixed inset-x-3 top-16 sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 w-auto sm:w-80 bg-white rounded-lg shadow-lg border border-gray-100 z-50 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
               <h3 className="font-semibold text-gray-900">Notifications</h3>
               {unreadNotifications > 0 && (

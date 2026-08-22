@@ -105,9 +105,11 @@ export default function ProfilePage() {
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isUploadingCover, setIsUploadingCover] = useState(false);
   const [formData, setFormData] = useState<any>({});
-  const [activeTab, setActiveTab] = useState<'posts' | 'saved' | 'info'>('posts');
+  const [activeTab, setActiveTab] = useState<'posts' | 'shares' | 'saved' | 'info'>('posts');
   const [posts, setPosts] = useState<Post[]>([]);
   const [postsLoading, setPostsLoading] = useState(false);
+  const [shares, setShares] = useState<Post[]>([]);
+  const [sharesLoading, setSharesLoading] = useState(false);
   const [sectionName, setSectionName] = useState<string | null>(null);
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [sidebarAvatarUrl, setSidebarAvatarUrl] = useState<string | null>(null);
@@ -141,6 +143,7 @@ export default function ProfilePage() {
   useEffect(() => {
     if (profile) {
       fetchPosts();
+      fetchShares();
     }
   }, [profile?.user_id]);
 
@@ -193,6 +196,36 @@ export default function ProfilePage() {
     }
   };
 
+  const fetchShares = async () => {
+    if (!profile) return;
+    setSharesLoading(true);
+    try {
+      const response = await postService.getUserShares(profile.user_id);
+      setShares(response.data.items);
+    } catch (error) {
+      console.error('Error fetching shares:', error);
+    } finally {
+      setSharesLoading(false);
+    }
+  };
+
+  const handleShareReact = async (postId: string, reaction: string) => {
+    const previous = shares.find((p) => p.id === postId);
+    try {
+      const response = await postService.reactToPost(postId, reaction);
+      setShares((prev) =>
+        prev.map((p) =>
+          p.id === postId
+            ? { ...p, my_reaction: response.data.reaction, reaction_breakdown: response.data.reaction_breakdown, reactions_count: response.data.reactions_count }
+            : p
+        )
+      );
+    } catch (error) {
+      console.error('Error reacting to post:', error);
+      if (previous) setShares((prev) => prev.map((p) => (p.id === postId ? previous : p)));
+    }
+  };
+
   const handlePostLike = async (postId: string) => {
     try {
       await postService.likePost(postId);
@@ -209,6 +242,28 @@ export default function ProfilePage() {
       );
     } catch (error) {
       console.error('Error toggling like:', error);
+    }
+  };
+
+  const handlePostReact = async (postId: string, reaction: string) => {
+    const previous = posts.find((p) => p.id === postId);
+    try {
+      const response = await postService.reactToPost(postId, reaction);
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId
+            ? {
+                ...p,
+                my_reaction: response.data.reaction,
+                reaction_breakdown: response.data.reaction_breakdown,
+                reactions_count: response.data.reactions_count,
+              }
+            : p
+        )
+      );
+    } catch (error) {
+      console.error('Error reacting to post:', error);
+      if (previous) setPosts((prev) => prev.map((p) => (p.id === postId ? previous : p)));
     }
   };
 
@@ -997,6 +1052,7 @@ export default function ProfilePage() {
             <div className="flex items-center gap-1 border-b border-[#1E3447] mb-4">
               {([
                 ['posts', 'Posts'],
+                ['shares', 'Shares'],
                 ['saved', 'Saved'],
                 ['info', 'About'],
               ] as const).map(([id, label]) => (
@@ -1021,6 +1077,30 @@ export default function ProfilePage() {
                 <div className="rounded-2xl border border-[#1E3447] bg-[#0D1722] p-10 text-center">
                   <p className="text-[#64748B]">Saved posts are coming soon.</p>
                 </div>
+              ) : activeTab === 'shares' ? (
+                sharesLoading ? (
+                  <div className="rounded-2xl border border-[#1E3447] bg-[#0D1722] p-10 text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00C8FF] mx-auto"></div>
+                  </div>
+                ) : shares.length === 0 ? (
+                  <div className="rounded-2xl border border-[#1E3447] bg-[#0D1722] p-10 text-center">
+                    <p className="text-[#94A3B8]">
+                      {isOwnProfile ? "You haven't shared anything yet." : 'No shared posts to show.'}
+                    </p>
+                  </div>
+                ) : (
+                  shares.map((post) => (
+                    <PostCard
+                      key={post.id}
+                      {...post}
+                      onLike={handlePostLike}
+                      onReact={handleShareReact}
+                      onDelete={handlePostDelete}
+                      onEdit={handlePostEdit}
+                      dark
+                    />
+                  ))
+                )
               ) : postsLoading ? (
                 <div className="rounded-2xl border border-[#1E3447] bg-[#0D1722] p-10 text-center">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00C8FF] mx-auto"></div>
@@ -1037,6 +1117,7 @@ export default function ProfilePage() {
                     key={post.id}
                     {...post}
                     onLike={handlePostLike}
+                    onReact={handlePostReact}
                     onDelete={handlePostDelete}
                     onEdit={handlePostEdit}
                     dark

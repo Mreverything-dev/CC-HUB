@@ -1,6 +1,6 @@
 # backend/app/schemas/comment.py
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime
 
 class CommentBase(BaseModel):
@@ -20,6 +20,9 @@ class CommentCreate(CommentBase):
 class CommentUpdate(BaseModel):
     content: str = Field(..., min_length=1, max_length=2000)
 
+class ReactionRequest(BaseModel):
+    reaction: str = Field(..., min_length=1, max_length=16)
+
 class CommentResponse(BaseModel):
     id: str
     post_id: str
@@ -35,6 +38,13 @@ class CommentResponse(BaseModel):
     updated_at: datetime
     is_liked_by_current_user: bool = False
     is_owned_by_current_user: bool = False
+
+    # Additive: the new multi-emoji comment reaction system (see
+    # CommentService.react_to_comment) - likes_count/is_liked_by_current_user
+    # above are untouched, still backed by the old binary Like table.
+    reactions_count: int = 0
+    reaction_breakdown: Dict[str, int] = Field(default_factory=dict)
+    my_reaction: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

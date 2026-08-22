@@ -7,12 +7,13 @@ from fastapi import HTTPException, status
 from datetime import datetime
 import logging
 
-from app.models.comment import Comment
+from app.models.comment import Comment, CommentReaction
 from app.models.post import Post
 from app.models.user import User
 from app.models.like import Like
 from app.models.profile import StudentProfile, ProfessorProfile, AdminProfile
 from app.schemas.comment import CommentCreate, CommentUpdate
+from app.services.post_service import ALLOWED_REACTIONS
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,39 @@ class CommentService:
         await self.db.refresh(comment)
 
         logger.info(f"✅ Comment created on post {post_id} by user {user_id}")
+
+        try:
+            from app.websocket.manager import manager
+            author_result = await self.db.execute(select(User).where(User.id == user_id))
+            author = author_result.scalar_one_or_none()
+            author_role = author.role if author else "student"
+            await manager.send_to_room(
+                f"post_{post_id}",
+                "post:comment_added",
+                {
+                    "post_id": str(post_id),
+                    "comments_count": post.comments_count,
+                    "comment": {
+                        "id": str(comment.id),
+                        "post_id": str(post_id),
+                        "user_id": str(user_id),
+                        "username": author.username if author else "Unknown",
+                        "user_role": author_role,
+                        "avatar_url": await self._get_avatar_url(user_id, author_role),
+                        "parent_id": str(comment.parent_id) if comment.parent_id else None,
+                        "content": comment.content,
+                        "image_url": comment.image_url,
+                        "likes_count": 0,
+                        "created_at": comment.created_at.isoformat() if comment.created_at else None,
+                        "updated_at": comment.updated_at.isoformat() if comment.updated_at else None,
+                        "reactions_count": 0,
+                        "reaction_breakdown": {},
+                    },
+                },
+            )
+        except Exception as e:
+            logger.error(f"❌ Failed to broadcast new comment: {e}")
+
         return comment
 
     # ============================================
@@ -97,6 +131,7 @@ class CommentService:
         comments = result.scalars().all()
 
         liked_comment_ids = await self._get_liked_comment_ids(viewer_id)
+        reactions_by_comment = await self._get_reactions_by_comment([str(c.id) for c in comments])
 
         items = []
         for comment in comments:
@@ -116,6 +151,7 @@ class CommentService:
                 "updated_at": comment.updated_at,
                 "is_liked_by_current_user": str(comment.id) in liked_comment_ids,
                 "is_owned_by_current_user": str(comment.user_id) == viewer_id,
+                **self._reaction_fields(reactions_by_comment.get(str(comment.id), []), viewer_id),
             })
 
         return {"total": total, "items": items}
@@ -161,6 +197,7 @@ class CommentService:
                 detail="You don't have permission to delete this comment"
             )
 
+        post_id = str(comment.post_id)
         post_result = await self.db.execute(
             select(Post).where(Post.id == comment.post_id)
         )
@@ -172,6 +209,17 @@ class CommentService:
         await self.db.commit()
 
         logger.info(f"✅ Comment {comment_id} deleted by user {user_id}")
+
+        try:
+            from app.websocket.manager import manager
+            await manager.send_to_room(
+                f"post_{post_id}",
+                "post:comment_deleted",
+                {"post_id": post_id, "comment_id": str(comment_id), "comments_count": post.comments_count if post else 0},
+            )
+        except Exception as e:
+            logger.error(f"❌ Failed to broadcast comment deletion: {e}")
+
         return {"message": "Comment deleted successfully"}
 
     # ============================================
@@ -240,3 +288,84 @@ class CommentService:
             select(model.avatar_url).where(model.user_id == user_id)
         )
         return result.scalar_one_or_none()
+
+    # ============================================
+    # REACTIONS (multi-emoji, mirrors PostService.react_to_post exactly)
+    # ============================================
+
+    async def _get_reactions_by_comment(self, comment_ids: List[str]) -> Dict[str, List[CommentReaction]]:
+        if not comment_ids:
+            return {}
+        result = await self.db.execute(
+            select(CommentReaction).where(CommentReaction.comment_id.in_(comment_ids))
+        )
+        by_comment: Dict[str, List[CommentReaction]] = {}
+        for r in result.scalars().all():
+            by_comment.setdefault(str(r.comment_id), []).append(r)
+        return by_comment
+
+    def _reaction_fields(self, reactions: List[CommentReaction], user_id: str) -> Dict[str, Any]:
+        breakdown: Dict[str, int] = {}
+        my_reaction = None
+        for r in reactions:
+            breakdown[r.reaction] = breakdown.get(r.reaction, 0) + 1
+            if str(r.user_id) == user_id:
+                my_reaction = r.reaction
+        return {
+            "reactions_count": len(reactions),
+            "reaction_breakdown": breakdown,
+            "my_reaction": my_reaction,
+        }
+
+    async def react_to_comment(self, comment_id: str, user_id: str, reaction: str) -> dict:
+        """Add/change/remove the caller's reaction on a comment. Same
+        reaction twice removes it; a different reaction replaces it."""
+        if reaction not in ALLOWED_REACTIONS:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported reaction")
+
+        comment = await self._get_comment(comment_id)
+
+        existing_result = await self.db.execute(
+            select(CommentReaction).where(
+                CommentReaction.comment_id == comment_id,
+                CommentReaction.user_id == user_id,
+            )
+        )
+        existing = existing_result.scalar_one_or_none()
+
+        if existing and existing.reaction == reaction:
+            await self.db.delete(existing)
+            new_reaction = None
+        elif existing:
+            existing.reaction = reaction
+            new_reaction = reaction
+        else:
+            self.db.add(CommentReaction(comment_id=comment_id, user_id=user_id, reaction=reaction))
+            new_reaction = reaction
+
+        await self.db.commit()
+
+        all_result = await self.db.execute(
+            select(CommentReaction).where(CommentReaction.comment_id == comment_id)
+        )
+        all_reactions = all_result.scalars().all()
+        breakdown: Dict[str, int] = {}
+        for r in all_reactions:
+            breakdown[r.reaction] = breakdown.get(r.reaction, 0) + 1
+
+        payload = {
+            "post_id": str(comment.post_id),
+            "comment_id": str(comment_id),
+            "user_id": str(user_id),
+            "reaction": new_reaction,
+            "reactions_count": len(all_reactions),
+            "reaction_breakdown": breakdown,
+        }
+
+        try:
+            from app.websocket.manager import manager
+            await manager.send_to_room(f"post_{comment.post_id}", "post:comment_reaction_updated", payload)
+        except Exception as e:
+            logger.error(f"❌ Failed to broadcast comment reaction: {e}")
+
+        return payload

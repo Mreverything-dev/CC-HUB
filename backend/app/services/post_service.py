@@ -7,7 +7,7 @@ from fastapi import HTTPException, status
 from datetime import datetime
 import logging
 
-from app.models.post import Post, PostMedia
+from app.models.post import Post, PostMedia, PostReaction
 from app.models.like import Like
 from app.models.share import Share
 from app.models.user import User
@@ -17,6 +17,13 @@ from app.models.profile import StudentProfile, ProfessorProfile, AdminProfile
 from app.schemas.post import PostCreate, PostUpdate
 
 logger = logging.getLogger(__name__)
+
+# Kept as a local module constant rather than importing from
+# chat_service/announcement_service - this codebase already has one such
+# constant per feature (chat_service.py, announcement_service.py,
+# stream_comment_service.py all define their own), so this follows the same
+# convention instead of introducing a shared cross-feature import.
+ALLOWED_REACTIONS = {"❤️", "😂", "🔥", "😮", "😢", "😡", "🚀", "👏", "👍"}
 
 class PostService:
     def __init__(self, db: AsyncSession):
@@ -125,27 +132,57 @@ class PostService:
         
         query = query.where(or_(*visibility_conditions))
         query = query.order_by(desc(Post.created_at))
-        
-        # Get total count
+
+        # Get total count (of original posts only - shares merged in below
+        # are additional feed items, not counted in pagination totals, since
+        # they wrap a post that's often already counted here).
         count_query = select(func.count()).select_from(query.subquery())
         total = await self.db.execute(count_query)
         total = total.scalar() or 0
-        
-        # Get paginated results
-        query = query.offset(offset).limit(limit)
+
+        # Fetch a page-sized window of BOTH original posts and shares by
+        # people the viewer follows, then merge-sort and re-slice below -
+        # shares never create a new Post row (see share_post), so they can
+        # only be surfaced by merging the lightweight `Share` table in here,
+        # not by widening the Post query itself.
+        query = query.offset(0).limit(offset + limit)
         query = query.options(selectinload(Post.user))
         result = await self.db.execute(query)
         posts = result.scalars().all()
-        
-        # Get user's liked/shared posts
+
+        # Shares from ANY user, newest first - visibility is decided purely
+        # by whether the viewer can see the ORIGINAL post (via
+        # _can_view_post below), exactly the same rule that already governs
+        # seeing that post directly. Deliberately NOT restricted to shares
+        # by the viewer's own friends: a share of a PUBLIC post must be
+        # visible to everyone, not just the sharer's friends - the sharer's
+        # own relationship to the viewer plays no part in this at all.
+        share_result = await self.db.execute(
+            select(Share)
+            .order_by(desc(Share.created_at))
+            .limit(offset + limit)
+            .options(selectinload(Share.user))
+        )
+        shares = share_result.scalars().all()
+        shared_post_originals = {}
+        if shares:
+            orig_result = await self.db.execute(
+                select(Post)
+                .where(Post.id.in_([s.post_id for s in shares]))
+                .options(selectinload(Post.user))
+            )
+            shared_post_originals = {str(p.id): p for p in orig_result.scalars().all()}
+
+        # Get user's liked/shared posts + a batched reaction lookup covering
+        # every post about to be rendered (both plain posts and shared ones).
         liked_post_ids = await self._get_liked_post_ids(user_id)
         shared_post_ids = await self._get_shared_post_ids(user_id)
+        all_post_ids = {str(p.id) for p in posts} | set(shared_post_originals.keys())
+        reactions_by_post = await self._get_reactions_by_post(list(all_post_ids))
 
-        # Format response
-        items = []
-        for post in posts:
+        async def build_post_dict(post: Post) -> dict:
             role = post.user.role if post.user else "student"
-            post_dict = {
+            return {
                 "id": str(post.id),
                 "user_id": str(post.user_id),
                 "username": post.user.username if post.user else "Unknown",
@@ -162,15 +199,43 @@ class PostService:
                 "updated_at": post.updated_at,
                 "is_liked_by_current_user": str(post.id) in liked_post_ids,
                 "is_shared_by_current_user": str(post.id) in shared_post_ids,
-                "is_owned_by_current_user": str(post.user_id) == user_id
+                "is_owned_by_current_user": str(post.user_id) == user_id,
+                **self._reaction_fields(reactions_by_post.get(str(post.id), []), user_id),
+                "sort_key": post.created_at,
             }
-            items.append(post_dict)
-        
+
+        items = [await build_post_dict(post) for post in posts]
+
+        for share in shares:
+            original = shared_post_originals.get(str(share.post_id))
+            # The original may no longer be visible/exist (deleted, or the
+            # sharer's own visibility changed since) - skip it silently
+            # rather than surfacing a broken/empty share card.
+            if not original or not await self._can_view_post(original, user_id):
+                continue
+            share_dict = await build_post_dict(original)
+            share_role = share.user.role if share.user else "student"
+            share_dict.update({
+                "is_shared": True,
+                "shared_by_user_id": str(share.user_id),
+                "shared_by_username": share.user.username if share.user else "Unknown",
+                "shared_by_avatar_url": await self._get_avatar_url(str(share.user_id), share_role),
+                "shared_by_role": share_role,
+                "shared_at": share.created_at,
+                "sort_key": share.created_at,
+            })
+            items.append(share_dict)
+
+        items.sort(key=lambda d: d["sort_key"], reverse=True)
+        page_items = items[offset:offset + limit]
+        for d in page_items:
+            d.pop("sort_key", None)
+
         return {
             "total": total,
             "page": page,
             "limit": limit,
-            "items": items
+            "items": page_items
         }
 
     # ============================================
@@ -254,6 +319,7 @@ class PostService:
 
         liked_post_ids = await self._get_liked_post_ids(viewer_id)
         shared_post_ids = await self._get_shared_post_ids(viewer_id)
+        reactions_by_post = await self._get_reactions_by_post([str(p.id) for p in page_posts])
 
         items = []
         for post in page_posts:
@@ -275,7 +341,8 @@ class PostService:
                 "updated_at": post.updated_at,
                 "is_liked_by_current_user": str(post.id) in liked_post_ids,
                 "is_shared_by_current_user": str(post.id) in shared_post_ids,
-                "is_owned_by_current_user": str(post.user_id) == viewer_id
+                "is_owned_by_current_user": str(post.user_id) == viewer_id,
+                **self._reaction_fields(reactions_by_post.get(str(post.id), []), viewer_id),
             })
 
         return {
@@ -283,6 +350,92 @@ class PostService:
             "page": page,
             "limit": limit,
             "items": items
+        }
+
+    # ============================================
+    # GET A USER'S SHARED POSTS (Profile "Shares" tab)
+    # ============================================
+
+    async def get_user_shares(
+        self,
+        target_user_id: str,
+        viewer_id: str,
+        page: int = 1,
+        limit: int = 20,
+    ) -> Dict[str, Any]:
+        """Posts a given user has shared, newest first - each item is the
+        ORIGINAL post (author, content, reactions, comments all untouched)
+        plus the share_by_* wrapper fields, same shape as a shared feed item.
+        Clicking one opens the original post's detail view on the frontend."""
+        offset = (page - 1) * limit
+
+        share_result = await self.db.execute(
+            select(Share)
+            .where(Share.user_id == target_user_id)
+            .order_by(desc(Share.created_at))
+            .options(selectinload(Share.user))
+        )
+        all_shares = share_result.scalars().all()
+
+        if not all_shares:
+            return {"total": 0, "page": page, "limit": limit, "items": []}
+
+        orig_result = await self.db.execute(
+            select(Post)
+            .where(Post.id.in_([s.post_id for s in all_shares]))
+            .options(selectinload(Post.user))
+        )
+        originals = {str(p.id): p for p in orig_result.scalars().all()}
+
+        visible_shares = [s for s in all_shares if await self._can_view_post(originals.get(str(s.post_id)), viewer_id)] \
+            if originals else []
+        # Guard against a share whose original post was deleted (no longer in `originals`).
+        visible_shares = [s for s in visible_shares if str(s.post_id) in originals]
+
+        total = len(visible_shares)
+        page_shares = visible_shares[offset:offset + limit]
+
+        liked_post_ids = await self._get_liked_post_ids(viewer_id)
+        shared_post_ids = await self._get_shared_post_ids(viewer_id)
+        reactions_by_post = await self._get_reactions_by_post(list({str(s.post_id) for s in page_shares}))
+
+        items = []
+        for share in page_shares:
+            post = originals[str(share.post_id)]
+            role = post.user.role if post.user else "student"
+            share_role = share.user.role if share.user else "student"
+            items.append({
+                "id": str(post.id),
+                "user_id": str(post.user_id),
+                "username": post.user.username if post.user else "Unknown",
+                "user_role": role,
+                "avatar_url": await self._get_avatar_url(str(post.user_id), role),
+                "content": post.content,
+                "type": post.type,
+                "visibility": post.visibility,
+                "media_urls": post.media_urls,
+                "likes_count": post.likes_count,
+                "comments_count": post.comments_count,
+                "shares_count": post.shares_count,
+                "created_at": post.created_at,
+                "updated_at": post.updated_at,
+                "is_liked_by_current_user": str(post.id) in liked_post_ids,
+                "is_shared_by_current_user": str(post.id) in shared_post_ids,
+                "is_owned_by_current_user": str(post.user_id) == viewer_id,
+                **self._reaction_fields(reactions_by_post.get(str(post.id), []), viewer_id),
+                "is_shared": True,
+                "shared_by_user_id": str(share.user_id),
+                "shared_by_username": share.user.username if share.user else "Unknown",
+                "shared_by_avatar_url": await self._get_avatar_url(str(share.user_id), share_role),
+                "shared_by_role": share_role,
+                "shared_at": share.created_at,
+            })
+
+        return {
+            "total": total,
+            "page": page,
+            "limit": limit,
+            "items": items,
         }
 
     # ============================================
@@ -358,7 +511,10 @@ class PostService:
     # ============================================
 
     async def share_post(self, post_id: str, user_id: str) -> dict:
-        """Record a share of a post - one share per user"""
+        """Record a share of a post - one share per user. Never creates a new
+        Post row - the share is just a (user_id, post_id) pointer, surfaced
+        as a feed/profile item by get_feed/get_user_shares joining back to
+        this same original post."""
         result = await self.db.execute(
             select(Post).where(Post.id == post_id)
         )
@@ -384,6 +540,17 @@ class PostService:
         await self.db.commit()
 
         logger.info(f"✅ Post {post_id} shared by user {user_id}")
+
+        try:
+            from app.websocket.manager import manager
+            await manager.send_to_room(
+                f"post_{post_id}",
+                "post:share_updated",
+                {"post_id": str(post_id), "shares_count": post.shares_count, "shared_by_user_id": str(user_id)},
+            )
+        except Exception as e:
+            logger.error(f"❌ Failed to broadcast post share: {e}")
+
         return {"shares_count": post.shares_count, "already_shared": False}
 
     # ============================================
@@ -479,6 +646,102 @@ class PostService:
             select(Share.post_id).where(Share.user_id == user_id)
         )
         return [str(id) for id in result.scalars().all()]
+
+    # ============================================
+    # REACTIONS (multi-emoji, separate from the older binary Like table)
+    # ============================================
+
+    async def _get_reactions_by_post(self, post_ids: List[str]) -> Dict[str, List[PostReaction]]:
+        """Batch-fetch every reaction for a set of posts in one query, grouped
+        by post_id - avoids an N+1 query per post when building a feed page."""
+        if not post_ids:
+            return {}
+        result = await self.db.execute(
+            select(PostReaction).where(PostReaction.post_id.in_(post_ids))
+        )
+        by_post: Dict[str, List[PostReaction]] = {}
+        for r in result.scalars().all():
+            by_post.setdefault(str(r.post_id), []).append(r)
+        return by_post
+
+    def _reaction_fields(self, reactions: List[PostReaction], user_id: str) -> Dict[str, Any]:
+        """Shapes a list of PostReaction rows into the three response fields
+        every post dict exposes: total count, per-emoji breakdown, and the
+        current viewer's own reaction (if any)."""
+        breakdown: Dict[str, int] = {}
+        my_reaction = None
+        for r in reactions:
+            breakdown[r.reaction] = breakdown.get(r.reaction, 0) + 1
+            if str(r.user_id) == user_id:
+                my_reaction = r.reaction
+        return {
+            "reactions_count": len(reactions),
+            "reaction_breakdown": breakdown,
+            "my_reaction": my_reaction,
+        }
+
+    async def react_to_post(self, post_id: str, user_id: str, reaction: str) -> dict:
+        """Add/change/remove the caller's reaction. Same reaction twice
+        removes it; a different reaction replaces it - mirrors
+        AnnouncementService.react_to_announcement for consistency."""
+        if reaction not in ALLOWED_REACTIONS:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported reaction")
+
+        post_result = await self.db.execute(select(Post).where(Post.id == post_id))
+        post = post_result.scalar_one_or_none()
+        if not post:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
+        if not await self._can_view_post(post, user_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to react to this post",
+            )
+
+        existing_result = await self.db.execute(
+            select(PostReaction).where(
+                PostReaction.post_id == post_id,
+                PostReaction.user_id == user_id,
+            )
+        )
+        existing = existing_result.scalar_one_or_none()
+
+        if existing and existing.reaction == reaction:
+            await self.db.delete(existing)
+            new_reaction = None
+        elif existing:
+            existing.reaction = reaction
+            new_reaction = reaction
+        else:
+            self.db.add(PostReaction(post_id=post_id, user_id=user_id, reaction=reaction))
+            new_reaction = reaction
+
+        await self.db.commit()
+
+        all_result = await self.db.execute(select(PostReaction).where(PostReaction.post_id == post_id))
+        all_reactions = all_result.scalars().all()
+        breakdown: Dict[str, int] = {}
+        for r in all_reactions:
+            breakdown[r.reaction] = breakdown.get(r.reaction, 0) + 1
+
+        payload = {
+            "post_id": str(post_id),
+            "user_id": str(user_id),
+            "reaction": new_reaction,
+            "reactions_count": len(all_reactions),
+            "reaction_breakdown": breakdown,
+        }
+
+        # Best-effort real-time push to anyone currently viewing this post
+        # (PostDetailModal or a PostCard on someone's feed - see usePostRoom
+        # on the frontend, which joins `post_{id}` while mounted). Never lets
+        # a broadcast failure fail the actual reaction write above.
+        try:
+            from app.websocket.manager import manager
+            await manager.send_to_room(f"post_{post_id}", "post:reaction_updated", payload)
+        except Exception as e:
+            logger.error(f"❌ Failed to broadcast post reaction: {e}")
+
+        return payload
 
     async def _can_view_post(self, post: Post, user_id: str) -> bool:
         """Check if a user can view a post"""

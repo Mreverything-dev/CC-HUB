@@ -56,6 +56,7 @@ export default function AdminDashboard() {
     (location.state as { section?: SidebarSection } | null)?.section || 'feed'
   );
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [showCreateAnnouncement, setShowCreateAnnouncement] = useState(false);
   const [showCreateSection, setShowCreateSection] = useState(false);
   const { liveStreams, upcomingStreams, isLoading: streamsLoading } = useLiveStreamsFeed(true);
@@ -106,10 +107,19 @@ export default function AdminDashboard() {
         }}
       />
 
-      <Sidebar activeSection={activeSection} onNavigate={setActiveSection} />
+      <Sidebar
+        activeSection={activeSection}
+        onNavigate={setActiveSection}
+        isMobileOpen={isMobileNavOpen}
+        onCloseMobile={() => setIsMobileNavOpen(false)}
+      />
 
       <div className="flex-1 min-w-0 flex flex-col">
-        <Topbar avatarUrl={avatarUrl} onOpenFriends={() => setActiveSection('friends')} />
+        <Topbar
+          avatarUrl={avatarUrl}
+          onOpenFriends={() => setActiveSection('friends')}
+          onOpenMenu={() => setIsMobileNavOpen(true)}
+        />
 
         <main className="relative flex-1 max-w-7xl w-full mx-auto px-4 py-6 lg:px-8">
           {activeSection === 'feed' && (

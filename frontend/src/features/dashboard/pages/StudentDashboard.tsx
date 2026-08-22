@@ -13,7 +13,6 @@ import { useAuthStore } from '@/features/auth/store/auth.store';
 import { profileService } from '@/services/api/profile.service';
 import { Sidebar, SidebarSection } from '@/features/dashboard/components/Sidebar';
 import { Topbar } from '@/features/dashboard/components/Topbar';
-import { FeedTabs, FeedFilter } from '@/features/dashboard/components/FeedTabs';
 import { AnnouncementWidget } from '@/features/dashboard/components/AnnouncementWidget';
 import { SectionWidget } from '@/features/dashboard/components/SectionWidget';
 import { EventCardList } from '@/features/dashboard/components/EventCard';
@@ -30,8 +29,8 @@ export default function StudentDashboard() {
   const [activeSection, setActiveSection] = useState<SidebarSection>(
     (location.state as { section?: SidebarSection } | null)?.section || 'feed'
   );
-  const [feedFilter, setFeedFilter] = useState<FeedFilter>('all');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   // Posts
   const {
@@ -40,6 +39,7 @@ export default function StudentDashboard() {
     isPosting,
     createPost,
     toggleLike,
+    reactToPost,
     deletePost,
     editPost,
   } = useFeed();
@@ -79,13 +79,6 @@ export default function StudentDashboard() {
     await createPost(data);
   };
 
-  const emptyFeedMessage: Record<FeedFilter, string> = {
-    all: '',
-    following: "You're not following anyone yet.",
-    section: mySection ? 'Section-specific feeds are coming soon.' : 'Join a section to see section posts.',
-    saved: "You haven't saved any posts yet.",
-  };
-
   return (
     <div className="min-h-screen bg-[#07111A] text-[#F1F5F9] flex">
       {/* Subtle grid background */}
@@ -98,10 +91,19 @@ export default function StudentDashboard() {
         }}
       />
 
-      <Sidebar activeSection={activeSection} onNavigate={setActiveSection} />
+      <Sidebar
+        activeSection={activeSection}
+        onNavigate={setActiveSection}
+        isMobileOpen={isMobileNavOpen}
+        onCloseMobile={() => setIsMobileNavOpen(false)}
+      />
 
       <div className="flex-1 min-w-0 flex flex-col">
-        <Topbar avatarUrl={avatarUrl} onOpenFriends={() => setActiveSection('friends')} />
+        <Topbar
+          avatarUrl={avatarUrl}
+          onOpenFriends={() => setActiveSection('friends')}
+          onOpenMenu={() => setIsMobileNavOpen(true)}
+        />
 
         <main className="relative flex-1 max-w-7xl w-full mx-auto px-4 py-6 sm:px-6 lg:px-8">
           {activeSection === 'feed' && (
@@ -123,16 +125,10 @@ export default function StudentDashboard() {
                   </div>
                 </div>
 
-                <FeedTabs active={feedFilter} onChange={setFeedFilter} />
-
                 <CreatePost onCreatePost={handleCreatePost} isLoading={isPosting} dark avatarUrl={avatarUrl} />
 
                 <div className="space-y-4">
-                  {feedFilter !== 'all' ? (
-                    <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-10 text-center">
-                      <p className="text-sm text-[#94A3B8]">{emptyFeedMessage[feedFilter]}</p>
-                    </div>
-                  ) : postsLoading && postList.length === 0 ? (
+                  {postsLoading && postList.length === 0 ? (
                     <div className="space-y-4">
                       {[0, 1, 2].map((i) => (
                         <div
@@ -161,6 +157,7 @@ export default function StudentDashboard() {
                         key={post.id}
                         {...post}
                         onLike={toggleLike}
+                        onReact={reactToPost}
                         onDelete={deletePost}
                         onEdit={editPost}
                         dark

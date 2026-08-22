@@ -4,8 +4,8 @@ from app.models.profile import StudentProfile, ProfessorProfile, AdminProfile
 from app.models.section import Section, SectionMember, SectionConversation
 from app.models.teaching_assignment import TeachingAssignment
 from app.models.announcement import Announcement, AnnouncementTarget, AnnouncementReaction, AnnouncementBookmark
-from app.models.post import Post, PostMedia
-from app.models.comment import Comment
+from app.models.post import Post, PostMedia, PostReaction
+from app.models.comment import Comment, CommentReaction
 from app.models.like import Like
 from app.models.share import Share
 from app.models.friend import Friend, FriendRequest, BlockedUser, UserReport
@@ -27,7 +27,9 @@ __all__ = [
     "TeachingAssignment",
     "Post",
     "PostMedia",
+    "PostReaction",
     "Comment",
+    "CommentReaction",
     "Like",
     "Share",
     "Friend",

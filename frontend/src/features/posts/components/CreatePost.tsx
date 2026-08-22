@@ -2,7 +2,7 @@
 import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/Button/Button';
 import { useAuthStore } from '@/features/auth/store/auth.store';
-import { PhotoIcon, XMarkIcon, FaceSmileIcon, CodeBracketIcon } from '@heroicons/react/24/outline';
+import { PhotoIcon, XMarkIcon, CodeBracketIcon } from '@heroicons/react/24/outline';
 import { mediaService } from '@/services/api/media.service';
 import CreatePostModal from './CreatePostModal';
 
@@ -59,14 +59,7 @@ export function CreatePost({ onCreatePost, isLoading = false, dark = false, avat
               <PhotoIcon className="h-4 w-4" />
               Upload
             </button>
-            <button
-              type="button"
-              onClick={() => setShowModal(true)}
-              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-sm font-medium text-[#94A3B8] hover:text-[#00C8FF] hover:bg-[#00C8FF]/10 rounded-xl transition"
-            >
-              <FaceSmileIcon className="h-4 w-4" />
-              Emoji
-            </button>
+            
             <button
               type="button"
               onClick={() => setShowModal(true)}

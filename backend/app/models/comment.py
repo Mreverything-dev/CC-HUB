@@ -1,5 +1,5 @@
 # backend/app/models/comment.py
-from sqlalchemy import Column, String, Text, ForeignKey, DateTime, Integer, and_
+from sqlalchemy import Column, String, Text, ForeignKey, DateTime, Integer, Index, and_
 from app.core.db_types import UTCDateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship, foreign
@@ -33,3 +33,27 @@ class Comment(Base):
         viewonly=True,
         cascade="all, delete-orphan",
     )
+
+
+class CommentReaction(Base):
+    """One Discord-style emoji reaction per user per comment - mirrors
+    PostReaction exactly (see post.py). Separate from the older binary
+    `Like` table, which stays intact for backward compat."""
+    __tablename__ = "comment_reactions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    comment_id = Column(UUID(as_uuid=True), ForeignKey("comments.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    reaction = Column(String(16), nullable=False)
+    created_at = Column(UTCDateTime, default=datetime.utcnow)
+
+    comment = relationship("Comment")
+    user = relationship("User")
+
+
+Index(
+    "uq_comment_reactions_comment_user",
+    CommentReaction.comment_id,
+    CommentReaction.user_id,
+    unique=True,
+)

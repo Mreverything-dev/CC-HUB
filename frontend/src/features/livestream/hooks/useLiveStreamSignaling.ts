@@ -119,6 +119,22 @@ export function useLiveStreamSignaling({ streamId, isHost, enabled, onClaimedPip
   const compositeStreamRef = useRef<MediaStream | null>(null);
   const compositeIntervalRef = useRef<number | null>(null);
   const pipConfigRef = useRef<PipConfig>(DEFAULT_PIP_CONFIG);
+  // HOST only: mirrors the video compositing pipeline above, but for audio -
+  // WebRTC sends one audio track per sender too, so "mic AND system/desktop
+  // audio together" needs the two source tracks mixed into a single track
+  // via the Web Audio API before sending, same idea as the canvas composite.
+  // Whether system audio should be included at all (independent of whether
+  // the mic is on - see updateOutgoingAudioSource) - seeded from GoLiveModal's
+  // handoff, defaults off since a page refresh/direct link never has a
+  // screen-share audio track to begin with.
+  const isSystemAudioOnRef = useRef(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const mixedAudioDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
+  const micAudioSourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const systemAudioSourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  // Whichever audio track is currently being sent to viewers (mic-only,
+  // system-audio-only, or the mixed track) - mirrors activeVideoTrackRef.
+  const activeAudioTrackRef = useRef<MediaStreamTrack | null>(null);
   // VIEWER only: the remote stream, built defensively by accumulating
   // tracks from `ontrack` rather than trusting `event.streams[0]` alone -
   // some paths/browsers can deliver that array empty even though the track
@@ -278,15 +294,18 @@ export function useLiveStreamSignaling({ streamId, isHost, enabled, onClaimedPip
         return;
       }
       const pc = createPeerConnection(viewerSid);
-      // Send whichever video track is currently live (camera or screen-share)
-      // plus the mic audio, so viewers who join mid-share see the screen too.
+      // Send whichever video/audio track is currently live (camera or
+      // screen-share video; mic, system audio, or a mix of both - see
+      // updateOutgoingAudioSource), so viewers who join mid-share get the
+      // right source instead of whatever was true at connection start.
       const videoTrack = activeVideoTrackRef.current ?? localStream.getVideoTracks()[0];
+      const audioTrack = activeAudioTrackRef.current ?? localStream.getAudioTracks()[0];
       console.log('[WebRTC] Adding tracks to peer connection for viewer', viewerSid, {
         video: videoTrack ? 1 : 0,
-        audio: localStream.getAudioTracks().length,
+        audio: audioTrack ? 1 : 0,
       });
       if (videoTrack) pc.addTrack(videoTrack, localStream);
-      localStream.getAudioTracks().forEach((track) => pc.addTrack(track, localStream));
+      if (audioTrack) pc.addTrack(audioTrack, localStream);
       try {
         console.log('[WebRTC] Creating offer');
         const offer = await pc.createOffer();
@@ -339,6 +358,7 @@ export function useLiveStreamSignaling({ streamId, isHost, enabled, onClaimedPip
         // separately later) is what avoids racing the one-shot claim above.
         pipConfigRef.current = pending.pipConfig;
         onClaimedPipConfig?.(pending.pipConfig);
+        isSystemAudioOnRef.current = pending.isSystemAudioOn;
       }
 
       let mediaStream: MediaStream;
@@ -404,6 +424,7 @@ export function useLiveStreamSignaling({ streamId, isHost, enabled, onClaimedPip
       // connections exist yet, but this is what offerToViewer reads from
       // the moment the first viewer joins, so it must be correct by now.
       updateOutgoingVideoSource();
+      updateOutgoingAudioSource();
       setHasLocalMedia(true);
     })();
 
@@ -414,6 +435,11 @@ export function useLiveStreamSignaling({ streamId, isHost, enabled, onClaimedPip
       }
       mediaRecorderRef.current = null;
       stopCompositing();
+      stopAudioMixing();
+      audioContextRef.current?.close().catch(() => {});
+      audioContextRef.current = null;
+      isSystemAudioOnRef.current = false;
+      activeAudioTrackRef.current = null;
       screenStreamRef.current?.getTracks().forEach((t) => t.stop());
       screenStreamRef.current = null;
       localStreamRef.current?.getTracks().forEach((t) => t.stop());
@@ -653,6 +679,86 @@ export function useLiveStreamSignaling({ streamId, isHost, enabled, onClaimedPip
     [renegotiate]
   );
 
+  /** Mirrors replaceOutgoingVideoTrack, for audio. Never called with `null`
+   * (see updateOutgoingAudioSource - "nothing to send" is represented by
+   * sending a disabled/silent track, exactly how the pre-existing
+   * microphone mute already worked), so a sender's track is always
+   * identifiable by kind on every call, same guarantee the video version
+   * already relies on. */
+  const replaceOutgoingAudioTrack = useCallback(
+    (track: MediaStreamTrack) => {
+      activeAudioTrackRef.current = track;
+      peersRef.current.forEach((pc, remoteSid) => {
+        const sender = pc.getSenders().find((s) => s.track?.kind === 'audio');
+        if (sender) {
+          sender.replaceTrack(track).catch((err) => console.error('[WebRTC] replaceTrack (audio) failed:', err));
+        } else {
+          pc.addTrack(track);
+          renegotiate(remoteSid, pc);
+        }
+      });
+    },
+    [renegotiate]
+  );
+
+  const stopAudioMixing = useCallback(() => {
+    micAudioSourceNodeRef.current?.disconnect();
+    micAudioSourceNodeRef.current = null;
+    systemAudioSourceNodeRef.current?.disconnect();
+    systemAudioSourceNodeRef.current = null;
+    mixedAudioDestRef.current?.stream.getTracks().forEach((t) => t.stop());
+    mixedAudioDestRef.current = null;
+  }, []);
+
+  /** Decides what viewers should actually hear right now - mic-only, system
+   * (desktop) audio only, both mixed together via the Web Audio API, or
+   * silence - and swaps the outgoing audio track accordingly. Mirrors
+   * updateOutgoingVideoSource's "decide, then replaceTrack" shape exactly.
+   *
+   * Muting is handled entirely through each source track's own `.enabled`
+   * flag (exactly how the microphone toggle already worked before this),
+   * never by swapping to a null track - a disabled track still sends
+   * silence over WebRTC, and a MediaStreamAudioSourceNode still respects its
+   * source track's `.enabled` when feeding the mixer. That's what makes all
+   * four Mic/System combinations fall out of just two real branches below,
+   * with no separate "both off" case to hand-write. */
+  const updateOutgoingAudioSource = useCallback(() => {
+    const micTrack = localStreamRef.current?.getAudioTracks()[0] ?? null;
+    const systemTrack = isSystemAudioOnRef.current
+      ? screenStreamRef.current?.getAudioTracks().find((t) => t.readyState === 'live') ?? null
+      : null;
+
+    if (micTrack && systemTrack) {
+      if (!audioContextRef.current) audioContextRef.current = new AudioContext();
+      const ctx = audioContextRef.current;
+      ctx.resume().catch(() => {});
+      if (!mixedAudioDestRef.current) mixedAudioDestRef.current = ctx.createMediaStreamDestination();
+      const dest = mixedAudioDestRef.current;
+
+      // Source nodes are tied to whatever track they were created from, so
+      // they're rebuilt any time this recomputes (cheap, and idempotent
+      // callers like screen-share start/stop don't run often enough for
+      // that to matter).
+      micAudioSourceNodeRef.current?.disconnect();
+      micAudioSourceNodeRef.current = ctx.createMediaStreamSource(new MediaStream([micTrack]));
+      micAudioSourceNodeRef.current.connect(dest);
+
+      systemAudioSourceNodeRef.current?.disconnect();
+      systemAudioSourceNodeRef.current = ctx.createMediaStreamSource(new MediaStream([systemTrack]));
+      systemAudioSourceNodeRef.current.connect(dest);
+
+      const mixedTrack = dest.stream.getAudioTracks()[0];
+      if (mixedTrack) {
+        replaceOutgoingAudioTrack(mixedTrack);
+        return;
+      }
+    }
+
+    stopAudioMixing();
+    const fallbackTrack = systemTrack ?? micTrack;
+    if (fallbackTrack) replaceOutgoingAudioTrack(fallbackTrack);
+  }, [replaceOutgoingAudioTrack, stopAudioMixing]);
+
   const stopCompositing = useCallback(() => {
     if (compositeIntervalRef.current !== null) {
       clearInterval(compositeIntervalRef.current);
@@ -809,12 +915,16 @@ export function useLiveStreamSignaling({ streamId, isHost, enabled, onClaimedPip
   }, []);
 
   const stopScreenShare = useCallback(() => {
+    // .getTracks() covers the system-audio track too, if there was one -
+    // it lives on this same MediaStream, not a separate one.
     screenStreamRef.current?.getTracks().forEach((t) => t.stop());
     screenStreamRef.current = null;
     setIsScreenSharing(false);
+    isSystemAudioOnRef.current = false;
     if (videoElRef.current) videoElRef.current.srcObject = localStreamRef.current;
     updateOutgoingVideoSource();
-  }, [updateOutgoingVideoSource]);
+    updateOutgoingAudioSource();
+  }, [updateOutgoingVideoSource, updateOutgoingAudioSource]);
 
   const startScreenShare = useCallback(async () => {
     if (!isHost) return;
@@ -826,7 +936,14 @@ export function useLiveStreamSignaling({ streamId, isHost, enabled, onClaimedPip
       screenStreamRef.current = screenStream;
       if (videoElRef.current) videoElRef.current.srcObject = screenStream;
       setIsScreenSharing(true);
+      // Whatever system/desktop-audio track the browser happened to grant
+      // for this share (never guaranteed) is included by default - there's
+      // no GoLiveModal-equivalent setup step for a mid-broadcast screen
+      // share to have set this via, so "on if available" is the only sane
+      // default (same as GoLiveModal's own default-on-when-available).
+      isSystemAudioOnRef.current = screenStream.getAudioTracks().length > 0;
       updateOutgoingVideoSource();
+      updateOutgoingAudioSource();
 
       // Browser's native "Stop sharing" bar/button ends the track directly.
       screenTrack.onended = () => stopScreenShare();
@@ -834,7 +951,7 @@ export function useLiveStreamSignaling({ streamId, isHost, enabled, onClaimedPip
       // User cancelling the picker rejects the promise - not a real error.
       console.warn('[WebRTC] Screen share not started:', err);
     }
-  }, [isHost, updateOutgoingVideoSource, stopScreenShare]);
+  }, [isHost, updateOutgoingVideoSource, updateOutgoingAudioSource, stopScreenShare]);
 
   const toggleScreenShare = useCallback(() => {
     if (isScreenSharing) {

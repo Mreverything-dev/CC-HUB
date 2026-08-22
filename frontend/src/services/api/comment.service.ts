@@ -19,7 +19,14 @@ export const commentService = {
   deleteComment: (commentId: string) =>
     api.delete(`/comments/${commentId}`),
 
-  // Toggle like on a comment
+  // Toggle like on a comment - kept for backward compatibility; new UI uses reactToComment.
   likeComment: (commentId: string) =>
     api.post<{ liked: boolean; likes_count: number }>(`/comments/${commentId}/like`),
+
+  // Add/change/remove the caller's emoji reaction on a comment.
+  reactToComment: (commentId: string, reaction: string) =>
+    api.post<{ post_id: string; comment_id: string; user_id: string; reaction: string | null; reactions_count: number; reaction_breakdown: Record<string, number> }>(
+      `/comments/${commentId}/react`,
+      { reaction }
+    ),
 };

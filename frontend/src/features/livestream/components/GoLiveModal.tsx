@@ -14,6 +14,8 @@ import {
   VideoCameraIcon,
   VideoCameraSlashIcon,
   MicrophoneIcon,
+  SpeakerWaveIcon,
+  SpeakerXMarkIcon,
   ComputerDesktopIcon,
   WindowIcon,
   PuzzlePieceIcon,
@@ -199,6 +201,13 @@ export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalPro
   const [isStartingScreen, setIsStartingScreen] = useState<ScreenSourceKind | null>(null);
   const [screenError, setScreenError] = useState<string | null>(null);
 
+  // System/desktop audio - piggybacks on the same getDisplayMedia() call as
+  // the screen/window/game share above (there's no separate capture API for
+  // it), so it can only ever be true once a share is active AND the browser
+  // actually granted an audio track for the chosen source - never assumed.
+  const [isSystemAudioOn, setIsSystemAudioOn] = useState(false);
+  const [systemAudioAvailable, setSystemAudioAvailable] = useState(false);
+
   // Camera picture-in-picture (only relevant once a screen/window/game
   // source is primary and the camera is also on)
   const [pipPosition, setPipPosition] = useState<PipPosition>('bottom-right');
@@ -372,9 +381,14 @@ export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalPro
   };
 
   const stopScreenShare = useCallback(() => {
+    // .getTracks() covers the system-audio track too (it lives on this same
+    // MediaStream, not a separate one) - stopping it here and resetting the
+    // System Sound state below is the only cleanup it needs.
     screenStreamRef.current?.getTracks().forEach((track) => track.stop());
     screenStreamRef.current = null;
     setScreenSourceType(null);
+    setSystemAudioAvailable(false);
+    setIsSystemAudioOn(false);
   }, []);
 
   // Window/Game both use the exact same Screen Capture API as Screen - the
@@ -396,6 +410,16 @@ export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalPro
       screenStreamRef.current?.getTracks().forEach((track) => track.stop());
       screenStreamRef.current = stream;
       setScreenSourceType(kind);
+
+      // Whether the browser actually granted a system/desktop-audio track
+      // for this particular screen/window/game - entirely up to the browser
+      // and what the user picked in its share dialog, never guaranteed just
+      // because audio: true was requested above. Defaults ON when available
+      // (matches the microphone's own default-on convention); stays fully
+      // OFF - never shown as active - when it isn't.
+      const hasSystemAudio = stream.getAudioTracks().length > 0;
+      setSystemAudioAvailable(hasSystemAudio);
+      setIsSystemAudioOn(hasSystemAudio);
 
       const [screenTrack] = stream.getVideoTracks();
       if (screenTrack) {
@@ -420,6 +444,13 @@ export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalPro
       startScreenShare(kind);
     }
   };
+
+  // Purely a preference flag, not a track mutation - kept separate from the
+  // microphone's toggle (which does flip .enabled on its track directly)
+  // because the live broadcast decides whether to actually mix this track in
+  // based on this flag once handed off (see useLiveStreamSignaling), the
+  // same way pipConfig.hidden is a flag rather than a track stop/start.
+  const toggleSystemAudio = () => setIsSystemAudioOn((v) => !v);
 
   const handleThumbnailSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -512,6 +543,7 @@ export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalPro
           cameraStream: cameraStreamRef.current,
           screenStream: screenStreamRef.current,
           isMicOn,
+          isSystemAudioOn: systemAudioAvailable && isSystemAudioOn,
           pipConfig: { position: pipPosition, size: pipSize, mirrored: isPipMirrored, hidden: isPipHidden },
         });
         handedOffStreamsRef.current = true;
@@ -556,6 +588,8 @@ export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalPro
     : screenError
     ? 'unavailable'
     : 'unavailable';
+  const systemAudioHealth: HealthState =
+    screenSourceType === null ? 'unavailable' : systemAudioAvailable && isSystemAudioOn ? 'ready' : 'unavailable';
 
   return (
     <div
@@ -768,6 +802,35 @@ export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalPro
                   <ToggleSwitch checked={isMicOn} onChange={toggleMic} disabled={!isCameraOn} />
                 </div>
 
+                {/* System sound - independent of the microphone above; both
+                    can be on, off, or any combination (see
+                    useLiveStreamSignaling, which mixes the two together for
+                    the actual broadcast once live). Only ever shown as ON
+                    when the browser actually granted an audio track for the
+                    chosen screen/window/game - never assumed. */}
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-2 text-sm text-[#F1F5F9]">
+                    {systemAudioAvailable && isSystemAudioOn ? (
+                      <SpeakerWaveIcon className="h-4 w-4 text-[#22C55E]" />
+                    ) : (
+                      <SpeakerXMarkIcon className="h-4 w-4 text-[#64748B]" />
+                    )}
+                    System Sound
+                  </span>
+                  {screenSourceType === null ? (
+                    <span className="text-[11px] text-[#64748B]">Share your screen first</span>
+                  ) : systemAudioAvailable ? (
+                    <ToggleSwitch checked={isSystemAudioOn} onChange={toggleSystemAudio} />
+                  ) : (
+                    <span className="text-[11px] font-medium text-[#EF4444]">Unavailable</span>
+                  )}
+                </div>
+                {screenSourceType !== null && !systemAudioAvailable && (
+                  <p className="text-[11px] text-[#64748B] -mt-1.5">
+                    System sound isn't available for this screen. The livestream will still work normally.
+                  </p>
+                )}
+
                 {(videoDevices.length > 0 || audioDevices.length > 0) && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                     {videoDevices.length > 0 && (
@@ -817,6 +880,7 @@ export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalPro
                 <HealthDot label="Camera" state={cameraHealth} />
                 <HealthDot label="Microphone" state={micHealth} />
                 <HealthDot label="Screen" state={screenHealth} />
+                <HealthDot label="System Sound" state={systemAudioHealth} />
               </div>
             </div>
 

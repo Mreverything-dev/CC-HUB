@@ -52,13 +52,13 @@ class Settings(BaseSettings):
         r"172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}):(3000|5173)$"
     )
     
-    MINIO_ENDPOINT: str = "localhost:9000"
+    MINIO_ENDPOINT: str = "192.168.0.107:9000"
     MINIO_ACCESS_KEY: str = "minioadmin"
     MINIO_SECRET_KEY: str = "minioadmin"
     MINIO_BUCKET: str = "ccs-hub"
     MINIO_SECURE: bool = False
     MINIO_PUBLIC_URL: Optional[str] = None  # For CDN/nginx proxy
-    MINIO_PUBLIC_URL: Optional[str] = "http://localhost:9000"
+    MINIO_PUBLIC_URL: Optional[str] = "http://192.168.0.107:9000"
     # App
     DEBUG: str = "True"
     LOG_LEVEL: str = "INFO"

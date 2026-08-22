@@ -1,10 +1,12 @@
 // frontend/src/features/dashboard/components/Topbar.tsx
 import { useNavigate } from 'react-router-dom';
+import { CodeXml } from 'lucide-react';
 import {
   MagnifyingGlassIcon,
   ChatBubbleLeftIcon,
   UserGroupIcon,
   ChevronDownIcon,
+  Bars3Icon,
 } from '@heroicons/react/24/outline';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { useChat } from '@/features/chat/hooks/useChat';
@@ -15,17 +17,37 @@ import { RoleBadge } from './RoleBadge';
 interface TopbarProps {
   avatarUrl: string | null;
   onOpenFriends?: () => void;
+  /** Opens the mobile Sidebar drawer. Omitted on any page that doesn't wire
+   * up the drawer, in which case the hamburger simply isn't rendered. */
+  onOpenMenu?: () => void;
 }
 
-export function Topbar({ avatarUrl, onOpenFriends }: TopbarProps) {
+export function Topbar({ avatarUrl, onOpenFriends, onOpenMenu }: TopbarProps) {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const { unreadCount, toggleWidget } = useChat();
 
   return (
-    <header className="sticky top-0 z-30 flex items-center gap-4 border-b border-[rgba(0,200,245,0.1)] bg-[#070D13]/90 backdrop-blur-xl px-4 py-3 lg:px-8">
-      {/* Search */}
-      <div className="relative flex-1 max-w-md">
+    <header className="sticky top-0 z-30 flex items-center gap-2 sm:gap-4 border-b border-[rgba(0,200,245,0.1)] bg-[#070D13]/90 backdrop-blur-xl px-3 py-3 sm:px-4 lg:px-8">
+      {/* Mobile-only: hamburger (opens the Sidebar drawer) + compact brand
+          mark, since the full Sidebar - and its logo - is hidden below lg:. */}
+      {onOpenMenu && (
+        <button
+          onClick={onOpenMenu}
+          title="Open menu"
+          aria-label="Open menu"
+          className="lg:hidden flex-shrink-0 p-2 -ml-1 text-[#94A3B8] hover:text-[#00C8FF] hover:bg-white/5 rounded-xl transition"
+        >
+          <Bars3Icon className="h-6 w-6" />
+        </button>
+      )}
+      <div className="lg:hidden flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-[#00C8FF]/40 bg-[#00C8FF]/10">
+        <CodeXml className="h-4 w-4 text-[#00C8FF]" />
+      </div>
+
+      {/* Search - hidden below sm: to keep the hamburger/brand/actions from
+          overflowing on the narrowest phone widths. */}
+      <div className="relative flex-1 max-w-md hidden sm:block">
         <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#64748B]" />
         <input
           type="text"
@@ -37,7 +59,7 @@ export function Topbar({ avatarUrl, onOpenFriends }: TopbarProps) {
       <div className="flex-1" />
 
       {/* Actions */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-0.5 sm:gap-2 flex-shrink-0">
         <button
           onClick={() => (onOpenFriends ? onOpenFriends() : navigate('/friends'))}
           title="Friends"

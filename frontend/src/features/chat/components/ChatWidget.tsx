@@ -47,7 +47,11 @@ export function ChatWidget() {
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 w-[22rem] sm:w-96 h-[32rem] max-h-[calc(100vh-3rem)] rounded-2xl border border-[#2a2a2a] shadow-[0_8px_40px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col">
+    // left-4/right-4 (both) on mobile makes this a full-width-minus-margins
+    // sheet instead of a fixed 22rem box docked to the corner - at 320-375px
+    // wide, w-[22rem] (352px) anchored only via right-6 ran off the left
+    // edge of the screen. sm: and up restores the original docked corner.
+    <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:bottom-6 sm:right-6 z-50 sm:w-96 h-[32rem] max-h-[calc(100vh-3rem)] rounded-2xl border border-[#2a2a2a] shadow-[0_8px_40px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col">
       {/* Widget chrome - back (when viewing a conversation) + close */}
       <div className="flex items-center justify-between px-2 py-1.5 border-b border-[#2a2a2a] bg-[#141414]/70 backdrop-blur-xl flex-shrink-0">
         {selectedConversationId ? (

@@ -2,6 +2,7 @@
 from sqlalchemy import Column, ForeignKey, DateTime, UniqueConstraint
 from app.core.db_types import UTCDateTime
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 from app.core.database import Base
 import uuid
 from datetime import datetime
@@ -16,3 +17,6 @@ class Share(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
     post_id = Column(UUID(as_uuid=True), ForeignKey("posts.id", ondelete="CASCADE"))
     created_at = Column(UTCDateTime, default=datetime.utcnow)
+
+    user = relationship("User")
+    post = relationship("Post")

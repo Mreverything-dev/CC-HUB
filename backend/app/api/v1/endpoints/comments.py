@@ -5,7 +5,7 @@ from app.core.database import get_db
 from app.dependencies.auth import get_current_user
 from app.models.user import User
 from app.services.comment_service import CommentService
-from app.schemas.comment import CommentCreate, CommentUpdate, CommentResponse, CommentListResponse
+from app.schemas.comment import CommentCreate, CommentUpdate, CommentResponse, CommentListResponse, ReactionRequest
 
 router = APIRouter()
 
@@ -104,6 +104,23 @@ async def toggle_comment_like(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Like or unlike a comment"""
+    """Like or unlike a comment - kept as-is for backward compatibility.
+    New clients should use POST /{comment_id}/react instead."""
     service = CommentService(db)
     return await service.toggle_like(comment_id, str(current_user.id))
+
+# ============================================
+# MULTI-EMOJI REACTIONS ON A COMMENT
+# ============================================
+
+@router.post("/{comment_id}/react")
+async def react_to_comment(
+    comment_id: str,
+    data: ReactionRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Add/change/remove the caller's emoji reaction on a comment. Broadcasts
+    the resulting reaction state to everyone currently viewing the post."""
+    service = CommentService(db)
+    return await service.react_to_comment(comment_id, str(current_user.id), data.reaction)

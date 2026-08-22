@@ -276,9 +276,19 @@ class SocketService {
     }
   }
 
-  off(event: string) {
+  /**
+   * Pass the SAME callback reference given to `on()` to remove only that one
+   * listener (socket.io-client's own off(event, listener) behavior) -
+   * omitting it removes every listener for that event name, which is only
+   * safe when nothing else in the app could also be listening for it at the
+   * same time. Post/comment real-time updates are listened to from more
+   * than one place at once (a PostDetailModal open on top of the still-
+   * mounted dashboard feed behind it), so callers there must always pass
+   * the callback to avoid tearing down each other's subscriptions.
+   */
+  off(event: string, callback?: (...args: any[]) => void) {
     if (this.socket) {
-      this.socket.off(event);
+      this.socket.off(event, callback);
     }
   }
 
@@ -314,6 +324,20 @@ class SocketService {
 
   reactToMessage(messageId: string, reaction: string) {
     this.emit('message:react', { message_id: messageId, reaction });
+  }
+
+  // Posts - reuses the same generic join_room/leave_room the server already
+  // supports for any room name (see manager.py), no new socket handlers
+  // needed server-side. A client joins a post's room while it's visible
+  // (PostCard on a feed, or PostDetailModal open) to receive
+  // post:reaction_updated / post:comment_added / post:comment_deleted /
+  // post:comment_reaction_updated / post:share_updated in real time.
+  joinPostRoom(postId: string) {
+    this.emit('join_room', { room: `post_${postId}` });
+  }
+
+  leavePostRoom(postId: string) {
+    this.emit('leave_room', { room: `post_${postId}` });
   }
 
   // Livestream signaling - the server only relays these between the host and

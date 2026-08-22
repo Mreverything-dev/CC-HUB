@@ -14,6 +14,9 @@ export interface Comment {
   updated_at: string;
   is_liked_by_current_user: boolean;
   is_owned_by_current_user: boolean;
+  reactions_count: number;
+  reaction_breakdown: Record<string, number>;
+  my_reaction: string | null;
 }
 
 export interface CommentCreate {

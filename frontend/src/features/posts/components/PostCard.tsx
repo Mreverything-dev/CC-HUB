@@ -20,7 +20,10 @@ import { useAuthStore } from '@/features/auth/store/auth.store';
 import { postService } from '@/services/api/post.service';
 import toast from 'react-hot-toast';
 import PostDetailModal from './PostDetailModal';
+import { PostReactions } from './PostReactions';
 import { RoleBadge } from '@/features/dashboard/components/RoleBadge';
+import { Avatar } from '@/features/dashboard/components/Avatar';
+import { ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 
 interface PostCardProps {
   id: string;
@@ -39,7 +42,17 @@ interface PostCardProps {
   is_liked_by_current_user: boolean;
   is_shared_by_current_user: boolean;
   is_owned_by_current_user: boolean;
+  reactions_count?: number;
+  reaction_breakdown?: Record<string, number>;
+  my_reaction?: string | null;
+  is_shared?: boolean;
+  shared_by_user_id?: string | null;
+  shared_by_username?: string | null;
+  shared_by_avatar_url?: string | null;
+  shared_by_role?: string | null;
+  shared_at?: string | null;
   onLike: (postId: string) => void;
+  onReact?: (postId: string, reaction: string) => void;
   onDelete: (postId: string) => void;
   onEdit: (postId: string, content: string) => void;
   /** Charcoal/cyan theme for the redesigned dashboard. Defaults to the original light theme. */
@@ -62,7 +75,14 @@ export function PostCard({
   is_liked_by_current_user,
   is_shared_by_current_user,
   is_owned_by_current_user,
+  reaction_breakdown = {},
+  my_reaction = null,
+  is_shared = false,
+  shared_by_username,
+  shared_by_avatar_url,
+  shared_at,
   onLike,
+  onReact,
   onDelete,
   onEdit,
   dark = false,
@@ -182,6 +202,17 @@ export function PostCard({
 
   return (
     <>
+      {is_shared && (
+        <div className={`flex items-center gap-2 mb-2 text-sm ${dark ? 'text-[#94A3B8]' : 'text-gray-500'}`}>
+          <ArrowUpTrayIcon className="h-4 w-4 flex-shrink-0" />
+          <Avatar src={shared_by_avatar_url} name={shared_by_username || undefined} size="xs" />
+          <span>
+            <span className={`font-medium ${dark ? 'text-[#F1F5F9]' : 'text-gray-800'}`}>{shared_by_username}</span>{' '}
+            shared a post
+            {shared_at && <span className={dark ? 'text-[#64748B]' : 'text-gray-400'}> · {formatRelativeTime(shared_at)}</span>}
+          </span>
+        </div>
+      )}
       <div
         className="cursor-pointer hover:shadow-lg transition-shadow"
         onClick={handleCardClick}
@@ -388,7 +419,14 @@ export function PostCard({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center space-x-1">
-              {dark ? (
+              {dark && onReact ? (
+                <PostReactions
+                  breakdown={reaction_breakdown}
+                  myReaction={my_reaction}
+                  onReact={(reaction) => onReact(id, reaction)}
+                  size="md"
+                />
+              ) : dark ? (
                 <button
                   onClick={handleLike}
                   className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl transition ${
@@ -533,7 +571,6 @@ export function PostCard({
         <PostDetailModal
           postId={id}
           onClose={() => setShowDetail(false)}
-          onLike={onLike}
           onDelete={handleDelete}
           onEdit={onEdit}
         />

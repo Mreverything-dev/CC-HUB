@@ -18,6 +18,7 @@ import {
   Cog6ToothIcon,
   QuestionMarkCircleIcon,
   ArrowRightOnRectangleIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { useFriendStore } from '@/features/friends/store/friend.store';
@@ -57,9 +58,15 @@ interface SidebarProps {
   /** Pass null when the current page (e.g. Profile) isn't one of the in-dashboard sections. */
   activeSection: SidebarSection | null;
   onNavigate: (section: SidebarSection) => void;
+  /** Mobile drawer state - the desktop `aside` below is unaffected by these
+   * and stays permanently visible at `lg:` and up via its own `hidden
+   * lg:flex`. Omitted entirely by any caller that doesn't need the mobile
+   * drawer (none currently, but keeps this a non-breaking addition). */
+  isMobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
-export function Sidebar({ activeSection, onNavigate }: SidebarProps) {
+export function Sidebar({ activeSection, onNavigate, isMobileOpen = false, onCloseMobile }: SidebarProps) {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -96,6 +103,15 @@ export function Sidebar({ activeSection, onNavigate }: SidebarProps) {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    if (!isMobileOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCloseMobile?.();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isMobileOpen, onCloseMobile]);
+
   const NAV_COUNTS: Record<string, number> = {
     announcements: announcementUnreadCount,
     live: liveCount,
@@ -109,6 +125,9 @@ export function Sidebar({ activeSection, onNavigate }: SidebarProps) {
     } else if (item.section) {
       onNavigate(item.section);
     }
+    // No-op when opened from the desktop aside (onCloseMobile is only
+    // passed by the mobile drawer instance), so this is safe either way.
+    onCloseMobile?.();
   };
 
   const handleLogout = async () => {
@@ -116,8 +135,10 @@ export function Sidebar({ activeSection, onNavigate }: SidebarProps) {
     navigate('/login');
   };
 
-  return (
-    <aside className="hidden lg:flex lg:flex-col w-[280px] h-screen sticky top-0 border-r border-[rgba(0,200,245,0.1)] bg-[#070D13]/95 backdrop-blur-xl">
+  // Shared between the always-visible desktop aside and the mobile drawer so
+  // the two never drift out of sync with each other.
+  const sidebarContent = (
+    <>
       {/* Logo */}
       <div className="flex items-center gap-3 px-5 py-5 border-b border-[rgba(0,200,245,0.1)]">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#00C8FF]/40 bg-[#00C8FF]/10 shadow-[0_0_20px_rgba(0,200,245,0.15)]">
@@ -214,6 +235,43 @@ export function Sidebar({ activeSection, onNavigate }: SidebarProps) {
           </button>
         </div>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Desktop - unchanged from before, permanently visible at lg: and up */}
+      <aside className="hidden lg:flex lg:flex-col w-[280px] h-screen sticky top-0 border-r border-[rgba(0,200,245,0.1)] bg-[#070D13]/95 backdrop-blur-xl">
+        {sidebarContent}
+      </aside>
+
+      {/* Mobile drawer - stays mounted (rather than being removed from the
+          DOM when closed) so the transform/opacity transitions can actually
+          animate; pointer-events-none plus the translate-x-full offscreen
+          position keep it invisible and unclickable while closed. */}
+      <div
+        className={`fixed inset-0 z-50 lg:hidden transition-opacity duration-300 ${
+          isMobileOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        }`}
+        aria-hidden={!isMobileOpen}
+      >
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCloseMobile} />
+        <aside
+          className={`absolute inset-y-0 left-0 w-[280px] max-w-[85vw] flex flex-col border-r border-[rgba(0,200,245,0.1)] bg-[#070D13] shadow-2xl transition-transform duration-300 ease-out ${
+            isMobileOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
+        >
+          <button
+            onClick={onCloseMobile}
+            title="Close menu"
+            aria-label="Close menu"
+            className="absolute top-4 right-3 p-2 rounded-xl text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5 transition-all duration-200"
+          >
+            <XMarkIcon className="h-5 w-5" />
+          </button>
+          {sidebarContent}
+        </aside>
+      </div>
+    </>
   );
 }

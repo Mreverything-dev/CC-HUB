@@ -1,6 +1,6 @@
 ﻿# backend/app/schemas/post.py
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime
 from enum import Enum
 
@@ -51,6 +51,9 @@ class PostUpdate(BaseModel):
     content: Optional[str] = Field(None, min_length=1)
     visibility: Optional[PostVisibility] = None
 
+class ReactionRequest(BaseModel):
+    reaction: str = Field(..., min_length=1, max_length=16)
+
 # ============================================
 # RESPONSE SCHEMA
 # ============================================
@@ -69,6 +72,24 @@ class PostResponse(PostBase):
     is_liked_by_current_user: bool = False
     is_shared_by_current_user: bool = False
     is_owned_by_current_user: bool = False
+
+    # --- Additive fields below: the new multi-emoji reaction system and the
+    # "shared post" feed concept. Every existing field above is untouched -
+    # old clients reading only likes_count/is_liked_by_current_user/etc. see
+    # no change at all. ---
+    reactions_count: int = 0
+    reaction_breakdown: Dict[str, int] = Field(default_factory=dict)
+    my_reaction: Optional[str] = None
+
+    # Set only on a feed item that represents someone sharing this post
+    # (see PostService.get_feed) - the post fields above are always the
+    # ORIGINAL post's own content/author/reactions, never a copy.
+    is_shared: bool = False
+    shared_by_user_id: Optional[str] = None
+    shared_by_username: Optional[str] = None
+    shared_by_avatar_url: Optional[str] = None
+    shared_by_role: Optional[str] = None
+    shared_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 
