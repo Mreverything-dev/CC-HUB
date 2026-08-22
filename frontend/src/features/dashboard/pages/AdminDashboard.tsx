@@ -19,9 +19,8 @@ import SectionDashboard from '@/features/sections/components/SectionDashboard';
 import CreateSectionModal from '@/features/sections/components/CreateSectionModal';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { profileService } from '@/services/api/profile.service';
-import { livestreamService } from '@/services/api/livestream.service';
 import { useFeed } from '@/features/posts/hooks/useFeed';
-import { Livestream } from '@/types/livestream.types';
+import { useLiveStreamsFeed } from '@/features/livestream/hooks/useLiveStreamsFeed';
 import { Sidebar, SidebarSection } from '@/features/dashboard/components/Sidebar';
 import { Topbar } from '@/features/dashboard/components/Topbar';
 import FriendsPage from '@/features/friends/components/FriendsPage';
@@ -59,9 +58,7 @@ export default function AdminDashboard() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [showCreateAnnouncement, setShowCreateAnnouncement] = useState(false);
   const [showCreateSection, setShowCreateSection] = useState(false);
-  const [liveStreams, setLiveStreams] = useState<Livestream[]>([]);
-  const [upcomingStreams, setUpcomingStreams] = useState<Livestream[]>([]);
-  const [streamsLoading, setStreamsLoading] = useState(true);
+  const { liveStreams, upcomingStreams, isLoading: streamsLoading } = useLiveStreamsFeed(true);
 
   // Admin dashboard stats (real counts from the DB via /admin/dashboard-stats)
   const { stats, isLoading: statsLoading, isError: statsError, refetch: refetchStats, isFetching: statsRefetching } =
@@ -90,20 +87,6 @@ export default function AdminDashboard() {
       .getMyProfile()
       .then((res) => setAvatarUrl((res.data.profile as any)?.avatar_url || null))
       .catch(() => setAvatarUrl(null));
-  }, []);
-
-  useEffect(() => {
-    setStreamsLoading(true);
-    Promise.all([livestreamService.getStreams('live'), livestreamService.getStreams('scheduled')])
-      .then(([liveRes, upcomingRes]) => {
-        setLiveStreams(liveRes.data);
-        setUpcomingStreams(upcomingRes.data);
-      })
-      .catch(() => {
-        setLiveStreams([]);
-        setUpcomingStreams([]);
-      })
-      .finally(() => setStreamsLoading(false));
   }, []);
 
   const postList = Array.isArray(posts) ? posts : [];

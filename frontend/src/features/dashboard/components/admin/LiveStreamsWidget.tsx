@@ -38,6 +38,15 @@ export function LiveStreamsWidget({ liveStreams, upcomingStreams, isLoading }: L
               onClick={() => (s.status === 'live' ? navigate(`/live/${s.id}`) : navigate('/livestreams'))}
               className="w-full flex items-center gap-3 text-left px-3 py-2.5 rounded-xl border border-[#1E3447] hover:border-[#00C8FF]/30 hover:bg-white/5 transition"
             >
+              <div className="relative flex-shrink-0 h-9 w-14 rounded-lg overflow-hidden bg-[#0A111A] border border-[#1E3447]">
+                {s.thumbnail_url ? (
+                  <img src={s.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <VideoCameraIcon className="h-4 w-4 text-[#1E3447]" />
+                  </div>
+                )}
+              </div>
               <div
                 className={`flex-shrink-0 text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded-full ${
                   s.status === 'live'

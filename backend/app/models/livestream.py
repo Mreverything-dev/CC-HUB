@@ -28,6 +28,7 @@ class Livestream(Base):
     visibility = Column(Enum(StreamVisibility), default=StreamVisibility.PUBLIC)
     status = Column(Enum(StreamStatus), default=StreamStatus.SCHEDULED)
     target_section_ids = Column(JSON, default=list)  # For section visibility
+    thumbnail_url = Column(String(500), nullable=True)
     stream_key = Column(String(255), unique=True)
     viewer_count = Column(Integer, default=0)
     started_at = Column(UTCDateTime)

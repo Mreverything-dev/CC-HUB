@@ -12,6 +12,7 @@ export interface Livestream {
   description?: string;
   visibility: StreamVisibility;
   target_section_ids: string[];
+  thumbnail_url?: string | null;
   status: StreamStatus;
   viewer_count: number;
   stream_key?: string;
@@ -28,6 +29,7 @@ export interface LivestreamCreate {
   description?: string;
   visibility: StreamVisibility;
   target_section_ids?: string[];
+  thumbnail_url?: string | null;
 }
 
 export interface LivestreamUpdate {
@@ -35,6 +37,7 @@ export interface LivestreamUpdate {
   description?: string;
   visibility?: StreamVisibility;
   target_section_ids?: string[];
+  thumbnail_url?: string | null;
   status?: StreamStatus;
 }
 

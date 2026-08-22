@@ -6,6 +6,7 @@ from app.core.database import get_db
 from app.dependencies.auth import get_current_user
 from app.models.user import User
 from app.services.livestream_service import LivestreamService
+from app.services.stream_comment_service import StreamCommentService
 from app.schemas.livestream import (
     LivestreamCreate, LivestreamUpdate, LivestreamResponse,
     StreamViewerResponse, StreamViewerCount, StreamChatMessage
@@ -32,6 +33,7 @@ async def create_stream(
         "description": stream.description,
         "visibility": stream.visibility,
         "target_section_ids": stream.target_section_ids,
+        "thumbnail_url": stream.thumbnail_url,
         "status": stream.status,
         "viewer_count": 0,
         "stream_key": stream.stream_key,
@@ -63,6 +65,7 @@ async def get_streams(
         "description": s.description,
         "visibility": s.visibility,
         "target_section_ids": s.target_section_ids,
+        "thumbnail_url": s.thumbnail_url,
         "status": s.status,
         "viewer_count": s.viewer_count,
         "started_at": s.started_at,
@@ -93,6 +96,7 @@ async def get_stream(
         "description": stream.description,
         "visibility": stream.visibility,
         "target_section_ids": stream.target_section_ids,
+        "thumbnail_url": stream.thumbnail_url,
         "status": stream.status,
         "viewer_count": stream.viewer_count,
         "started_at": stream.started_at,
@@ -123,6 +127,7 @@ async def update_stream(
         "description": stream.description,
         "visibility": stream.visibility,
         "target_section_ids": stream.target_section_ids,
+        "thumbnail_url": stream.thumbnail_url,
         "status": stream.status,
         "viewer_count": stream.viewer_count,
         "started_at": stream.started_at,
@@ -142,25 +147,40 @@ async def start_stream(
     """Start a livestream"""
     service = LivestreamService(db)
     stream = await service.start_stream(stream_id, str(current_user.id))
-    
-    return {
+
+    payload = {
         "id": str(stream.id),
         "host_id": str(stream.host_id),
         "host_username": stream.host.username,
+        "host_avatar": None,
         "host_role": stream.host.role,
         "title": stream.title,
         "description": stream.description,
         "visibility": stream.visibility,
         "target_section_ids": stream.target_section_ids,
+        "thumbnail_url": stream.thumbnail_url,
         "status": stream.status,
         "viewer_count": stream.viewer_count,
-        "started_at": stream.started_at,
-        "ended_at": stream.ended_at,
-        "created_at": stream.created_at,
-        "updated_at": stream.updated_at,
-        "is_host": True,
-        "can_view": True
+        "started_at": stream.started_at.isoformat() if stream.started_at else None,
+        "ended_at": stream.ended_at.isoformat() if stream.ended_at else None,
+        "created_at": stream.created_at.isoformat() if stream.created_at else None,
+        "updated_at": stream.updated_at.isoformat() if stream.updated_at else None,
     }
+
+    # Broadcast to every connected user who is actually allowed to view this
+    # stream, not just whoever has already joined its room (nobody has yet,
+    # at start time) - reuses the exact same can_view_stream check the REST
+    # list/detail endpoints already enforce, so a Dashboard's realtime feed
+    # respects public/friends/section visibility identically to its initial
+    # page-load fetch instead of leaking every stream to every connection.
+    from app.websocket.manager import manager
+
+    recipient_user_ids = {conn['user_id'] for conn in manager.active_connections.values()}
+    for uid in recipient_user_ids:
+        if await service.can_view_stream(uid, stream_id):
+            await manager.send_to_user(uid, 'stream:started', payload)
+
+    return {**payload, "is_host": True, "can_view": True}
 
 @router.post("/{stream_id}/end", response_model=LivestreamResponse)
 async def end_stream(
@@ -183,6 +203,11 @@ async def end_stream(
     manager.stream_hosts.pop(stream_id, None)
     manager.stream_viewers.pop(stream_id, None)
 
+    # Separate, no-room broadcast (everyone connected, not just this stream's
+    # room) so a dashboard that never opened this stream still removes its
+    # card immediately instead of waiting on the next poll/refetch.
+    await sio.emit('stream:ended', {'stream_id': stream_id})
+
     return {
         "id": str(stream.id),
         "host_id": str(stream.host_id),
@@ -192,6 +217,7 @@ async def end_stream(
         "description": stream.description,
         "visibility": stream.visibility,
         "target_section_ids": stream.target_section_ids,
+        "thumbnail_url": stream.thumbnail_url,
         "status": stream.status,
         "viewer_count": stream.viewer_count,
         "started_at": stream.started_at,
@@ -239,3 +265,18 @@ async def get_viewers(
         "avatar": None,
         "joined_at": v.joined_at
     } for v in viewers]
+
+@router.get("/{stream_id}/comments")
+async def get_comments(
+    stream_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Chat history for a stream - the database is the source of truth for
+    persistence; the live chat socket handlers (stream:chat_message etc.) are
+    the source of truth for realtime delivery only. Called on mount/refresh
+    so a viewer's chat panel isn't empty just because they weren't connected
+    when earlier messages were sent. Same visibility rule as watching the
+    stream itself (enforced in StreamCommentService)."""
+    service = StreamCommentService(db)
+    return await service.get_comments(stream_id, str(current_user.id))

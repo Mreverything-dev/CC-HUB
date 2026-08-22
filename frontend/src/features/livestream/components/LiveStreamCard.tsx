@@ -36,9 +36,13 @@ export function LiveStreamCard({ stream, sectionName, onClick }: LiveStreamCardP
     >
       {/* Thumbnail */}
       <div className="relative aspect-video bg-gradient-to-br from-[#0D1722] via-[#0A111A] to-[#162534] overflow-hidden">
-        <div className="absolute inset-0 flex items-center justify-center">
-          <VideoCameraIcon className="h-10 w-10 text-[#1E3447] group-hover:text-[#00C8FF]/30 transition-colors" />
-        </div>
+        {stream.thumbnail_url ? (
+          <img src={stream.thumbnail_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <VideoCameraIcon className="h-10 w-10 text-[#1E3447] group-hover:text-[#00C8FF]/30 transition-colors" />
+          </div>
+        )}
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#060B12]/70 via-transparent to-transparent" />
 
         {/* LIVE + viewers */}

@@ -32,14 +32,28 @@ class SocketManager:
             if not payload:
                 await sio.emit('error', {'message': 'Invalid token'}, room=sid)
                 return False
-            
+
             user_id = payload.get('sub')
             if not user_id:
                 await sio.emit('error', {'message': 'Invalid token payload'}, room=sid)
                 return False
-            
+
+            # Cached once per connection so livestream join/leave system
+            # messages (and anything else that wants a display name) don't
+            # need a fresh DB lookup on every event - best effort, a failed
+            # lookup just falls back to a generic label later.
+            username = None
+            try:
+                from app.models.user import User
+                async with AsyncSessionLocal() as db:
+                    result = await db.execute(select(User.username).where(User.id == user_id))
+                    username = result.scalar_one_or_none()
+            except Exception as e:
+                logger.error(f"❌ Failed to look up username for {user_id}: {e}")
+
             self.active_connections[sid] = {
                 'user_id': user_id,
+                'username': username,
                 'sid': sid
             }
 
@@ -55,8 +69,10 @@ class SocketManager:
 
     async def disconnect(self, sid: str):
         """Handle user disconnection"""
+        username = None
         if sid in self.active_connections:
             user_id = self.active_connections[sid]['user_id']
+            username = self.active_connections[sid].get('username')
             logger.info(f"👋 User {user_id} disconnected")
             del self.active_connections[sid]
             # Only stamp last_seen if the user has no other active connections
@@ -64,7 +80,7 @@ class SocketManager:
             if not any(c['user_id'] == user_id for c in self.active_connections.values()):
                 await self._touch_last_seen(user_id)
 
-        await self.cleanup_stream_connection(sid)
+        await self.cleanup_stream_connection(sid, username)
 
     async def _touch_last_seen(self, user_id: str):
         """Persist a fresh last_seen timestamp for a user - best effort."""
@@ -82,7 +98,7 @@ class SocketManager:
         """User IDs with at least one active WebSocket connection right now."""
         return {conn['user_id'] for conn in self.active_connections.values()}
 
-    async def cleanup_stream_connection(self, sid: str):
+    async def cleanup_stream_connection(self, sid: str, username: str = None):
         """Tear down any livestream host/viewer state held by this sid"""
         # If this sid was hosting a stream, tell every viewer the host is gone.
         for stream_id, host_sid in list(self.stream_hosts.items()):
@@ -91,13 +107,25 @@ class SocketManager:
                 await self.send_to_room(f"stream_{stream_id}", 'stream:host_left', {'stream_id': stream_id})
                 logger.info(f"📡 Host disconnected from stream {stream_id}")
 
-        # If this sid was viewing any stream(s), remove it and tell the host.
+        # If this sid was viewing any stream(s), remove it, tell the host,
+        # and post a "left" system message to the room's chat - mirrors the
+        # explicit stream:leave handler below so a tab close/disconnect
+        # announces a leave exactly like a deliberate Leave Live click does.
         for stream_id, viewers in list(self.stream_viewers.items()):
             if sid in viewers:
                 viewers.discard(sid)
                 host_sid = self.stream_hosts.get(stream_id)
                 if host_sid:
                     await sio.emit('stream:viewer_left', {'viewer_sid': sid}, room=host_sid)
+                await sio.emit(
+                    'stream:system_message',
+                    {
+                        'stream_id': stream_id,
+                        'message': f"{username or 'A viewer'} left the live.",
+                        'timestamp': datetime.utcnow().isoformat(),
+                    },
+                    room=f"stream_{stream_id}",
+                )
 
     async def join_room(self, sid: str, room: str):
         """Join a room (conversation)"""
@@ -450,6 +478,18 @@ async def stream_viewer_join(sid, data):
         await sio.enter_room(sid, _stream_room(stream_id))
         logger.info(f"👁️ Viewer {user_id} joined stream {stream_id}")
 
+        # Announced once per genuine join - the idempotent early-return above
+        # (already-joined sid) means a retry/reconnect race never double-posts.
+        await sio.emit(
+            'stream:system_message',
+            {
+                'stream_id': stream_id,
+                'message': f"{user.username if user else 'A viewer'} joined the live.",
+                'timestamp': datetime.utcnow().isoformat(),
+            },
+            room=_stream_room(stream_id),
+        )
+
         host_sid = manager.stream_hosts.get(stream_id)
         if host_sid:
             await sio.emit(
@@ -485,15 +525,31 @@ async def stream_viewer_join(sid, data):
 
 @sio.on('stream:leave')
 async def stream_leave(sid, data):
-    """Viewer stops watching a stream"""
+    """Viewer stops watching a stream (explicit Leave Live click, or the
+    signaling hook's own unmount/teardown)."""
     stream_id = data.get('stream_id')
     if not stream_id:
         return
+    was_viewer = sid in manager.stream_viewers.get(stream_id, set())
     manager.stream_viewers.get(stream_id, set()).discard(sid)
     await sio.leave_room(sid, _stream_room(stream_id))
     host_sid = manager.stream_hosts.get(stream_id)
     if host_sid:
         await sio.emit('stream:viewer_left', {'viewer_sid': sid}, room=host_sid)
+    # Only announce a leave for a sid that was actually a registered viewer -
+    # keeps a redundant/duplicate stream:leave call (already left, or never
+    # joined) silent instead of posting a spurious "left the live." message.
+    if was_viewer:
+        username = manager.active_connections.get(sid, {}).get('username') or 'A viewer'
+        await sio.emit(
+            'stream:system_message',
+            {
+                'stream_id': stream_id,
+                'message': f"{username} left the live.",
+                'timestamp': datetime.utcnow().isoformat(),
+            },
+            room=_stream_room(stream_id),
+        )
 
 @sio.on('stream:offer')
 async def stream_offer(sid, data):

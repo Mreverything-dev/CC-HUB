@@ -75,6 +75,7 @@ class LivestreamService:
             description=data.description,
             visibility=data.visibility,
             target_section_ids=data.target_section_ids or [],
+            thumbnail_url=data.thumbnail_url,
             stream_key=stream_key,
             status=StreamStatus.SCHEDULED
         )

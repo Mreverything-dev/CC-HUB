@@ -19,6 +19,8 @@ import { FeedTabs, FeedFilter } from '@/features/dashboard/components/FeedTabs';
 import { AnnouncementWidget } from '@/features/dashboard/components/AnnouncementWidget';
 import { SectionWidget } from '@/features/dashboard/components/SectionWidget';
 import { EventCardList } from '@/features/dashboard/components/EventCard';
+import { LiveStreamsWidget } from '@/features/dashboard/components/admin/LiveStreamsWidget';
+import { useLiveStreamsFeed } from '@/features/livestream/hooks/useLiveStreamsFeed';
 import FriendsPage from '@/features/friends/components/FriendsPage';
 import ChatPanel from '@/features/chat/components/ChatPanel';
 
@@ -56,6 +58,8 @@ export default function ProfessorDashboard() {
 
   // Sections (for the right-rail widget; SectionManager handles the full Sections view itself)
   const { sections = [], isLoading: sectionsLoading } = useSections();
+
+  const { liveStreams, isLoading: liveStreamsLoading } = useLiveStreamsFeed();
 
   useEffect(() => {
     refetchAnnouncements();
@@ -180,6 +184,7 @@ export default function ProfessorDashboard() {
                   isLoading={sectionsLoading}
                   onGoToSection={() => setActiveSection('sections')}
                 />
+                <LiveStreamsWidget liveStreams={liveStreams} upcomingStreams={[]} isLoading={liveStreamsLoading} />
                 <EventCardList />
               </div>
             </div>

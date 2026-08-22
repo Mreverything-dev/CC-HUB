@@ -20,6 +20,7 @@ class LivestreamBase(BaseModel):
     description: Optional[str] = Field(None, max_length=1000)
     visibility: StreamVisibility = StreamVisibility.PUBLIC
     target_section_ids: List[str] = Field(default_factory=list)
+    thumbnail_url: Optional[str] = Field(None, max_length=500)
 
 class LivestreamCreate(LivestreamBase):
     pass
@@ -29,6 +30,7 @@ class LivestreamUpdate(BaseModel):
     description: Optional[str] = Field(None, max_length=1000)
     visibility: Optional[StreamVisibility] = None
     target_section_ids: Optional[List[str]] = None
+    thumbnail_url: Optional[str] = Field(None, max_length=500)
     status: Optional[StreamStatus] = None
 
 class LivestreamResponse(LivestreamBase):

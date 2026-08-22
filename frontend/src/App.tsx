@@ -23,6 +23,7 @@ import { SocketProvider } from './app/providers/SocketProvider';
 
 import LivestreamsPage from '@/features/livestream/components/pages/LivestreamsPage';
 import LivePage from '@/features/livestream/components/pages/LivePage';
+import { LiveStreamStage } from '@/features/livestream/components/LiveStreamStage';
 
 function App() {
   return (
@@ -166,6 +167,7 @@ function App() {
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
           <ChatWidget />
+          <LiveStreamStage />
         </BrowserRouter>
       </SocketProvider>
     </QueryProvider>

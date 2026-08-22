@@ -74,6 +74,57 @@ class StreamCommentService:
             "reactions": [{"user_id": str(r.user_id), "reaction": r.reaction} for r in reactions],
         }
 
+    async def get_comments(self, stream_id: str, user_id: str, limit: int = 300) -> list:
+        """Persisted chat history for a stream (top-level + replies, oldest
+        first) - what a viewer's chat panel is seeded with on join/refresh,
+        so it doesn't start empty just because they weren't connected when
+        earlier messages were sent. Reactions are batch-fetched in a single
+        extra query instead of once per comment (this is a bounded chat log,
+        not a single lookup, so the N+1 pattern used elsewhere in this file
+        isn't appropriate here)."""
+        await self._require_access(user_id, stream_id)
+
+        result = await self.db.execute(
+            select(StreamComment)
+            .options(selectinload(StreamComment.user))
+            .where(StreamComment.stream_id == stream_id)
+            .order_by(StreamComment.created_at.desc())
+            .limit(limit)
+        )
+        # Most recent `limit` first (so a long-running stream's history is
+        # capped to the latest messages, not the earliest), then reversed
+        # back to chronological order for display.
+        comments = list(reversed(result.scalars().all()))
+        if not comments:
+            return []
+
+        comment_ids = [c.id for c in comments]
+        reactions_result = await self.db.execute(
+            select(StreamCommentReaction).where(StreamCommentReaction.comment_id.in_(comment_ids))
+        )
+        reactions_by_comment: dict = {}
+        for r in reactions_result.scalars().all():
+            reactions_by_comment.setdefault(str(r.comment_id), []).append(
+                {"user_id": str(r.user_id), "reaction": r.reaction}
+            )
+
+        history = []
+        for comment in comments:
+            user = comment.user
+            history.append({
+                "id": str(comment.id),
+                "stream_id": str(comment.stream_id),
+                "user_id": str(comment.user_id),
+                "username": user.username if user else "Unknown",
+                "avatar": await self._get_avatar_url(str(comment.user_id), user.role) if user else None,
+                "message": comment.content,
+                "parent_comment_id": str(comment.parent_comment_id) if comment.parent_comment_id else None,
+                "is_deleted": comment.is_deleted,
+                "timestamp": comment.created_at.isoformat(),
+                "reactions": reactions_by_comment.get(str(comment.id), []),
+            })
+        return history
+
     async def create_comment(
         self, stream_id: str, user_id: str, content: str, parent_comment_id: Optional[str] = None
     ) -> dict:

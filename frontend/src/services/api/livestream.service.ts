@@ -2,6 +2,22 @@
 import { api } from '@/lib/axios';
 import { Livestream, LivestreamCreate, LivestreamUpdate, StreamViewer } from '@/types/livestream.types';
 
+// Mirrors StreamChatMsg (features/livestream/hooks/useLiveStreamSignaling) -
+// duplicated as a minimal shape here rather than imported, to avoid a
+// service -> hook -> service circular import.
+interface StreamCommentHistoryItem {
+  id: string;
+  stream_id: string;
+  user_id: string;
+  username: string;
+  avatar?: string | null;
+  message: string;
+  timestamp: string;
+  parent_comment_id?: string | null;
+  is_deleted?: boolean;
+  reactions: { user_id: string; reaction: string }[];
+}
+
 export const livestreamService = {
   // Create a livestream
   createStream: (data: LivestreamCreate) =>
@@ -38,4 +54,10 @@ export const livestreamService = {
   // Get stream viewers
   getViewers: (streamId: string) =>
     api.get<StreamViewer[]>(`/livestream/${streamId}/viewers`),
+
+  // Persisted chat history - the database is the source of truth for
+  // persistence, real-time delivery still flows entirely over the existing
+  // Socket.IO stream:chat_message event.
+  getComments: (streamId: string) =>
+    api.get<StreamCommentHistoryItem[]>(`/livestream/${streamId}/comments`),
 };

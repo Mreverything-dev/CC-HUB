@@ -25,8 +25,12 @@ export function UpcomingStreamCard({ stream, sectionName, isReminderSet, onToggl
   return (
     <div className="rounded-2xl border border-[#1E3447] bg-[#0A111A] overflow-hidden transition-all duration-200 hover:border-[#8B5CF6]/40 hover:shadow-[0_0_24px_rgba(139,92,246,0.1)]">
       {/* Preview */}
-      <div className="relative aspect-video bg-gradient-to-br from-[#0D1722] via-[#0A111A] to-[#1a1330] flex items-center justify-center">
-        <ClockIcon className="h-9 w-9 text-[#1E3447]" />
+      <div className="relative aspect-video bg-gradient-to-br from-[#0D1722] via-[#0A111A] to-[#1a1330] flex items-center justify-center overflow-hidden">
+        {stream.thumbnail_url ? (
+          <img src={stream.thumbnail_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
+        ) : (
+          <ClockIcon className="h-9 w-9 text-[#1E3447]" />
+        )}
         <span className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-md bg-[#8B5CF6]/15 border border-[#8B5CF6]/40 text-[#8B5CF6] text-[10px] font-bold uppercase tracking-wide">
           Scheduled
         </span>
