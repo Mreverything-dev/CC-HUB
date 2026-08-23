@@ -4,6 +4,7 @@ import { useLocation } from 'react-router-dom';
 
 import { CreatePost } from '@/features/posts/components/CreatePost';
 import { PostCard } from '@/features/posts/components/PostCard';
+import PostDetailModal from '@/features/posts/components/PostDetailModal';
 import { useFeed } from '@/features/posts/hooks/useFeed';
 import AnnouncementFeedBody from '@/features/announcements/components/AnnouncementFeedBody';
 import { useAnnouncements } from '@/features/announcements/hooks/useAnnouncements';
@@ -39,6 +40,12 @@ export default function StudentDashboard() {
   );
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  // Global search deep-links - opening a post from search reuses this same
+  // existing PostDetailModal + useFeed's own deletePost/editPost, rather
+  // than a second post-detail implementation; opening a section from search
+  // reuses SectionDashboard's existing initialSectionId prop.
+  const [searchOpenPostId, setSearchOpenPostId] = useState<string | null>(null);
+  const [searchSectionId, setSearchSectionId] = useState<string | null>(null);
 
   // Posts
   const {
@@ -141,6 +148,14 @@ export default function StudentDashboard() {
           avatarUrl={avatarUrl}
           onOpenFriends={() => setActiveSection('friends')}
           onOpenMenu={() => setIsMobileNavOpen(true)}
+          searchPosts={postList}
+          searchAnnouncements={announcementList}
+          searchSections={sectionList}
+          onOpenPost={setSearchOpenPostId}
+          onOpenSection={(sectionId) => {
+            setSearchSectionId(sectionId);
+            setActiveSection('sections');
+          }}
         />
 
         <main className="relative flex-1 max-w-7xl w-full mx-auto px-4 py-6 sm:px-6 lg:px-8">
@@ -230,6 +245,8 @@ export default function StudentDashboard() {
 
           {activeSection === 'sections' && (
             <SectionDashboard
+              key={searchSectionId || 'default'}
+              initialSectionId={searchSectionId || undefined}
             />
           )}
 
@@ -238,6 +255,15 @@ export default function StudentDashboard() {
           {activeSection === 'chat' && <ChatPanel fullHeight={false} />}
         </main>
       </div>
+
+      {searchOpenPostId && (
+        <PostDetailModal
+          postId={searchOpenPostId}
+          onClose={() => setSearchOpenPostId(null)}
+          onDelete={deletePost}
+          onEdit={editPost}
+        />
+      )}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { CreatePost } from '@/features/posts/components/CreatePost';
 import { PostCard } from '@/features/posts/components/PostCard';
+import PostDetailModal from '@/features/posts/components/PostDetailModal';
 import { useFeed } from '@/features/posts/hooks/useFeed';
 import AnnouncementFeedBody from '@/features/announcements/components/AnnouncementFeedBody';
 import { useAnnouncements } from '@/features/announcements/hooks/useAnnouncements';
@@ -39,6 +40,9 @@ export default function ProfessorDashboard() {
   // Professors land on "My Teaching Assignments" first; the per-section
   // "Manage" button hands off to the existing SectionDashboard for that section.
   const [selectedTeachingSectionId, setSelectedTeachingSectionId] = useState<string | null>(null);
+  // Global search deep-link - reuses the exact same PostDetailModal +
+  // useFeed's own deletePost/editPost, no second post-detail implementation.
+  const [searchOpenPostId, setSearchOpenPostId] = useState<string | null>(null);
 
   // Posts
   const {
@@ -149,6 +153,14 @@ export default function ProfessorDashboard() {
           avatarUrl={avatarUrl}
           onOpenFriends={() => setActiveSection('friends')}
           onOpenMenu={() => setIsMobileNavOpen(true)}
+          searchPosts={postList}
+          searchAnnouncements={announcementList}
+          searchSections={sectionList}
+          onOpenPost={setSearchOpenPostId}
+          onOpenSection={(sectionId) => {
+            setSelectedTeachingSectionId(sectionId);
+            setActiveSection('sections');
+          }}
         />
 
         <main className="relative flex-1 max-w-7xl w-full mx-auto px-4 py-6 sm:px-6 lg:px-8">
@@ -251,6 +263,7 @@ export default function ProfessorDashboard() {
                   Back to My Teaching Assignments
                 </button>
                 <SectionDashboard
+                  key={selectedTeachingSectionId}
                   initialSectionId={selectedTeachingSectionId}
                 />
               </div>
@@ -264,6 +277,15 @@ export default function ProfessorDashboard() {
           {activeSection === 'chat' && <ChatPanel fullHeight={false} />}
         </main>
       </div>
+
+      {searchOpenPostId && (
+        <PostDetailModal
+          postId={searchOpenPostId}
+          onClose={() => setSearchOpenPostId(null)}
+          onDelete={deletePost}
+          onEdit={editPost}
+        />
+      )}
     </div>
   );
 }

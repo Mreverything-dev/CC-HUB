@@ -20,6 +20,7 @@ import CreateSectionModal from '@/features/sections/components/CreateSectionModa
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { profileService } from '@/services/api/profile.service';
 import { useFeed } from '@/features/posts/hooks/useFeed';
+import PostDetailModal from '@/features/posts/components/PostDetailModal';
 import { useLiveStreamsFeed } from '@/features/livestream/hooks/useLiveStreamsFeed';
 import { Sidebar, SidebarSection } from '@/features/dashboard/components/Sidebar';
 import { Topbar } from '@/features/dashboard/components/Topbar';
@@ -59,6 +60,10 @@ export default function AdminDashboard() {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [showCreateAnnouncement, setShowCreateAnnouncement] = useState(false);
   const [showCreateSection, setShowCreateSection] = useState(false);
+  // Global search deep-links - reuse the exact same PostDetailModal/
+  // SectionDashboard components the rest of the dashboard already uses.
+  const [searchOpenPostId, setSearchOpenPostId] = useState<string | null>(null);
+  const [searchSectionId, setSearchSectionId] = useState<string | null>(null);
   const { liveStreams, upcomingStreams, isLoading: streamsLoading } = useLiveStreamsFeed(true);
 
   // Admin dashboard stats (real counts from the DB via /admin/dashboard-stats)
@@ -67,7 +72,8 @@ export default function AdminDashboard() {
 
   // Recent posts, for the Recent Activity feed only - the admin dashboard no
   // longer shows a post composer/feed (that stays on Student/Professor).
-  const { posts = [], isLoading: postsLoading } = useFeed();
+  // deletePost/editPost are only used for a post opened via global search.
+  const { posts = [], isLoading: postsLoading, deletePost, editPost } = useFeed();
 
   // Announcements
   const {
@@ -119,6 +125,14 @@ export default function AdminDashboard() {
           avatarUrl={avatarUrl}
           onOpenFriends={() => setActiveSection('friends')}
           onOpenMenu={() => setIsMobileNavOpen(true)}
+          searchPosts={postList}
+          searchAnnouncements={announcementList}
+          searchSections={sectionList}
+          onOpenPost={setSearchOpenPostId}
+          onOpenSection={(sectionId) => {
+            setSearchSectionId(sectionId);
+            setActiveSection('sections');
+          }}
         />
 
         <main className="relative flex-1 max-w-7xl w-full mx-auto px-4 py-6 lg:px-8">
@@ -260,6 +274,8 @@ export default function AdminDashboard() {
 
           {activeSection === 'sections' && (
             <SectionDashboard
+              key={searchSectionId || 'default'}
+              initialSectionId={searchSectionId || undefined}
             />
           )}
 
@@ -277,6 +293,15 @@ export default function AdminDashboard() {
       {/* Create Section Modal */}
       {showCreateSection && (
         <CreateSectionModal onClose={() => setShowCreateSection(false)} />
+      )}
+
+      {searchOpenPostId && (
+        <PostDetailModal
+          postId={searchOpenPostId}
+          onClose={() => setSearchOpenPostId(null)}
+          onDelete={deletePost}
+          onEdit={editPost}
+        />
       )}
     </div>
   );

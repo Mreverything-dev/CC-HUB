@@ -5,6 +5,7 @@ from sqlalchemy import select, or_
 from app.core.database import get_db
 from app.dependencies.auth import get_current_user
 from app.models.user import User
+from app.models.friend import BlockedUser
 from app.models.profile import StudentProfile, ProfessorProfile, AdminProfile
 from app.schemas.auth import UserSearchResult
 from typing import List, Optional
@@ -44,7 +45,22 @@ async def search_users(
     if name_match_ids:
         conditions.append(User.id.in_(name_match_ids))
 
-    query = select(User).where(or_(*conditions))
+    # Excludes both directions of any block involving the caller - mirrors
+    # FriendService.suggest_friends' own exclusion (friend_service.py) so a
+    # blocked user can't still be found through search, which previously
+    # had no such check at all despite being reused by Find People/Add
+    # Student and (now) the dashboard's global search.
+    blocked_result = await db.execute(
+        select(BlockedUser.blocker_id, BlockedUser.blocked_id).where(
+            or_(BlockedUser.blocker_id == current_user.id, BlockedUser.blocked_id == current_user.id)
+        )
+    )
+    excluded_ids = {str(current_user.id)}
+    for blocker_id, blocked_id in blocked_result.all():
+        excluded_ids.add(str(blocker_id))
+        excluded_ids.add(str(blocked_id))
+
+    query = select(User).where(or_(*conditions), User.id.notin_(excluded_ids))
     if role:
         query = query.where(User.role == role)
     query = query.limit(20)
