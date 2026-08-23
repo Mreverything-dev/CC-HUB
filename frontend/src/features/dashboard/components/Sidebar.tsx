@@ -41,8 +41,8 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'feed', label: 'Dashboard', icon: HomeIcon, section: 'feed' },
-  { id: 'announcements', label: 'Announcements', icon: MegaphoneIcon, section: 'announcements' },
+  { id: 'feed', label: 'Feed', icon: HomeIcon, section: 'feed' },
+  { id: 'announcements', label: 'Campus News', icon: MegaphoneIcon, section: 'announcements' },
   { id: 'sections', label: 'Sections', icon: UsersIcon, section: 'sections' },
   { id: 'users', label: 'Users', icon: IdentificationIcon, section: 'users', adminOnly: true },
   { id: 'classes', label: 'Classes', icon: AcademicCapIcon, section: 'classes' },

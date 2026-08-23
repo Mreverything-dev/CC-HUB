@@ -18,7 +18,7 @@ export function AnnouncementWidget({ announcements, isLoading, onViewAll }: Anno
       <div className="flex items-center justify-between mb-3">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-[#F1F5F9]">
           <MegaphoneIcon className="h-4 w-4 text-[#00C8FF]" />
-          Announcements
+          Latest News
         </h3>
         <button onClick={onViewAll} className="text-xs text-[#00C8FF] hover:text-[#00E0FF] hover:underline">
           View all

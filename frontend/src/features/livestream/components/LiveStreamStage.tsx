@@ -125,6 +125,15 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
   const [isPipMirrored, setIsPipMirrored] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  // Auto-hide player controls (modern livestream-platform behavior) - a
+  // pure CSS opacity/pointer-events toggle on the control overlays, never
+  // touching the <video> element's mount lifecycle, so this can never cause
+  // a stream reconnect or remount (see PERFORMANCE note near showPlayer).
+  const [controlsVisible, setControlsVisible] = useState(true);
+  const hideControlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isHoveringControlsRef = useRef(false);
   const [isChatOpen, setIsChatOpen] = useState(true);
   const [isLiked, setIsLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
@@ -398,6 +407,62 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
       playerRef.current?.requestFullscreen();
     }
   };
+
+  // Keeps the fullscreen button's icon (and any other fullscreen-aware UI)
+  // in sync with the ACTUAL browser state, which can also change from
+  // outside this button (Escape key, browser/OS fullscreen shortcut).
+  useEffect(() => {
+    const handleFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const handleVolumeChange = (next: number) => {
+    setVolume(next);
+    const video = videoElRef.current;
+    if (!video) return;
+    video.volume = next;
+    if (next > 0 && video.muted) {
+      video.muted = false;
+      setIsMuted(false);
+      acknowledgeUnmute();
+    } else if (next === 0 && !video.muted) {
+      video.muted = true;
+      setIsMuted(true);
+    }
+  };
+
+  // Reveals the control overlays and (re)starts the auto-hide countdown -
+  // called on any mouse movement/click/tap over the player, and whenever
+  // playback state changes in a way that should keep controls visible a
+  // moment longer. Never hides while paused or while the pointer is
+  // resting directly over the controls themselves (isHoveringControlsRef).
+  const revealControls = () => {
+    setControlsVisible(true);
+    if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+    hideControlsTimerRef.current = setTimeout(() => {
+      if (!isHoveringControlsRef.current) setControlsVisible(false);
+    }, 3000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+    };
+  }, []);
+
+  // Controls should stay visible while paused (nothing to auto-hide from -
+  // there's no motion to watch), and reappear/restart the countdown the
+  // moment the stream actually becomes visible.
+  useEffect(() => {
+    if (isPaused) {
+      setControlsVisible(true);
+      if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+    } else {
+      revealControls();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPaused]);
 
   const toggleViewers = () => {
     setShowViewers(!showViewers);
@@ -709,8 +774,8 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
   // DOCKED (expanded, non-fullscreen) MODE
   // ============================================
   return (
-    <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-6">
-      <div className="w-full max-w-6xl h-full sm:h-[88vh] rounded-none sm:rounded-2xl border border-[#1E3447] bg-[#060B12] text-[#F1F5F9] shadow-2xl overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
+      <div className="w-full max-w-[90rem] h-full sm:h-[92vh] rounded-none sm:rounded-2xl border border-[#1E3447] bg-[#060B12] text-[#F1F5F9] shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-start justify-between gap-4 px-4 sm:px-6 py-4 border-b border-[#1E3447] flex-shrink-0">
           <div className="flex items-center gap-3 min-w-0">
@@ -817,7 +882,12 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                 isChatOpen ? 'lg:w-3/4' : 'w-full'
               }`}
             >
-              <div className="relative flex-1 aspect-video lg:aspect-auto bg-[#060B12]">
+              <div
+                className="relative flex-1 aspect-video lg:aspect-auto bg-[#060B12]"
+                onMouseMove={revealControls}
+                onClick={revealControls}
+                onTouchStart={revealControls}
+              >
                 {showPlayer ? (
                   <>
                     <video
@@ -963,7 +1033,19 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                     </div>
 
                     {isHost && (
-                      <div className="absolute top-4 right-4 flex items-center gap-2 bg-[#060B12]/80 rounded-lg p-1.5">
+                      <div
+                        className={`absolute top-4 right-4 flex items-center gap-2 bg-[#060B12]/80 rounded-lg p-1.5 transition-opacity duration-300 ${
+                          controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                        }`}
+                        onMouseEnter={() => {
+                          isHoveringControlsRef.current = true;
+                          setControlsVisible(true);
+                        }}
+                        onMouseLeave={() => {
+                          isHoveringControlsRef.current = false;
+                          revealControls();
+                        }}
+                      >
                         <button
                           onClick={toggleMic}
                           title={isMicOn ? 'Mute microphone' : 'Unmute microphone'}
@@ -1000,10 +1082,18 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                     {!isHost && (
                       <button
                         onClick={toggleRecording}
+                        onMouseEnter={() => {
+                          isHoveringControlsRef.current = true;
+                          setControlsVisible(true);
+                        }}
+                        onMouseLeave={() => {
+                          isHoveringControlsRef.current = false;
+                          revealControls();
+                        }}
                         title={isRecording ? 'Stop recording' : 'Record this stream'}
-                        className={`absolute top-4 right-4 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition ${
-                          isRecording ? 'bg-[#EF4444] text-white' : 'bg-[#060B12]/80 text-[#94A3B8] hover:text-[#F1F5F9]'
-                        }`}
+                        className={`absolute top-4 right-4 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-opacity duration-300 ${
+                          controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                        } ${isRecording ? 'bg-[#EF4444] text-white' : 'bg-[#060B12]/80 text-[#94A3B8] hover:text-[#F1F5F9]'}`}
                       >
                         {isRecording ? <StopIcon className="h-3.5 w-3.5" /> : <span className="block h-2.5 w-2.5 rounded-full bg-[#EF4444]" />}
                         {isRecording ? 'Stop' : 'Record'}
@@ -1017,19 +1107,71 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                       </div>
                     )}
 
-                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[#060B12]/95 to-transparent px-4 pt-8 pb-3">
-                      <div className="flex items-center gap-3">
-                        <button onClick={togglePlayPause} title={isPaused ? 'Play' : 'Pause'} className="text-[#F1F5F9] hover:text-[#00C8FF] transition">
+                    <div
+                      className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[#060B12]/95 to-transparent px-3 sm:px-4 pt-10 pb-3 transition-opacity duration-300 ${
+                        controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                      }`}
+                      onMouseEnter={() => {
+                        isHoveringControlsRef.current = true;
+                        setControlsVisible(true);
+                      }}
+                      onMouseLeave={() => {
+                        isHoveringControlsRef.current = false;
+                        revealControls();
+                      }}
+                    >
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        <button
+                          onClick={togglePlayPause}
+                          title={isPaused ? 'Play' : 'Pause'}
+                          className="p-1.5 sm:p-1 text-[#F1F5F9] hover:text-[#00C8FF] transition flex-shrink-0"
+                        >
                           {isPaused ? <PlayIcon className="h-5 w-5" /> : <PauseIcon className="h-5 w-5" />}
                         </button>
-                        <div className="flex-1 h-1 rounded-full bg-[#1E3447] overflow-hidden">
-                          <div className="h-full w-full bg-[#00C8FF]" />
+
+                        {/* A true live broadcast has no seekable history, so
+                            this is a status indicator, not a fake/misleading
+                            scrub bar - it fills the space a progress bar
+                            would, without implying you can seek. */}
+                        <div className="flex-1 flex items-center gap-1.5 min-w-0">
+                          <span className="h-1.5 w-1.5 rounded-full bg-[#EF4444] animate-pulse flex-shrink-0" />
+                          <span className="text-xs font-bold uppercase tracking-wide text-[#F1F5F9]">Live</span>
                         </div>
-                        <button onClick={toggleMute} title={isMuted ? 'Unmute' : 'Mute'} className="text-[#F1F5F9] hover:text-[#00C8FF] transition">
-                          {isMuted ? <SpeakerXMarkIcon className="h-5 w-5" /> : <SpeakerWaveIcon className="h-5 w-5" />}
-                        </button>
-                        <button onClick={toggleFullscreen} title="Fullscreen" className="text-[#F1F5F9] hover:text-[#00C8FF] transition">
-                          <ArrowsPointingOutIcon className="h-5 w-5" />
+
+                        <div
+                          className="group/volume relative flex items-center flex-shrink-0"
+                          onMouseEnter={() => {
+                            isHoveringControlsRef.current = true;
+                            setControlsVisible(true);
+                          }}
+                        >
+                          <div className="hidden group-hover/volume:flex items-center pr-2">
+                            <input
+                              type="range"
+                              min={0}
+                              max={1}
+                              step={0.05}
+                              value={isMuted ? 0 : volume}
+                              onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+                              title="Volume"
+                              className="w-16 sm:w-20 accent-[#00C8FF]"
+                            />
+                          </div>
+                          <button
+                            onClick={toggleMute}
+                            title={isMuted ? 'Unmute' : 'Mute'}
+                            className="p-1.5 sm:p-1 text-[#F1F5F9] hover:text-[#00C8FF] transition"
+                          >
+                            {isMuted ? <SpeakerXMarkIcon className="h-5 w-5" /> : <SpeakerWaveIcon className="h-5 w-5" />}
+                          </button>
+                        </div>
+
+                        <button
+                          onClick={toggleFullscreen}
+                          title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+                          className="p-1.5 sm:p-1 text-[#F1F5F9] hover:text-[#00C8FF] transition flex-shrink-0"
+                        >
+                          {isFullscreen ? <ArrowsPointingInIcon className="h-5 w-5" /> : <ArrowsPointingOutIcon className="h-5 w-5" />}
                         </button>
                       </div>
                     </div>
