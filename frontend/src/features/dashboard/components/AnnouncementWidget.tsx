@@ -2,13 +2,7 @@
 import { formatRelativeTime } from '@/lib/formatters';
 import { MegaphoneIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
 import { Announcement } from '@/types/announcement.types';
-
-const TYPE_ICON: Record<string, string> = {
-  general: '📢',
-  academic: '📅',
-  event: '🎤',
-  emergency: '🚨',
-};
+import { Avatar } from './Avatar';
 
 interface AnnouncementWidgetProps {
   announcements: Announcement[];
@@ -44,15 +38,22 @@ export function AnnouncementWidget({ announcements, isLoading, onViewAll }: Anno
             <button
               key={a.id}
               onClick={onViewAll}
-              className="w-full flex items-start gap-2.5 text-left px-2 py-2 rounded-xl hover:bg-white/5 transition"
+              className="w-full flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-white/5 transition text-left"
             >
-              <span className="text-base leading-none mt-0.5">{TYPE_ICON[a.type] || '📢'}</span>
+              <Avatar src={a.created_by_avatar} name={a.created_by_username || undefined} size="sm" />
               <div className="min-w-0 flex-1">
-                <p className="text-sm text-[#F1F5F9] font-medium truncate">{a.title}</p>
+                <p className="text-sm font-medium text-[#F1F5F9] truncate">{a.title}</p>
                 <p className="text-xs text-[#64748B] mt-0.5">
                   {formatRelativeTime(a.created_at)} • {a.created_by_role}
                 </p>
               </div>
+              {a.image_url && (
+                <img
+                  src={a.image_url}
+                  alt=""
+                  className="h-9 w-9 rounded-lg object-cover flex-shrink-0 border border-[#1E3447]"
+                />
+              )}
             </button>
           ))}
         </div>

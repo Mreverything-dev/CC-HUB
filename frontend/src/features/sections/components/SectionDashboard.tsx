@@ -15,10 +15,12 @@ import {
   MegaphoneIcon,
   SpeakerWaveIcon,
   ExclamationTriangleIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/outline';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { useSections } from '../hooks/useSections';
 import { useChat } from '@/features/chat/hooks/useChat';
+import { profileService } from '@/services/api/profile.service';
 import { Avatar } from '@/features/dashboard/components/Avatar';
 import { RoleBadge } from '@/features/dashboard/components/RoleBadge';
 import { Section, SectionMember, TeachingAssignment } from '@/types/section.types';
@@ -37,6 +39,9 @@ interface SectionDashboardProps {
 }
 
 const STUDENTS_PAGE_SIZE = 10;
+
+const inputClassName =
+  'w-full px-3.5 py-2.5 rounded-xl border border-[#1E3447] bg-[#0A111A] text-sm text-[#F1F5F9] placeholder-[#64748B] focus:outline-none focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition';
 
 // "HH:MM:SS" (the backend's Time column) -> "2:30 PM" - a schedule-string
 // formatter, distinct from lib/formatters.ts's formatTime which formats a
@@ -86,6 +91,11 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
   const [showManageSection, setShowManageSection] = useState(false);
   const [showCreateSection, setShowCreateSection] = useState(false);
   const [showCreateAnnouncement, setShowCreateAnnouncement] = useState(false);
+
+  const [realFirstName, setRealFirstName] = useState('');
+  const [realLastName, setRealLastName] = useState('');
+  const [savingRealName, setSavingRealName] = useState(false);
+  const [realNameError, setRealNameError] = useState<string | null>(null);
 
   const canCreateSection = user?.role === 'professor' || user?.role === 'admin';
 
@@ -177,6 +187,18 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
     isTeachingProfessor ||
     members.some((m) => m.user_id === user?.id && (m.is_mayor || m.is_officer));
 
+  // A student who was just added to a section by a professor/admin/mayor
+  // starts out with no StudentProfile.first_name set at all - there's no
+  // separate "pending invitation" concept in this system (add_member always
+  // creates an already-active membership), so this reuses the already-
+  // fetched member row (this IS the page students land on when they open
+  // Sections - SectionDetailModal, which had this same gate, is only ever
+  // opened via the professor/admin/mayor-only "Manage Section" button, so a
+  // regular student never reached it) as the signal that they still need to
+  // set their real name before browsing the section normally.
+  const currentMember = members.find((m) => m.user_id === user?.id);
+  const needsRealName = user?.role === 'student' && !!currentMember && !currentMember.user_first_name;
+
   const filteredStudents = useMemo(() => {
     let list = regularStudents;
     if (search.trim()) {
@@ -214,6 +236,31 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
     const fresh = await getSection(selectedSectionId);
     setSection(fresh);
     refetch();
+  };
+
+  const handleSaveRealName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!realFirstName.trim() || !realLastName.trim()) {
+      setRealNameError('Please enter both your first and last name.');
+      return;
+    }
+    setRealNameError(null);
+    setSavingRealName(true);
+    try {
+      await profileService.updateStudentProfile({
+        first_name: realFirstName.trim(),
+        last_name: realLastName.trim(),
+      });
+      // Nothing to separately "accept" - the student is already a member,
+      // so refreshing the section (now with their real name populated) is
+      // what reveals the normal section view below.
+      await refreshSection();
+      toast.success('Welcome! Your name has been saved.');
+    } catch (err: any) {
+      setRealNameError(err.response?.data?.detail || "Couldn't save your name. Please try again.");
+    } finally {
+      setSavingRealName(false);
+    }
   };
 
   // Opens the section's own dedicated group conversation (never the generic
@@ -363,6 +410,50 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
             <div className="h-40 rounded-2xl bg-[#0D1722] animate-pulse" />
             <div className="h-40 rounded-2xl bg-[#0D1722] animate-pulse" />
           </div>
+        </div>
+      ) : needsRealName ? (
+        /* First time a newly-added student opens this section - blocks the
+           normal view until they set their real name (via the existing
+           profile API). There's no separate "accept invitation" step to
+           perform since add_member already made them a full member -
+           saving the name and refreshing is what reveals the section. */
+        <div className="rounded-2xl border border-[#1E3447] bg-[#0D1722] p-6 sm:p-10 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-[#00C8FF]/25 bg-[#00C8FF]/10">
+            <SparklesIcon className="h-7 w-7 text-[#00C8FF]" />
+          </div>
+          <h3 className="text-lg font-bold text-[#F1F5F9] mt-4">You're in {section.name}!</h3>
+          <p className="text-sm text-[#94A3B8] mt-1">What's your real name?</p>
+          <form onSubmit={handleSaveRealName} className="mt-5 max-w-sm mx-auto text-left space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-[#94A3B8] mb-1.5">First Name</label>
+              <input
+                type="text"
+                value={realFirstName}
+                onChange={(e) => setRealFirstName(e.target.value)}
+                placeholder="e.g. Limwel"
+                className={inputClassName}
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-[#94A3B8] mb-1.5">Last Name</label>
+              <input
+                type="text"
+                value={realLastName}
+                onChange={(e) => setRealLastName(e.target.value)}
+                placeholder="e.g. Perciba"
+                className={inputClassName}
+              />
+            </div>
+            {realNameError && <p className="text-xs text-[#EF4444]">{realNameError}</p>}
+            <button
+              type="submit"
+              disabled={savingRealName}
+              className="w-full py-2.5 text-sm font-semibold bg-gradient-to-br from-[#00C8FF] to-[#0090CC] text-[#060B12] rounded-xl hover:opacity-90 transition disabled:opacity-50"
+            >
+              {savingRealName ? 'Saving...' : 'Continue'}
+            </button>
+          </form>
         </div>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">

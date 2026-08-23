@@ -42,12 +42,12 @@ export default function NotificationBell({ onNavigateFriends }: NotificationBell
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 text-gray-500 hover:text-cyan-500 transition rounded-full hover:bg-cyan-500/10"
+        className="relative p-2 text-[#94A3B8] hover:text-[#00C8FF] transition rounded-xl hover:bg-white/5"
         title="Notifications"
       >
-        <BellIcon className="h-6 w-6" />
+        <BellIcon className="h-5 w-5" />
         {unreadNotifications > 0 && (
-          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
+          <span className="absolute -top-0.5 -right-0.5 bg-[#00C8FF] text-[#060B12] text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
             {unreadNotifications > 9 ? '9+' : unreadNotifications}
           </span>
         )}
@@ -63,22 +63,22 @@ export default function NotificationBell({ onNavigateFriends }: NotificationBell
               `right-0` to the button itself, at a fixed 320px width, was
               extending past the left edge of the screen and causing
               horizontal overflow on narrow phones. */}
-          <div className="fixed inset-x-3 top-16 sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 w-auto sm:w-80 bg-white rounded-lg shadow-lg border border-gray-100 z-50 overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="font-semibold text-gray-900">Notifications</h3>
+          <div className="fixed inset-x-3 top-16 sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 w-auto sm:w-80 bg-[#0D1722] rounded-2xl shadow-2xl border border-[#1E3447] z-50 overflow-hidden">
+            <div className="px-4 py-3 border-b border-[#1E3447] flex items-center justify-between">
+              <h3 className="font-semibold text-[#F1F5F9]">Notifications</h3>
               {unreadNotifications > 0 && (
                 <button
                   onClick={() => markAllNotificationsRead()}
-                  className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                  className="text-xs text-[#00C8FF] hover:text-[#00E0FF] font-medium transition"
                 >
                   Mark all read
                 </button>
               )}
             </div>
 
-            <div className="max-h-96 overflow-y-auto">
+            <div className="max-h-96 overflow-y-auto themed-scrollbar">
               {notifications.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-8">No notifications yet.</p>
+                <p className="text-sm text-[#64748B] text-center py-8">No notifications yet.</p>
               ) : (
                 notifications.map((n) => {
                   const actorAvatar = n.data?.actor_avatar as string | null | undefined;
@@ -87,31 +87,31 @@ export default function NotificationBell({ onNavigateFriends }: NotificationBell
                     <button
                       key={n.id}
                       onClick={() => handleNotificationClick(n.id, n.is_read, n.type, n.data)}
-                      className={`w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition ${
-                        !n.is_read ? 'bg-blue-50/50' : ''
+                      className={`w-full text-left px-4 py-3 border-b border-[#1E3447] hover:bg-white/5 transition ${
+                        !n.is_read ? 'bg-[#00C8FF]/[0.06]' : ''
                       }`}
                     >
                       <div className="flex items-start gap-2.5">
                         <div className="relative flex-shrink-0">
-                          <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
+                          <div className="w-8 h-8 rounded-full bg-[#1E3447] flex items-center justify-center overflow-hidden">
                             {actorAvatar ? (
                               <img src={actorAvatar} alt={actorName || ''} className="w-full h-full object-cover" />
                             ) : (
-                              <span className="text-gray-500 text-xs font-semibold">
+                              <span className="text-[#94A3B8] text-xs font-semibold">
                                 {actorName?.charAt(0).toUpperCase() || 'C'}
                               </span>
                             )}
                           </div>
                           {!n.is_read && (
-                            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-blue-600 border-2 border-white" />
+                            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#00C8FF] border-2 border-[#0D1722]" />
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900">{n.title}</p>
+                          <p className="text-sm font-medium text-[#F1F5F9]">{n.title}</p>
                           {n.content && (
-                            <p className="text-sm text-gray-500">{n.content}</p>
+                            <p className="text-sm text-[#94A3B8]">{n.content}</p>
                           )}
-                          <p className="text-xs text-gray-400 mt-1">
+                          <p className="text-xs text-[#64748B] mt-1">
                             {formatRelativeTime(n.created_at)}
                           </p>
                         </div>

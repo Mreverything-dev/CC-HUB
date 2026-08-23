@@ -1,9 +1,11 @@
 // frontend/src/features/sections/components/SectionDetailModal.tsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { Section, SectionMember } from '@/types/section.types';
 import { useSections } from '../hooks/useSections';
 import { useAuthStore } from '@/features/auth/store/auth.store';
+import { profileService } from '@/services/api/profile.service';
 import {
   XMarkIcon,
   UserPlusIcon,
@@ -12,6 +14,7 @@ import {
   ShieldCheckIcon,
   ExclamationTriangleIcon,
   MegaphoneIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/outline';
 import { Avatar } from '@/features/dashboard/components/Avatar';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -22,6 +25,19 @@ interface SectionDetailModalProps {
   section: Section;
   onClose: () => void;
   onRefresh: () => void;
+}
+
+const inputClassName =
+  'w-full px-3.5 py-2.5 rounded-xl border border-[#1E3447] bg-[#0A111A] text-sm text-[#F1F5F9] placeholder-[#64748B] focus:outline-none focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition';
+
+/** "Last Name, First Name" - falls back to the username for anyone who
+ * hasn't set up their real name yet (mirrors AddStudentModal's own
+ * first/last-name-with-username-fallback convention). */
+function formatMemberName(member: SectionMember): string {
+  if (member.user_last_name || member.user_first_name) {
+    return `${member.user_last_name || ''}${member.user_last_name && member.user_first_name ? ', ' : ''}${member.user_first_name || ''}`.trim();
+  }
+  return member.user_username || 'Student';
 }
 
 export default function SectionDetailModal({ section: initialSection, onClose, onRefresh }: SectionDetailModalProps) {
@@ -43,6 +59,10 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [removeTarget, setRemoveTarget] = useState<SectionMember | null>(null);
+  const [realFirstName, setRealFirstName] = useState('');
+  const [realLastName, setRealLastName] = useState('');
+  const [savingRealName, setSavingRealName] = useState(false);
+  const [realNameError, setRealNameError] = useState<string | null>(null);
 
   // A user counts as "one of the section's professors" via the legacy
   // single advisor_id OR an active teaching assignment - never just one.
@@ -66,6 +86,39 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
   const userMember = section.members?.find(m => m.user_id === user?.id);
   const isOfficer = userMember?.is_officer || false;
   const isMayor = userMember?.is_mayor || false;
+
+  // A student who was just added to a section by a professor/admin/mayor
+  // starts out with no StudentProfile.first_name set at all - there's no
+  // separate "pending invitation" concept in this system (add_member always
+  // creates an already-active membership), so this reuses that same
+  // already-fetched member row as the signal that they still need to set
+  // their real name before browsing the section normally.
+  const needsRealName = user?.role === 'student' && !!userMember && !userMember.user_first_name;
+
+  const handleSaveRealName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!realFirstName.trim() || !realLastName.trim()) {
+      setRealNameError('Please enter both your first and last name.');
+      return;
+    }
+    setRealNameError(null);
+    setSavingRealName(true);
+    try {
+      await profileService.updateStudentProfile({
+        first_name: realFirstName.trim(),
+        last_name: realLastName.trim(),
+      });
+      // Nothing to separately "accept" - the student is already a member,
+      // so refreshing the section (now with their real name populated)
+      // is what reveals the normal section view below.
+      await refreshSection();
+      toast.success('Welcome! Your name has been saved.');
+    } catch (err: any) {
+      setRealNameError(err.response?.data?.detail || "Couldn't save your name. Please try again.");
+    } finally {
+      setSavingRealName(false);
+    }
+  };
 
   // Fetch full section details when modal opens
   useEffect(() => {
@@ -168,7 +221,11 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
     }
   };
 
-  const members = section.members || [];
+  // Alphabetical by "Last Name, First Name" - the section's own member order
+  // (join order) isn't touched anywhere else, this is purely a display sort.
+  const members = [...(section.members || [])].sort((a, b) =>
+    formatMemberName(a).localeCompare(formatMemberName(b))
+  );
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-0 sm:p-4 z-50">
@@ -240,6 +297,52 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
               <div key={i} className="h-16 rounded-xl bg-[#162534]/60 animate-pulse" />
             ))}
           </div>
+        ) : !error && needsRealName ? (
+          /* First time a newly-added student opens this section - blocks the
+             normal view until they set their real name (via the existing
+             profile API). There's no separate "accept invitation" step to
+             perform since add_member already made them a full member -
+             saving the name and refreshing is what reveals the section. */
+          <div className="p-6 sm:p-8 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-[#00C8FF]/25 bg-[#00C8FF]/10">
+              <SparklesIcon className="h-7 w-7 text-[#00C8FF]" />
+            </div>
+            <h3 className="text-lg font-bold text-[#F1F5F9] mt-4">
+              You're in {section.name}!
+            </h3>
+            <p className="text-sm text-[#94A3B8] mt-1">What's your real name?</p>
+            <form onSubmit={handleSaveRealName} className="mt-5 max-w-sm mx-auto text-left space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-[#94A3B8] mb-1.5">First Name</label>
+                <input
+                  type="text"
+                  value={realFirstName}
+                  onChange={(e) => setRealFirstName(e.target.value)}
+                  placeholder="e.g. Limwel"
+                  className={inputClassName}
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#94A3B8] mb-1.5">Last Name</label>
+                <input
+                  type="text"
+                  value={realLastName}
+                  onChange={(e) => setRealLastName(e.target.value)}
+                  placeholder="e.g. Perciba"
+                  className={inputClassName}
+                />
+              </div>
+              {realNameError && <p className="text-xs text-[#EF4444]">{realNameError}</p>}
+              <button
+                type="submit"
+                disabled={savingRealName}
+                className="w-full py-2.5 text-sm font-semibold bg-gradient-to-br from-[#00C8FF] to-[#0090CC] text-[#060B12] rounded-xl hover:opacity-90 transition disabled:opacity-50"
+              >
+                {savingRealName ? 'Saving...' : 'Continue'}
+              </button>
+            </form>
+          </div>
         ) : !error && (
           <>
             {/* Actions - Show for users with manage permission (advisor, admin, mayor, officer) */}
@@ -293,14 +396,14 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
                         className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 bg-[#162534]/60 hover:bg-[#162534] border border-transparent hover:border-[#1E3447] rounded-xl transition"
                       >
                         <div className="flex items-center gap-3 min-w-0">
-                          <Avatar src={member.user_avatar} name={member.user_username || undefined} size="sm" />
+                          <Avatar src={member.user_avatar} name={formatMemberName(member)} size="sm" />
                           <div className="min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <p
                                 onClick={() => navigate(`/profile/${member.user_id}`)}
                                 className="font-medium text-[#F1F5F9] hover:underline cursor-pointer truncate"
                               >
-                                {member.user_username}
+                                {formatMemberName(member)}
                               </p>
                               {member.is_mayor && (
                                 <span className="text-xs bg-[#F59E0B]/10 text-[#F59E0B] border border-[#F59E0B]/30 px-2 py-0.5 rounded-full font-medium flex-shrink-0">
@@ -323,7 +426,6 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
                                 </span>
                               )}
                             </div>
-                            <p className="text-sm text-[#64748B] truncate">{member.user_email}</p>
                           </div>
                         </div>
 
@@ -420,7 +522,7 @@ export default function SectionDetailModal({ section: initialSection, onClose, o
           title="Remove Student"
           message={
             <>
-              Remove <span className="font-semibold text-[#F1F5F9]">{removeTarget.user_username}</span>{' '}
+              Remove <span className="font-semibold text-[#F1F5F9]">{formatMemberName(removeTarget)}</span>{' '}
               from <span className="font-semibold text-[#F1F5F9]">"{section.name}"</span>? They will
               lose access to this section's announcements and resources.
             </>

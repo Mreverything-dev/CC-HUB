@@ -1,13 +1,13 @@
 // frontend/src/features/dashboard/pages/ProfessorDashboard.tsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
-import { CodeXml } from 'lucide-react';
 import { CreatePost } from '@/features/posts/components/CreatePost';
 import { PostCard } from '@/features/posts/components/PostCard';
 import { useFeed } from '@/features/posts/hooks/useFeed';
 import AnnouncementFeedBody from '@/features/announcements/components/AnnouncementFeedBody';
 import { useAnnouncements } from '@/features/announcements/hooks/useAnnouncements';
 import { useSections } from '@/features/sections/hooks/useSections';
+import { useTeachingAssignments } from '@/features/sections/hooks/useTeachingAssignments';
 import SectionDashboard from '@/features/sections/components/SectionDashboard';
 import ProfessorTeachingHub from '@/features/sections/components/ProfessorTeachingHub';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
@@ -15,6 +15,9 @@ import { useAuthStore } from '@/features/auth/store/auth.store';
 import { profileService } from '@/services/api/profile.service';
 import { Sidebar, SidebarSection } from '@/features/dashboard/components/Sidebar';
 import { Topbar } from '@/features/dashboard/components/Topbar';
+import { ClassReminderCard } from '@/features/dashboard/components/ClassReminderCard';
+import ClassesPage from '@/features/dashboard/pages/ClassesPage';
+import { buildTodayClasses, buildWeekOccurrences, findNextUpcomingClass, subjectDurationHours } from '@/features/dashboard/utils/todayClasses';
 import { AnnouncementWidget } from '@/features/dashboard/components/AnnouncementWidget';
 import { SectionWidget } from '@/features/dashboard/components/SectionWidget';
 import { EventCardList } from '@/features/dashboard/components/EventCard';
@@ -59,6 +62,10 @@ export default function ProfessorDashboard() {
   // Sections (for the right-rail widget; SectionManager handles the full Sections view itself)
   const { sections = [], isLoading: sectionsLoading } = useSections();
 
+  // Today's Teaching Reminder - reuses the exact same data already powering
+  // ProfessorTeachingHub (mine + sections' member_count), no new API call.
+  const { mine: myAssignments = [] } = useTeachingAssignments();
+
   const { liveStreams, isLoading: liveStreamsLoading } = useLiveStreamsFeed();
 
   useEffect(() => {
@@ -80,6 +87,43 @@ export default function ProfessorDashboard() {
   const handleCreatePost = async (data: { content: string; media_urls?: string[] }) => {
     await createPost(data);
   };
+
+  const todayEntries = useMemo(
+    () =>
+      buildTodayClasses(myAssignments, (ta) => {
+        const section = sectionList.find((s) => s.id === ta.section_id);
+        const memberCount = section?.member_count ?? 0;
+        return {
+          primaryMeta: ta.section_name || section?.name || 'Section',
+          secondaryMeta: `${memberCount} ${memberCount === 1 ? 'Student' : 'Students'}`,
+        };
+      }),
+    [myAssignments, sectionList]
+  );
+  const nextUpcomingClass = useMemo(() => findNextUpcomingClass(myAssignments), [myAssignments]);
+
+  // Classes page - same assignments powering the reminder above, expanded
+  // into one entry per scheduled day across the week (see buildWeekOccurrences).
+  const classOccurrences = useMemo(
+    () =>
+      buildWeekOccurrences(myAssignments, (ta) => {
+        const section = sectionList.find((s) => s.id === ta.section_id);
+        const memberCount = section?.member_count ?? 0;
+        return {
+          primaryMeta: ta.section_name || section?.name || 'Section',
+          secondaryMeta: `${memberCount} ${memberCount === 1 ? 'Student' : 'Students'}`,
+        };
+      }),
+    [myAssignments, sectionList]
+  );
+  const classesSectionsCount = useMemo(
+    () => new Set(myAssignments.map((ta) => ta.section_id)).size,
+    [myAssignments]
+  );
+  const classesTotalHours = useMemo(
+    () => Math.round(myAssignments.reduce((sum, ta) => sum + subjectDurationHours(ta), 0) * 10) / 10,
+    [myAssignments]
+  );
 
   return (
     <div className="min-h-screen bg-[#07111A] text-[#F1F5F9] flex">
@@ -112,20 +156,14 @@ export default function ProfessorDashboard() {
             <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6">
               {/* Center - Feed */}
               <div className="space-y-6 min-w-0">
-                {/* Greeting */}
-                <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                  <div className="min-w-0">
-                    <h1 className="text-xl font-semibold text-[#F1F5F9] break-words">
-                      Good morning, <span className="text-[#00C8FF]">{user?.username || 'Professor'}</span>! 👋
-                    </h1>
-                    <p className="text-sm text-[#94A3B8] mt-1">
-                      Manage your classes, posts, and announcements.
-                    </p>
-                  </div>
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-[#00C8FF]/30 bg-[#00C8FF]/10 shadow-[0_0_16px_rgba(0,200,245,0.12)]">
-                    <CodeXml className="h-5 w-5 text-[#00C8FF]" />
-                  </div>
-                </div>
+                {/* Greeting / Today's Teaching Reminder */}
+                <ClassReminderCard
+                  greetingTitle={`Welcome back, ${user?.username || 'Professor'}! 👋`}
+                  greetingSubtitle="Manage your classes, posts, and announcements."
+                  scheduleLabel="Today's Teaching"
+                  entries={todayEntries}
+                  nextUpcoming={nextUpcomingClass}
+                />
 
                 <CreatePost onCreatePost={handleCreatePost} isLoading={isPosting} dark avatarUrl={avatarUrl} />
 
@@ -188,6 +226,19 @@ export default function ProfessorDashboard() {
           )}
 
           {activeSection === 'announcements' && <AnnouncementFeedBody />}
+
+          {activeSection === 'classes' && (
+            <ClassesPage
+              occurrences={classOccurrences}
+              sectionsCount={classesSectionsCount}
+              totalHours={classesTotalHours}
+              isLoading={sectionsLoading}
+              onOpenSection={(sectionId) => {
+                setSelectedTeachingSectionId(sectionId);
+                setActiveSection('sections');
+              }}
+            />
+          )}
 
           {activeSection === 'sections' && (
             selectedTeachingSectionId ? (

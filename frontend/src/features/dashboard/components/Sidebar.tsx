@@ -28,7 +28,7 @@ import { livestreamService } from '@/services/api/livestream.service';
 import { Avatar } from './Avatar';
 import { RoleBadge } from './RoleBadge';
 
-export type SidebarSection = 'feed' | 'announcements' | 'sections' | 'users' | 'friends' | 'chat';
+export type SidebarSection = 'feed' | 'announcements' | 'sections' | 'classes' | 'users' | 'friends' | 'chat';
 
 interface NavItem {
   id: string;
@@ -45,7 +45,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'announcements', label: 'Announcements', icon: MegaphoneIcon, section: 'announcements' },
   { id: 'sections', label: 'Sections', icon: UsersIcon, section: 'sections' },
   { id: 'users', label: 'Users', icon: IdentificationIcon, section: 'users', adminOnly: true },
-  { id: 'classes', label: 'Classes', icon: AcademicCapIcon, comingSoon: true },
+  { id: 'classes', label: 'Classes', icon: AcademicCapIcon, section: 'classes' },
   { id: 'live', label: 'Live Streams', icon: VideoCameraIcon, href: '/livestreams' },
   { id: 'chat', label: 'Chat', icon: ChatBubbleLeftIcon, section: 'chat' },
   { id: 'friends', label: 'Friends', icon: UserPlusIcon, section: 'friends' },

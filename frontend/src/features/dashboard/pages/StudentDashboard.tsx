@@ -1,7 +1,7 @@
 // frontend/src/features/dashboard/pages/StudentDashboard.tsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
-import { CodeXml } from 'lucide-react';
+
 import { CreatePost } from '@/features/posts/components/CreatePost';
 import { PostCard } from '@/features/posts/components/PostCard';
 import { useFeed } from '@/features/posts/hooks/useFeed';
@@ -13,6 +13,9 @@ import { useAuthStore } from '@/features/auth/store/auth.store';
 import { profileService } from '@/services/api/profile.service';
 import { Sidebar, SidebarSection } from '@/features/dashboard/components/Sidebar';
 import { Topbar } from '@/features/dashboard/components/Topbar';
+import { ClassReminderCard } from '@/features/dashboard/components/ClassReminderCard';
+import ClassesPage from '@/features/dashboard/pages/ClassesPage';
+import { buildTodayClasses, buildWeekOccurrences, findNextUpcomingClass, subjectDurationHours } from '@/features/dashboard/utils/todayClasses';
 import { AnnouncementWidget } from '@/features/dashboard/components/AnnouncementWidget';
 import { SectionWidget } from '@/features/dashboard/components/SectionWidget';
 import { EventCardList } from '@/features/dashboard/components/EventCard';
@@ -20,6 +23,11 @@ import { LiveStreamsWidget } from '@/features/dashboard/components/admin/LiveStr
 import { useLiveStreamsFeed } from '@/features/livestream/hooks/useLiveStreamsFeed';
 import FriendsPage from '@/features/friends/components/FriendsPage';
 import ChatPanel from '@/features/chat/components/ChatPanel';
+
+function professorLabel(ta: { professor_first_name?: string | null; professor_last_name?: string | null; professor_username?: string | null }): string {
+  const name = ta.professor_first_name ? `${ta.professor_first_name} ${ta.professor_last_name || ''}`.trim() : ta.professor_username;
+  return name ? `Prof. ${name}` : 'Professor';
+}
 
 export default function StudentDashboard() {
   const { user } = useAuthStore();
@@ -79,6 +87,36 @@ export default function StudentDashboard() {
     await createPost(data);
   };
 
+  // Today's Class Reminder - derived entirely from the section's own
+  // teaching_assignments (already embedded on the Section object returned
+  // by useSections(), same data SectionWidget/SectionDashboard already
+  // read), no new API call.
+  const sectionAssignments = mySection?.teaching_assignments || [];
+  const todayEntries = useMemo(
+    () =>
+      buildTodayClasses(sectionAssignments, (ta) => ({
+        primaryMeta: professorLabel(ta),
+        secondaryMeta: mySection?.name,
+      })),
+    [sectionAssignments, mySection?.name]
+  );
+  const nextUpcomingClass = useMemo(() => findNextUpcomingClass(sectionAssignments), [sectionAssignments]);
+
+  // Classes page - same section assignments, expanded into one entry per
+  // scheduled day across the week (see buildWeekOccurrences).
+  const classOccurrences = useMemo(
+    () =>
+      buildWeekOccurrences(sectionAssignments, (ta) => ({
+        primaryMeta: professorLabel(ta),
+        secondaryMeta: mySection?.name,
+      })),
+    [sectionAssignments, mySection?.name]
+  );
+  const classesTotalHours = useMemo(
+    () => Math.round(sectionAssignments.reduce((sum, ta) => sum + subjectDurationHours(ta), 0) * 10) / 10,
+    [sectionAssignments]
+  );
+
   return (
     <div className="min-h-screen bg-[#07111A] text-[#F1F5F9] flex">
       {/* Subtle grid background */}
@@ -110,20 +148,14 @@ export default function StudentDashboard() {
             <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6">
               {/* Center - Feed */}
               <div className="space-y-6 min-w-0">
-                {/* Greeting */}
-                <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                  <div className="min-w-0">
-                    <h1 className="text-xl font-semibold text-[#F1F5F9] break-words">
-                      Welcome to CCS HUB, <span className="text-[#00C8FF]">{user?.username || 'Student'}</span>! 👋
-                    </h1>
-                    <p className="text-sm text-[#94A3B8] mt-1">
-                      Stay informed, connected, and up to date with the College of Computer Studies.
-                    </p>
-                  </div>
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-[#00C8FF]/30 bg-[#00C8FF]/10 shadow-[0_0_16px_rgba(0,200,245,0.12)]">
-                    <CodeXml className="h-5 w-5 text-[#00C8FF]" />
-                  </div>
-                </div>
+                {/* Greeting / Today's Class Reminder */}
+                <ClassReminderCard
+                  greetingTitle={`Welcome back, ${user?.username || 'Student'}! 👋`}
+                  greetingSubtitle="Stay informed, connected, and up to date with the College of Computer Studies."
+                  scheduleLabel="Today's Schedule"
+                  entries={todayEntries}
+                  nextUpcoming={nextUpcomingClass}
+                />
 
                 <CreatePost onCreatePost={handleCreatePost} isLoading={isPosting} dark avatarUrl={avatarUrl} />
 
@@ -186,6 +218,15 @@ export default function StudentDashboard() {
           )}
 
           {activeSection === 'announcements' && <AnnouncementFeedBody />}
+
+          {activeSection === 'classes' && (
+            <ClassesPage
+              occurrences={classOccurrences}
+              sectionsCount={sectionList.length}
+              totalHours={classesTotalHours}
+              isLoading={sectionsLoading}
+            />
+          )}
 
           {activeSection === 'sections' && (
             <SectionDashboard
