@@ -1,7 +1,7 @@
 ﻿// frontend/src/features/auth/hooks/useAuth.ts
 import { useAuthStore } from '../store/auth.store';
 import { authApi } from '../api/auth.api';
-import { LoginRequest, RegisterRequest, ForgotPasswordRequest, ResetPasswordRequest } from '../types/auth.types';
+import { LoginRequest, RegisterRequest, ForgotPasswordRequest, ResetPasswordRequest, ChangePasswordRequest } from '../types/auth.types';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -81,11 +81,16 @@ export function useAuth() {
     }
   };
 
-  const changePassword = async (data: any) => {
+  // Step 1 only - sends a confirmation email, does not change the password
+  // yet (see authApi.confirmChangePassword for step 2). Returns the
+  // server's own message so the caller can show it verbatim, same pattern
+  // as forgotPassword/resetPassword below.
+  const changePassword = async (data: ChangePasswordRequest) => {
     setIsLoading(true);
     try {
-      await authApi.changePassword(data);
-      toast.success('Password changed successfully');
+      const response = await authApi.changePassword(data);
+      toast.success(response.data.message);
+      return response.data;
     } catch (error: any) {
       toast.error(error.response?.data?.detail || 'Failed to change password');
       throw error;

@@ -116,5 +116,36 @@ class EmailService:
             logger.error(f"❌ Failed to send password reset email: {e}")
             return False
 
+    async def send_password_change_confirmation_email(self, to_email: str, username: str, token: str):
+        """Send the confirm-my-password-change link for an authenticated
+        Settings > Security change - a distinct template from
+        send_password_reset_email since the wording differs (this is a
+        change the user just initiated while logged in, not an "I forgot my
+        password" request)."""
+        confirm_url = f"{settings.FRONTEND_URL}/confirm-password-change?token={token}"
+
+        template = self.template_env.get_template("password_change_confirmation_email.html")
+        html_content = template.render(
+            username=username,
+            confirm_url=confirm_url,
+            app_name=settings.APP_NAME,
+            year=datetime.utcnow().year
+        )
+
+        message = MessageSchema(
+            subject=f"Confirm Your Password Change - {settings.APP_NAME}",
+            recipients=[to_email],
+            body=html_content,
+            subtype=MessageType.html
+        )
+
+        try:
+            await self.fastmail.send_message(message)
+            logger.info(f"✅ Password change confirmation email sent to {to_email}")
+            return True
+        except ConnectionErrors as e:
+            logger.error(f"❌ Failed to send password change confirmation email: {e}")
+            return False
+
 # Create singleton instance
 email_service = EmailService()

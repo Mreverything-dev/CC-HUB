@@ -6,6 +6,8 @@ import {
   AuthResponse,
   RegisterResponse,
   ChangePasswordRequest,
+  ChangePasswordResponse,
+  ConfirmChangePasswordResponse,
   User,
   ForgotPasswordRequest,
   ResetPasswordRequest,
@@ -28,8 +30,16 @@ export const authApi = {
   getMe: () => 
     api.get<User>('/auth/me'),
   
+  // Step 1: validates current password + new password, emails a
+  // confirmation link. The password is not changed until that link is
+  // clicked (see confirmChangePassword below).
   changePassword: (data: ChangePasswordRequest) =>
-    api.post('/auth/change-password', data),
+    api.post<ChangePasswordResponse>('/auth/change-password', data),
+
+  // Step 2: called from the ConfirmPasswordChange page once the user
+  // clicks the emailed link.
+  confirmChangePassword: (token: string) =>
+    api.get<ConfirmChangePasswordResponse>('/auth/confirm-change-password', { params: { token } }),
 
   updateUsername: (username: string) =>
     api.put<{ message: string; username: string }>('/auth/update-username', { username }),

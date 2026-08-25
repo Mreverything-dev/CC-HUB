@@ -3,6 +3,7 @@ import { useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { chatApi } from '@/services/api/chat.service';
 import { useChatStore } from '../store/chat.store';
+import { useAuthStore } from '@/features/auth/store/auth.store';
 import { socketService } from '@/lib/socket';
 import toast from 'react-hot-toast';
 
@@ -10,6 +11,15 @@ import toast from 'react-hot-toast';
 // based on auth state). This hook only joins rooms / emits on the existing connection.
 export function useChat() {
   const queryClient = useQueryClient();
+  // ChatWidget (mounted globally at the app root, on every route including
+  // public/unauthenticated pages like reset-password, verify-email, and
+  // confirm-password-change) calls this hook unconditionally. Without this
+  // guard, the conversations query below fired on every page load with no
+  // token, 401'd, and the axios interceptor's refresh-then-redirect logic
+  // (see lib/axios.ts) hard-navigated the browser to /login - which is what
+  // made an unauthenticated visitor's reset-password page flash and
+  // disappear seconds after loading, even though nothing was actually wrong.
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const {
     conversations,
     currentConversation,
@@ -31,7 +41,8 @@ export function useChat() {
     setLoading,
   } = useChatStore();
 
-  // Get conversations
+  // Get conversations - only ever meaningful (and only ever valid to call)
+  // once someone is actually logged in; see the isAuthenticated comment above.
   const { isLoading: isLoadingConversations, refetch: refetchConversations } = useQuery({
     queryKey: ['conversations'],
     queryFn: async () => {
@@ -44,6 +55,7 @@ export function useChat() {
       setUnreadCount(totalUnread);
       return response.data;
     },
+    enabled: isAuthenticated,
   });
 
   // Get messages for a conversation

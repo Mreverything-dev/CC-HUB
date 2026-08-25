@@ -45,6 +45,9 @@ class AuthService:
     def _password_reset_key(self, token: str) -> str:
         return f"password_reset:{token}"
 
+    def _password_change_key(self, token: str) -> str:
+        return f"password_change:{token}"
+
     async def register(self, request: RegisterRequest) -> RegisterResponse:
         """Register a new user with invitation code validation for professor/admin"""
         logger.info(f"📝 Registering user: {request.email} with role: {request.role}")
@@ -734,42 +737,114 @@ class AuthService:
         return {"message": "Successfully logged out"}
 
     # ============================================
-    # CHANGE PASSWORD
+    # CHANGE PASSWORD (two-step: request -> email confirmation -> apply)
     # ============================================
-    async def change_password(self, user_id: str, request) -> dict:
-        """Change user password"""
-        logger.info(f"🔑 Changing password for user: {user_id}")
-        
-        try:
-            result = await self.db.execute(
-                select(User).where(User.id == user_id)
+    async def request_change_password(self, user_id: str, request) -> dict:
+        """Step 1: validate the current password and new-password
+        requirements (both already enforced by ChangePasswordRequest's own
+        validators - min length, confirm-match), then email a confirmation
+        link before touching the database. Mirrors forgot_password's
+        token-in-Redis pattern exactly, except the value stored is the
+        ALREADY-HASHED new password (computed now, while the request is
+        still authenticated and trusted) rather than just a user id - so
+        confirm_change_password never needs the plaintext again and the
+        applied hash can't drift from what was actually confirmed."""
+        logger.info(f"🔑 Password change requested for user: {user_id}")
+
+        result = await self.db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+        if not verify_password(request.current_password, user.password_hash):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
+
+        if verify_password(request.new_password, user.password_hash):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="New password must be different from your current password",
             )
-            user = result.scalar_one_or_none()
-            
-            if not user:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="User not found"
-                )
-            
-            if not verify_password(request.current_password, user.password_hash):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Current password is incorrect"
-                )
-            
-            user.password_hash = get_password_hash(request.new_password)
-            await self.db.commit()
-            
-            logger.info(f"✅ Password changed for user: {user.email}")
-            return {"message": "Password changed successfully"}
-            
-        except HTTPException:
-            raise
+
+        new_password_hash = get_password_hash(request.new_password)
+        change_token = secrets.token_urlsafe(32)
+
+        await redis_service.set_token(
+            self._password_change_key(change_token),
+            {"user_id": str(user.id), "new_password_hash": new_password_hash},
+            30 * 60,  # 30 minutes, same window as forgot/reset-password
+        )
+
+        try:
+            await email_service.send_password_change_confirmation_email(
+                to_email=user.email,
+                username=user.username,
+                token=change_token,
+            )
         except Exception as e:
-            logger.error(f"❌ Password change error: {e}")
-            await self.db.rollback()
+            logger.error(f"❌ Failed to send password change confirmation email: {e}")
+            await redis_service.delete_token(self._password_change_key(change_token))
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Password change failed: {str(e)}"
+                detail="Failed to send confirmation email. Please try again.",
             )
+
+        logger.info(f"📧 Password change confirmation email sent for user: {user.email}")
+        return {
+            "message": "We've sent a confirmation link to your email. Click it to finish changing your password.",
+            "requires_verification": True,
+        }
+
+    async def confirm_change_password(self, token: str) -> dict:
+        """Step 2: the user clicked the emailed confirmation link - apply
+        the new password hash that was already computed and validated in
+        request_change_password.
+
+        The actual password_hash write happens at most once per token (see
+        the `consumed` check below) - but a REPEAT confirmation of the same
+        token must still succeed, not error. Without that, this token
+        behaves like a true one-time-use secret that vanishes the instant
+        it's redeemed, which breaks the very next duplicate request for
+        entirely ordinary reasons: React 18 StrictMode fires effects twice
+        in dev, an email client's link-scanner (Outlook Safe Links, Gmail
+        image/link proxying, etc.) can visit the URL before the user ever
+        clicks it, and a page refresh or double-click both re-fire the same
+        request. verify_email() already solves this correctly by keeping
+        the token row and checking is_verified on a repeat lookup instead of
+        deleting it outright - this mirrors that exact pattern instead of
+        treating "already confirmed" as indistinguishable from "never
+        existed"."""
+        logger.info("🔐 Confirming password change with token")
+
+        redis_data = await redis_service.get_token(self._password_change_key(token))
+        if not redis_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired confirmation link. Please request the password change again.",
+            )
+
+        result = await self.db.execute(
+            select(User).where(User.id == redis_data.get("user_id"), User.is_active == True)
+        )
+        user = result.scalar_one_or_none()
+        if not user:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired confirmation link")
+
+        if not redis_data.get("consumed"):
+            user.password_hash = redis_data.get("new_password_hash")
+            await self.db.commit()
+
+            # Mark consumed rather than delete outright, so a near-simultaneous
+            # repeat confirmation of this exact token is idempotent (same
+            # success response) instead of a false "invalid or expired" - the
+            # password_hash write above still only ever happens this one time,
+            # guarded by this same `consumed` check.
+            await redis_service.set_token(
+                self._password_change_key(token),
+                {"user_id": redis_data.get("user_id"), "consumed": True},
+                30 * 60,
+            )
+            logger.info(f"✅ Password change confirmed for user: {user.email}")
+        else:
+            logger.info(f"ℹ️ Password change link re-opened after already being confirmed for user: {user.email}")
+
+        return {"message": "Your password has been changed successfully.", "success": True}

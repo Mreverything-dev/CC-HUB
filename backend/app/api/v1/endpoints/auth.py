@@ -7,7 +7,8 @@ from app.core.database import get_db
 from app.services.auth_service import AuthService
 from app.schemas.auth import (
     LoginRequest, RegisterRequest, TokenResponse, RegisterResponse,
-    RefreshTokenRequest, ChangePasswordRequest, UserResponse,
+    RefreshTokenRequest, ChangePasswordRequest, ChangePasswordResponse,
+    ConfirmChangePasswordResponse, UserResponse,
     ResendVerificationRequest, VerifyEmailResponse,
     ForgotPasswordRequest, ResetPasswordRequest, PasswordResetResponse
 )
@@ -67,15 +68,29 @@ async def get_current_user_info(
     """Get current user information"""
     return UserResponse.model_validate(current_user)
 
-@router.post("/change-password")
+@router.post("/change-password", response_model=ChangePasswordResponse)
 async def change_password(
     request: ChangePasswordRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ) -> Any:
-    """Change user password"""
+    """Step 1 of changing your password: validates the current password and
+    the new password's requirements, then emails a confirmation link. The
+    password itself is NOT changed until that link is clicked (see
+    /confirm-change-password) - mirrors the existing forgot/reset-password
+    flow's token-then-confirm shape."""
     service = AuthService(db)
-    return await service.change_password(str(current_user.id), request)
+    return await service.request_change_password(str(current_user.id), request)
+
+@router.get("/confirm-change-password", response_model=ConfirmChangePasswordResponse)
+async def confirm_change_password(
+    token: str = Query(..., description="Confirmation token from email"),
+    db: AsyncSession = Depends(get_db)
+) -> Any:
+    """Step 2: applies the new password after the user clicks the emailed
+    confirmation link - same GET-with-token shape as /verify-email."""
+    service = AuthService(db)
+    return await service.confirm_change_password(token)
 
 @router.put("/update-username")
 async def update_username(

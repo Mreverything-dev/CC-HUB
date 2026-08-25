@@ -59,6 +59,16 @@ export interface ChangePasswordRequest {
   confirm_password: string;
 }
 
+export interface ChangePasswordResponse {
+  message: string;
+  requires_verification: boolean;
+}
+
+export interface ConfirmChangePasswordResponse {
+  message: string;
+  success: boolean;
+}
+
 export interface ForgotPasswordRequest {
   email: string;
 }

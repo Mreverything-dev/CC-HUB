@@ -15,6 +15,7 @@ import { Avatar } from '@/features/dashboard/components/Avatar';
 import { RoleBadge } from '@/features/dashboard/components/RoleBadge';
 import { Sidebar, SidebarSection } from '@/features/dashboard/components/Sidebar';
 import { Topbar } from '@/features/dashboard/components/Topbar';
+import { ChangePasswordSection } from '@/features/profile/components/ChangePasswordSection';
 import { formatDate } from '@/lib/formatters';
 import toast from 'react-hot-toast';
 import {
@@ -105,7 +106,7 @@ export default function ProfilePage() {
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isUploadingCover, setIsUploadingCover] = useState(false);
   const [formData, setFormData] = useState<any>({});
-  const [activeTab, setActiveTab] = useState<'posts' | 'shares' | 'saved' | 'info'>('posts');
+  const [activeTab, setActiveTab] = useState<'posts' | 'shares' | 'saved' | 'info' | 'security'>('posts');
   const [posts, setPosts] = useState<Post[]>([]);
   const [postsLoading, setPostsLoading] = useState(false);
   const [shares, setShares] = useState<Post[]>([]);
@@ -1050,12 +1051,15 @@ export default function ProfilePage() {
           <div className="xl:col-span-2 min-w-0">
             {/* Tabs */}
             <div className="flex items-center gap-1 border-b border-[#1E3447] mb-4">
-              {([
-                ['posts', 'Posts'],
-                ['shares', 'Shares'],
-                ['saved', 'Saved'],
-                ['info', 'About'],
-              ] as const).map(([id, label]) => (
+              {(
+                [
+                  ['posts', 'Posts'],
+                  ['shares', 'Shares'],
+                  ['saved', 'Saved'],
+                  ['info', 'About'],
+                  isOwnProfile ? ['security', 'Security'] : null,
+                ].filter(Boolean) as [typeof activeTab, string][]
+              ).map(([id, label]) => (
                 <button
                   key={id}
                   onClick={() => setActiveTab(id)}
@@ -1071,7 +1075,9 @@ export default function ProfilePage() {
             </div>
 
             <div className="space-y-4">
-              {activeTab === 'info' ? (
+              {activeTab === 'security' && isOwnProfile ? (
+                <ChangePasswordSection />
+              ) : activeTab === 'info' ? (
                 <div className="rounded-2xl border border-[#1E3447] bg-[#0D1722] p-6">{renderProfileFields()}</div>
               ) : activeTab === 'saved' ? (
                 <div className="rounded-2xl border border-[#1E3447] bg-[#0D1722] p-10 text-center">
