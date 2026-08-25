@@ -4,6 +4,8 @@ from typing import List, Optional
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
+    FIRST_SUPERUSER_EMAIL: str
+    FIRST_SUPERUSER_PASSWORD: str
     # Database
     DATABASE_URL: str = "postgresql://root:ccshub26@localhost:5432/ccs_hub"
     DATABASE_ECHO: bool = False

@@ -4,10 +4,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.api.v1.router import api_router
-from app.core.database import engine, Base
+from app.core.database import engine, Base, AsyncSessionLocal  # Added AsyncSessionLocal
+from app.seed import seed_all  # Import master seed function
 import socketio
 import os
 from app.websocket.manager import sio
+
 
 # Create tables
 async def create_tables():
@@ -16,7 +18,13 @@ async def create_tables():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 1. Create database tables if they don't exist
     await create_tables()
+    
+    # 2. Run seeders (Permissions -> Roles -> Admin)
+    async with AsyncSessionLocal() as db:
+        await seed_all(db)
+        
     yield
 
 # Initialize app
