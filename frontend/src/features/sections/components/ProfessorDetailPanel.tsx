@@ -61,7 +61,12 @@ export default function ProfessorDetailPanel({
           <div className="space-y-2">
             {assignments.map((ta) => (
               <div key={ta.id} className="rounded-xl border border-[#1E3447] bg-[#0A111A] p-3">
-                <p className="text-sm font-semibold text-[#F1F5F9]">{ta.subject}</p>
+                <p className="text-sm font-semibold text-[#F1F5F9]">
+                  {ta.subject}
+                  {ta.subject_code && (
+                    <span className="ml-1.5 text-xs font-medium text-[#64748B]">({ta.subject_code})</span>
+                  )}
+                </p>
                 {ta.schedule_days.length > 0 && ta.schedule_start && ta.schedule_end ? (
                   <div className="flex items-start gap-1.5 mt-1.5">
                     <CalendarIcon className="h-3.5 w-3.5 text-[#64748B] mt-0.5 flex-shrink-0" />
@@ -69,6 +74,7 @@ export default function ProfessorDetailPanel({
                       {ta.schedule_days.join(', ')}
                       <br />
                       {formatTime(ta.schedule_start)} - {formatTime(ta.schedule_end)}
+                      {ta.room ? ` · ${ta.room}` : ''}
                     </p>
                   </div>
                 ) : (

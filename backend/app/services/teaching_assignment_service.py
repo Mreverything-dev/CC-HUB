@@ -55,6 +55,8 @@ class TeachingAssignmentService:
             "section_id": str(assignment.section_id),
             "professor_id": str(assignment.professor_id),
             "subject": assignment.subject,
+            "subject_code": assignment.subject_code,
+            "room": assignment.room,
             "schedule_days": assignment.schedule_days or [],
             "schedule_start": assignment.schedule_start,
             "schedule_end": assignment.schedule_end,
@@ -147,6 +149,8 @@ class TeachingAssignmentService:
             professor_id=professor_id,
             section_id=section_id,
             subject=data.subject,
+            subject_code=data.subject_code,
+            room=data.room,
             schedule_days=data.schedule_days,
             schedule_start=data.schedule_start,
             schedule_end=data.schedule_end,
@@ -164,6 +168,16 @@ class TeachingAssignmentService:
             await SectionConversationService(self.db).get_or_create(section_id, ensure_user_id=professor_id)
         except Exception:
             logger.exception(f"Failed to sync group chat membership for professor {professor_id} in section {section_id}")
+
+        # ✅ Provision the subject's own dedicated group chat, seeded with
+        # every current section member plus the assigned professor - only
+        # after the assignment above has actually committed successfully.
+        # Never let a chat-provisioning failure block the assignment itself.
+        try:
+            from app.services.teaching_assignment_conversation_service import TeachingAssignmentConversationService
+            await TeachingAssignmentConversationService(self.db).get_or_create(assignment)
+        except Exception:
+            logger.exception(f"Failed to auto-provision subject group chat for assignment {assignment.id}")
 
         return await self._enrich(assignment)
 

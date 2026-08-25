@@ -5,6 +5,10 @@ import { PipConfig } from '../hooks/useLiveStreamSignaling';
 interface PendingStreams {
   cameraStream: MediaStream | null;
   screenStream: MediaStream | null;
+  /** Independently-acquired microphone audio, decoupled from the camera's
+   * own video capture - lets a screen-only (camera-off) broadcast still
+   * carry mic audio without ever having requested a camera track. */
+  micStream: MediaStream | null;
   isMicOn: boolean;
   /** Whether the screen-share's system/desktop-audio track (if the browser
    * granted one) should be included in the broadcast - false whenever no
@@ -32,6 +36,7 @@ interface PendingStreamState extends PendingStreams {
 const EMPTY: PendingStreams = {
   cameraStream: null,
   screenStream: null,
+  micStream: null,
   isMicOn: true,
   isSystemAudioOn: false,
   pipConfig: { position: 'bottom-right', size: 'small', mirrored: false, hidden: false },
@@ -41,8 +46,8 @@ export const usePendingStreamStore = create<PendingStreamState>((set, get) => ({
   ...EMPTY,
   setPendingStreams: (streams) => set(streams),
   claimPendingStreams: () => {
-    const { cameraStream, screenStream, isMicOn, isSystemAudioOn, pipConfig } = get();
+    const { cameraStream, screenStream, micStream, isMicOn, isSystemAudioOn, pipConfig } = get();
     set(EMPTY);
-    return { cameraStream, screenStream, isMicOn, isSystemAudioOn, pipConfig };
+    return { cameraStream, screenStream, micStream, isMicOn, isSystemAudioOn, pipConfig };
   },
 }));

@@ -18,6 +18,8 @@ const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 export default function EditTeachingAssignmentModal({ assignment, onClose }: EditTeachingAssignmentModalProps) {
   const { updateAssignment, removeAssignment } = useTeachingAssignments();
   const [subject, setSubject] = useState(assignment.subject);
+  const [subjectCode, setSubjectCode] = useState(assignment.subject_code || '');
+  const [room, setRoom] = useState(assignment.room || '');
   const [days, setDays] = useState<string[]>(assignment.schedule_days || []);
   const [startTime, setStartTime] = useState(assignment.schedule_start?.slice(0, 5) || '');
   const [endTime, setEndTime] = useState(assignment.schedule_end?.slice(0, 5) || '');
@@ -37,7 +39,15 @@ export default function EditTeachingAssignmentModal({ assignment, onClose }: Edi
     try {
       await updateAssignment({
         id: assignment.id,
-        data: { subject, schedule_days: days, schedule_start: startTime, schedule_end: endTime, status },
+        data: {
+          subject,
+          subject_code: subjectCode,
+          room,
+          schedule_days: days,
+          schedule_start: startTime,
+          schedule_end: endTime,
+          status,
+        },
       });
       onClose();
     } catch (err: any) {
@@ -79,7 +89,7 @@ export default function EditTeachingAssignmentModal({ assignment, onClose }: Edi
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-[#94A3B8] mb-1.5">Subject *</label>
+            <label className="block text-sm font-medium text-[#94A3B8] mb-1.5">Subject Name *</label>
             <input
               type="text"
               value={subject}
@@ -87,6 +97,29 @@ export default function EditTeachingAssignmentModal({ assignment, onClose }: Edi
               required
               className={inputClassName}
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-[#94A3B8] mb-1.5">Subject Code</label>
+              <input
+                type="text"
+                value={subjectCode}
+                onChange={(e) => setSubjectCode(e.target.value)}
+                className={inputClassName}
+                placeholder="e.g. MELEC 8"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-[#94A3B8] mb-1.5">Room</label>
+              <input
+                type="text"
+                value={room}
+                onChange={(e) => setRoom(e.target.value)}
+                className={inputClassName}
+                placeholder="e.g. COMLAB 1"
+              />
+            </div>
           </div>
 
           <div>

@@ -1,6 +1,6 @@
 // frontend/src/services/api/chat.service.ts
 import { api } from '@/lib/axios';
-import { Conversation, Message, ConversationCreate, MessageCreate } from '@/types/chat.types';
+import { Conversation, GroupMember, Message, ConversationCreate, MessageCreate } from '@/types/chat.types';
 
 export const chatApi = {
   // Conversations
@@ -10,9 +10,20 @@ export const chatApi = {
   getOrCreateDirectConversation: (userId: string) => 
     api.post<Conversation>(`/chat/conversations/direct/${userId}`),
   
-  createGroupConversation: (data: ConversationCreate) => 
+  createGroupConversation: (data: ConversationCreate) =>
     api.post<Conversation>('/chat/conversations/group', data),
-  
+
+  // Group chat members + logo
+  getGroupMembers: (conversationId: string) =>
+    api.get<GroupMember[]>(`/chat/conversations/${conversationId}/members`),
+
+  getGroupLogoPermission: (conversationId: string) =>
+    api.get<{ can_edit_logo: boolean }>(`/chat/conversations/${conversationId}/logo-permission`),
+
+  updateGroupLogo: (conversationId: string, avatarUrl: string) =>
+    api.put<Conversation>(`/chat/conversations/${conversationId}/logo`, { avatar_url: avatarUrl }),
+
+
   // Messages
   getMessages: (conversationId: string, limit: number = 50, before?: string) => 
     api.get<Message[]>(`/chat/conversations/${conversationId}/messages`, {

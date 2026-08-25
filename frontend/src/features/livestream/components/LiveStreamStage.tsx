@@ -1,11 +1,13 @@
 // frontend/src/features/livestream/components/LiveStreamStage.tsx
 import { useEffect, useRef, useState } from 'react';
-import { CodeXml } from 'lucide-react';
-import { formatRelativeTime, formatTime } from '@/lib/formatters';
+import { useNavigate } from 'react-router-dom';
+import { formatRelativeTime, formatTime, formatDurationClock, parseServerDate } from '@/lib/formatters';
+import { Avatar } from '@/features/dashboard/components/Avatar';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { useChatStore } from '@/features/chat/store/chat.store';
 import { socketService } from '@/lib/socket';
 import { livestreamService } from '@/services/api/livestream.service';
+import { mediaService } from '@/services/api/media.service';
 import { Livestream, StreamViewer } from '@/types/livestream.types';
 import { useLiveStreamSignaling, StreamChatMsg, PipPosition, PipSize, PIP_SIZE_RATIO } from '../hooks/useLiveStreamSignaling';
 import { useLiveSessionStore } from '../store/liveSession.store';
@@ -108,6 +110,7 @@ interface StageInnerProps {
 
 function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRestore, onEnd }: StageInnerProps) {
   const { user } = useAuthStore();
+  const navigate = useNavigate();
   const [stream, setStream] = useState<Livestream | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [viewerCount, setViewerCount] = useState(0);
@@ -143,6 +146,8 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
   const [commentMenuFor, setCommentMenuFor] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showEndConfirm, setShowEndConfirm] = useState(false);
+  const [isEndingStream, setIsEndingStream] = useState(false);
 
   const streamRef = useRef<Livestream | null>(null);
   const hasJoinedRef = useRef(false);
@@ -201,6 +206,84 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
   useEffect(() => {
     if (needsUnmute) setIsMuted(true);
   }, [needsUnmute]);
+
+  // Live duration - based on the stream's actual `started_at` timestamp
+  // (never "time since this component rendered"), ticking once a second
+  // only while genuinely live, and torn down the instant that's no longer
+  // true. The effect only re-runs when one of these three values actually
+  // changes, so a single interval is created per live session - not one per
+  // render - and it's always cleared (by the returned cleanup) before a new
+  // one is ever created, both on unmount and when the stream ends.
+  const [liveDurationSeconds, setLiveDurationSeconds] = useState(0);
+  useEffect(() => {
+    if (!isLive || hostOffline || !stream?.started_at) return;
+    const startedAtMs = parseServerDate(stream.started_at).getTime();
+    const tick = () => setLiveDurationSeconds(Math.max(0, Math.floor((Date.now() - startedAtMs) / 1000)));
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [isLive, hostOffline, stream?.started_at]);
+
+  const goToStreamerProfile = () => {
+    if (stream?.host_id) navigate(`/profile/${stream.host_id}`);
+  };
+
+  // HOST only, once per session: if the streamer never uploaded a
+  // thumbnail, capture a single frame from their own local preview the
+  // moment it actually has real video data, and persist it through the
+  // existing media upload + stream-update endpoints (no new backend). This
+  // is what lets the lobby/browse cards show real stream content instead of
+  // a generic placeholder for streams nobody thumbnailed by hand - it never
+  // touches a stream that already has a thumbnail, never re-captures once
+  // attempted, and never blocks or delays the actual video from playing.
+  const thumbnailCaptureAttemptedRef = useRef(false);
+  useEffect(() => {
+    if (!isHost || !hasLocalMedia || thumbnailCaptureAttemptedRef.current) return;
+    if (stream?.thumbnail_url) {
+      thumbnailCaptureAttemptedRef.current = true;
+      return;
+    }
+    const video = videoElRef.current;
+    if (!video) return;
+
+    let cancelled = false;
+    const captureNow = () => {
+      if (cancelled || thumbnailCaptureAttemptedRef.current) return;
+      // Wait for real, valid frame data - never capture a blank/half-decoded frame.
+      if (video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) return;
+      thumbnailCaptureAttemptedRef.current = true;
+
+      (async () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+          if (!blob || cancelled) return;
+
+          const file = new File([blob], `stream-${streamId}-thumbnail.jpg`, { type: 'image/jpeg' });
+          const uploaded = await mediaService.uploadFiles([file]);
+          const url = uploaded.urls[0];
+          if (!url || cancelled) return;
+
+          await livestreamService.updateStream(streamId, { thumbnail_url: url });
+          setStream((prev) => (prev && !prev.thumbnail_url ? { ...prev, thumbnail_url: url } : prev));
+        } catch (err) {
+          console.warn('[Livestream] Auto thumbnail capture failed (non-fatal):', err);
+        }
+      })();
+    };
+
+    captureNow();
+    video.addEventListener('loadeddata', captureNow);
+    return () => {
+      cancelled = true;
+      video.removeEventListener('loadeddata', captureNow);
+    };
+  }, [isHost, hasLocalMedia, stream?.thumbnail_url, streamId, videoElRef]);
 
   // Note: no effect is needed here to re-attach the stream when switching
   // between the docked and minimized layouts (which mounts a structurally
@@ -338,14 +421,21 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
     }
   };
 
-  const handleEndStream = async () => {
-    if (!confirm('Are you sure you want to end this stream?')) return;
+  const handleEndStream = () => {
+    setShowEndConfirm(true);
+  };
+
+  const confirmEndStream = async () => {
+    if (isEndingStream) return;
+    setIsEndingStream(true);
     try {
       await livestreamService.endStream(streamId);
       toast.success('Stream ended');
+      setShowEndConfirm(false);
       onEnd();
     } catch (error) {
       toast.error('Failed to end stream');
+      setIsEndingStream(false);
     }
   };
 
@@ -688,6 +778,7 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
   // ============================================
   if (isMinimized) {
     return (
+      <>
       <div className="fixed bottom-6 left-6 z-50 w-72 sm:w-80 rounded-2xl border border-[#1E3447] bg-[#0D1722] shadow-[0_8px_40px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between px-3 py-2 border-b border-[#1E3447] bg-[#0A111A]/80 flex-shrink-0">
           <div className="flex items-center gap-1.5 min-w-0">
@@ -767,6 +858,25 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
           </div>
         )}
       </div>
+
+      {showEndConfirm && (
+        <ConfirmDialog
+          title="End Livestream?"
+          message={
+            <>
+              Are you sure you want to end this stream?
+              <br />
+              Your current livestream will be ended for all viewers.
+            </>
+          }
+          confirmLabel="End Live"
+          loadingLabel="Ending stream..."
+          isLoading={isEndingStream}
+          onConfirm={confirmEndStream}
+          onCancel={() => setShowEndConfirm(false)}
+        />
+      )}
+      </>
     );
   }
 
@@ -779,22 +889,41 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
         {/* Header */}
         <div className="flex items-start justify-between gap-4 px-4 sm:px-6 py-4 border-b border-[#1E3447] flex-shrink-0">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="h-10 w-10 flex-shrink-0 rounded-full border border-[#00C8FF]/40 bg-[#00C8FF]/10 flex items-center justify-center">
-              <CodeXml className="h-5 w-5 text-[#00C8FF]" />
-            </div>
+            <button
+              type="button"
+              onClick={goToStreamerProfile}
+              title={stream?.host_username ? `View ${stream.host_username}'s profile` : undefined}
+              className="flex-shrink-0 rounded-full transition hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00C8FF]/60"
+            >
+              <Avatar src={stream?.host_avatar} name={stream?.host_username} size="md" />
+            </button>
             <div className="min-w-0">
               <h2 className="text-base sm:text-lg font-semibold text-[#F1F5F9] truncate">
                 {stream?.title || 'Live Stream'}
               </h2>
-              <p className="text-sm text-[#94A3B8] flex items-center gap-1.5">
+              <p className="text-sm text-[#94A3B8] flex items-center gap-1.5 flex-wrap">
                 <span className={`flex items-center gap-1 ${PHASE_META[phase].textClass}`}>
                   <span className={`h-1.5 w-1.5 rounded-full ${PHASE_META[phase].dotClass}`} />
                   {PHASE_META[phase].label}
                 </span>
+                {phase === 'live' && (
+                  <>
+                    <span>•</span>
+                    <span className="font-mono tabular-nums text-[#F1F5F9]">
+                      {formatDurationClock(liveDurationSeconds)}
+                    </span>
+                  </>
+                )}
                 {stream?.host_username && (
                   <>
                     <span>•</span>
-                    <span>{stream.host_username}</span>
+                    <button
+                      type="button"
+                      onClick={goToStreamerProfile}
+                      className="hover:text-[#00C8FF] hover:underline transition truncate"
+                    >
+                      {stream.host_username}
+                    </button>
                   </>
                 )}
               </p>
@@ -1004,13 +1133,21 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                   </>
                 ) : (
                   <div
-                    className="flex items-center justify-center h-full bg-cover bg-center"
+                    className={`relative flex items-center justify-center h-full bg-cover bg-center ${
+                      stream?.thumbnail_url ? '' : 'bg-gradient-to-br from-[#0D1722] via-[#0A111A] to-[#162534]'
+                    }`}
                     style={stream?.thumbnail_url ? { backgroundImage: `url(${stream.thumbnail_url})` } : undefined}
                   >
-                    <div className="text-center px-4 py-3 rounded-xl bg-[#060B12]/70 backdrop-blur-sm">
-                      <VideoCameraIcon className="h-16 w-16 mx-auto mb-4 text-[#94A3B8] opacity-30" />
+                    {stream?.thumbnail_url && <div className="absolute inset-0 bg-[#060B12]/50" />}
+                    <div className="relative text-center px-4 py-3 rounded-xl bg-[#060B12]/70 backdrop-blur-sm">
+                      {!streamEnded && (
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00C8FF] mx-auto mb-3" />
+                      )}
+                      <VideoCameraIcon
+                        className={`h-16 w-16 mx-auto mb-4 text-[#94A3B8] opacity-30 ${streamEnded ? '' : 'hidden'}`}
+                      />
                       <p className="text-[#94A3B8]">
-                        {streamEnded ? 'This livestream has ended' : 'Waiting for the host to go live...'}
+                        {streamEnded ? 'This livestream has ended' : 'Connecting to live stream...'}
                       </p>
                     </div>
                   </div>
@@ -1022,6 +1159,11 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                       <span className="px-3 py-1 bg-[#EF4444] text-white text-xs font-bold rounded-full animate-pulse">
                         LIVE
                       </span>
+                      {phase === 'live' && (
+                        <span className="px-2.5 py-1 bg-[#060B12]/80 backdrop-blur-sm rounded-full text-xs font-mono tabular-nums text-[#F1F5F9]">
+                          {formatDurationClock(liveDurationSeconds)}
+                        </span>
+                      )}
                       <button
                         onClick={toggleViewers}
                         className="flex items-center gap-1.5 px-2.5 py-1 bg-[#060B12]/80 rounded-full text-xs text-[#F1F5F9] hover:bg-[#060B12] transition"
@@ -1261,15 +1403,21 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                 <p className="text-center text-[#94A3B8] py-8">No viewers yet</p>
               ) : (
                 viewers.map((viewer) => (
-                  <div key={viewer.id} className="flex items-center gap-3 p-2 hover:bg-[#162534] rounded-lg transition">
-                    <div className="w-8 h-8 rounded-full bg-[#1E3447] flex items-center justify-center text-[#F1F5F9] text-xs font-bold">
-                      {viewer.username?.charAt(0).toUpperCase() || 'U'}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-[#F1F5F9]">{viewer.username}</p>
+                  <button
+                    key={viewer.id}
+                    type="button"
+                    onClick={() => {
+                      setShowViewers(false);
+                      navigate(`/profile/${viewer.user_id}`);
+                    }}
+                    className="w-full flex items-center gap-3 p-2 hover:bg-[#162534] rounded-lg transition text-left"
+                  >
+                    <Avatar src={viewer.avatar} name={viewer.username} size="sm" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-[#F1F5F9] truncate">{viewer.username}</p>
                       <p className="text-xs text-[#94A3B8]">Joined {formatTime(viewer.joined_at)}</p>
                     </div>
-                  </div>
+                  </button>
                 ))
               )}
             </div>
@@ -1285,6 +1433,24 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
           isLoading={isDeleting}
           onConfirm={handleDeleteComment}
           onCancel={() => setDeleteTarget(null)}
+        />
+      )}
+
+      {showEndConfirm && (
+        <ConfirmDialog
+          title="End Livestream?"
+          message={
+            <>
+              Are you sure you want to end this stream?
+              <br />
+              Your current livestream will be ended for all viewers.
+            </>
+          }
+          confirmLabel="End Live"
+          loadingLabel="Ending stream..."
+          isLoading={isEndingStream}
+          onConfirm={confirmEndStream}
+          onCancel={() => setShowEndConfirm(false)}
         />
       )}
     </div>

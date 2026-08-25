@@ -8,7 +8,7 @@ from app.services.chat_service import ChatService
 from app.schemas.chat import (
     ConversationCreate, ConversationResponse,
     MessageCreate, MessageResponse,
-    ChatListResponse
+    ChatListResponse, ConversationLogoUpdate, GroupMemberResponse
 )
 from typing import List, Optional
 from datetime import datetime
@@ -52,6 +52,48 @@ async def create_group_conversation(
     """Create a group conversation"""
     service = ChatService(db)
     return await service.create_group_conversation(str(current_user.id), data)
+
+# ============================================
+# GROUP CHAT MEMBERS + LOGO
+# ============================================
+
+@router.get("/conversations/{conversation_id}/members", response_model=List[GroupMemberResponse])
+async def get_group_members(
+    conversation_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Enriched member list (avatar, full name, Professor/Mayor/Officer/
+    Student role) for a group conversation's Members panel."""
+    service = ChatService(db)
+    return await service.get_group_members(conversation_id, str(current_user.id))
+
+@router.get("/conversations/{conversation_id}/logo-permission")
+async def get_group_logo_permission(
+    conversation_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Whether the current user may change this group's logo (professor,
+    mayor, or officer) - lets the frontend show/hide the option without
+    guessing the permission rule itself."""
+    service = ChatService(db)
+    await service._require_group_conversation(conversation_id, str(current_user.id))
+    can_edit = await service.can_edit_group_logo(conversation_id, str(current_user.id))
+    return {"can_edit_logo": can_edit}
+
+@router.put("/conversations/{conversation_id}/logo", response_model=ConversationResponse)
+async def update_group_logo(
+    conversation_id: str,
+    data: ConversationLogoUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Sets a group conversation's logo - the URL is expected to already be
+    uploaded via the existing /media/upload endpoint. Professor(s), mayor,
+    and officer only; everyone else gets a 403."""
+    service = ChatService(db)
+    return await service.update_group_logo(conversation_id, str(current_user.id), data.avatar_url)
 
 # ============================================
 # MESSAGE ENDPOINTS

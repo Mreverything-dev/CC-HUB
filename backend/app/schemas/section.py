@@ -16,6 +16,8 @@ class SectionCreate(SectionBase):
     # the creating professor alongside the section. Omitting these leaves
     # section creation behaving exactly as before.
     subject: Optional[str] = Field(None, max_length=150)
+    subject_code: Optional[str] = Field(None, max_length=50)
+    room: Optional[str] = Field(None, max_length=100)
     schedule_days: Optional[List[str]] = None
     schedule_start: Optional[time] = None
     schedule_end: Optional[time] = None
@@ -86,6 +88,11 @@ class SectionMemberResponse(BaseModel):
 
 class TeachingAssignmentCreate(BaseModel):
     subject: str = Field(..., min_length=1, max_length=150)
+    # Optional at the schema level so existing callers that don't collect
+    # these (e.g. JoinSectionModal) keep working unchanged - AddSubjectModal
+    # and CreateSectionModal enforce them as required in their own forms.
+    subject_code: Optional[str] = Field(None, max_length=50)
+    room: Optional[str] = Field(None, max_length=100)
     schedule_days: List[str] = Field(default_factory=list)
     schedule_start: time
     schedule_end: time
@@ -96,6 +103,8 @@ class TeachingAssignmentCreate(BaseModel):
 
 class TeachingAssignmentUpdate(BaseModel):
     subject: Optional[str] = Field(None, min_length=1, max_length=150)
+    subject_code: Optional[str] = Field(None, max_length=50)
+    room: Optional[str] = Field(None, max_length=100)
     schedule_days: Optional[List[str]] = None
     schedule_start: Optional[time] = None
     schedule_end: Optional[time] = None
@@ -106,6 +115,8 @@ class TeachingAssignmentResponse(BaseModel):
     section_id: str
     professor_id: str
     subject: str
+    subject_code: Optional[str] = None
+    room: Optional[str] = None
     schedule_days: List[str] = Field(default_factory=list)
     schedule_start: time
     schedule_end: time

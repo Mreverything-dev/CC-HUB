@@ -5,6 +5,8 @@ from sqlalchemy.orm import selectinload
 from app.models.conversation import Conversation, ConversationMember, Message, MessageReaction
 from app.models.user import User
 from app.models.profile import StudentProfile, ProfessorProfile, AdminProfile
+from app.models.section import Section, SectionMember, SectionConversation
+from app.models.teaching_assignment import TeachingAssignment, TeachingAssignmentConversation
 from app.schemas.chat import ConversationCreate, MessageCreate
 from fastapi import HTTPException, status
 from datetime import datetime
@@ -30,6 +32,22 @@ class ChatService:
             select(model.avatar_url).where(model.user_id == user_id)
         )
         return result.scalar_one_or_none()
+
+    async def _get_profile_names(self, user_id: str, role: str) -> tuple[Optional[str], Optional[str]]:
+        """First/last name from a user's role-specific profile - mirrors
+        SectionService's own helper of the same name/shape."""
+        model = {
+            "student": StudentProfile,
+            "professor": ProfessorProfile,
+            "admin": AdminProfile,
+        }.get(role)
+        if not model:
+            return None, None
+        result = await self.db.execute(
+            select(model.first_name, model.last_name).where(model.user_id == user_id)
+        )
+        row = result.first()
+        return (row[0], row[1]) if row else (None, None)
 
     async def _build_participants(self, conversation_id: str) -> List[dict]:
         """Participant list (with avatar) for a conversation - shared by every
@@ -173,9 +191,153 @@ class ChatService:
         return conversations
 
     # ============================================
+    # GROUP CHAT MEMBERS + LOGO
+    # ============================================
+
+    async def _require_group_conversation(self, conversation_id: str, user_id: str) -> Conversation:
+        """Loads the conversation, 404s if missing, 403s if the caller isn't
+        actually a member, 400s if it isn't a group at all - the same guard
+        every group-only action below needs first."""
+        result = await self.db.execute(select(Conversation).where(Conversation.id == conversation_id))
+        conversation = result.scalar_one_or_none()
+        if not conversation:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+        if conversation.type != "group":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not a group conversation")
+
+        member_result = await self.db.execute(
+            select(ConversationMember).where(
+                ConversationMember.conversation_id == conversation_id,
+                ConversationMember.user_id == user_id,
+            )
+        )
+        if not member_result.scalar_one_or_none():
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not a member of this conversation")
+        return conversation
+
+    async def _resolve_group_section(self, conversation_id: str) -> tuple[Optional[str], set]:
+        """For a group conversation, returns (section_id, professor_ids) -
+        the underlying section (via SectionConversation directly, or via
+        TeachingAssignmentConversation -> TeachingAssignment for a subject
+        chat) and whichever user ids count as "the professor" for THIS
+        specific group: every active professor for a section chat, but only
+        the one assigned professor for a subject chat. Every group
+        conversation in this app is one or the other (there's no ad-hoc
+        group-creation UI), so a (None, set()) result means the link is
+        missing/broken, not a third kind of group."""
+        sec_link = await self.db.execute(
+            select(SectionConversation.section_id).where(SectionConversation.conversation_id == conversation_id)
+        )
+        section_id = sec_link.scalar_one_or_none()
+        if section_id:
+            section_id = str(section_id)
+            professor_ids = set()
+            section_result = await self.db.execute(select(Section).where(Section.id == section_id))
+            section = section_result.scalar_one_or_none()
+            if section and section.advisor_id:
+                professor_ids.add(str(section.advisor_id))
+            ta_result = await self.db.execute(
+                select(TeachingAssignment.professor_id).where(
+                    TeachingAssignment.section_id == section_id,
+                    TeachingAssignment.status == "active",
+                )
+            )
+            professor_ids.update(str(r) for r in ta_result.scalars().all())
+            return section_id, professor_ids
+
+        ta_link = await self.db.execute(
+            select(TeachingAssignmentConversation.teaching_assignment_id).where(
+                TeachingAssignmentConversation.conversation_id == conversation_id
+            )
+        )
+        assignment_id = ta_link.scalar_one_or_none()
+        if assignment_id:
+            ta_result = await self.db.execute(
+                select(TeachingAssignment).where(TeachingAssignment.id == assignment_id)
+            )
+            assignment = ta_result.scalar_one_or_none()
+            if assignment:
+                return str(assignment.section_id), {str(assignment.professor_id)}
+
+        return None, set()
+
+    async def get_group_members(self, conversation_id: str, requesting_user_id: str) -> List[dict]:
+        """Enriched member list for a group's Members panel - avatar, full
+        name, and role (Professor/Mayor/Officer/Student), sourced from the
+        SAME section membership that already governs this group's real
+        Conversation/ConversationMember rows, not a separate roster."""
+        await self._require_group_conversation(conversation_id, requesting_user_id)
+        section_id, professor_ids = await self._resolve_group_section(conversation_id)
+
+        section_member_map = {}
+        if section_id:
+            sm_result = await self.db.execute(select(SectionMember).where(SectionMember.section_id == section_id))
+            for sm in sm_result.scalars().all():
+                section_member_map[str(sm.user_id)] = sm
+
+        result = await self.db.execute(
+            select(User).join(ConversationMember).where(ConversationMember.conversation_id == conversation_id)
+        )
+        users = result.scalars().all()
+
+        members = []
+        for u in users:
+            uid = str(u.id)
+            sm = section_member_map.get(uid)
+            first_name, last_name = await self._get_profile_names(uid, u.role)
+            full_name = f"{first_name or ''} {last_name or ''}".strip() or u.username
+            members.append({
+                "id": uid,
+                "username": u.username,
+                "full_name": full_name,
+                "avatar_url": await self._get_avatar_url(uid, u.role),
+                "role": u.role,
+                "is_professor": uid in professor_ids,
+                "is_mayor": bool(sm.is_mayor) if sm else False,
+                "is_officer": bool(sm.is_officer) if sm else False,
+            })
+
+        def sort_key(m: dict):
+            rank = 0 if m["is_professor"] else 1 if m["is_mayor"] else 2 if m["is_officer"] else 3
+            return (rank, m["full_name"].lower())
+
+        return sorted(members, key=sort_key)
+
+    async def can_edit_group_logo(self, conversation_id: str, user_id: str) -> bool:
+        """Professor(s), mayor, and officer may change a group's logo;
+        everyone else (students) can only view it."""
+        section_id, professor_ids = await self._resolve_group_section(conversation_id)
+        if user_id in professor_ids:
+            return True
+        if not section_id:
+            return False
+        sm_result = await self.db.execute(
+            select(SectionMember).where(
+                SectionMember.section_id == section_id,
+                SectionMember.user_id == user_id,
+            )
+        )
+        sm = sm_result.scalar_one_or_none()
+        return bool(sm and (sm.is_mayor or sm.is_officer))
+
+    async def update_group_logo(self, conversation_id: str, user_id: str, avatar_url: str) -> Conversation:
+        conversation = await self._require_group_conversation(conversation_id, user_id)
+        if not await self.can_edit_group_logo(conversation_id, user_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the professor, mayor, or officer can change the group logo",
+            )
+        conversation.avatar_url = avatar_url
+        conversation.updated_at = datetime.utcnow()
+        await self.db.commit()
+        await self.db.refresh(conversation)
+        conversation.participants = await self._build_participants(str(conversation.id))
+        return conversation
+
+    # ============================================
     # MESSAGE METHODS
     # ============================================
-    
+
     async def send_message(self, user_id: str, data: MessageCreate):
         """Send a message to a conversation"""
         # Check if conversation exists

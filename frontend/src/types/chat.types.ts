@@ -3,11 +3,23 @@ export interface Conversation {
   id: string;
   type: 'direct' | 'group';
   name: string | null;
+  avatar_url?: string | null;
   created_at: string;
   updated_at: string;
   last_message?: Message | null;
   unread_count: number;
   participants: User[];
+}
+
+export interface GroupMember {
+  id: string;
+  username: string;
+  full_name: string;
+  avatar_url?: string | null;
+  role: 'student' | 'professor' | 'admin';
+  is_professor: boolean;
+  is_mayor: boolean;
+  is_officer: boolean;
 }
 
 export interface MessageReactionEntry {

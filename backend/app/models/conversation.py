@@ -13,6 +13,7 @@ class Conversation(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     type = Column(String(20), default="direct")  # 'direct' or 'group'
     name = Column(String(100), nullable=True)  # For group chats
+    avatar_url = Column(String(500), nullable=True)  # Group chat logo - direct conversations never set this
     created_at = Column(UTCDateTime, default=datetime.utcnow)
     updated_at = Column(UTCDateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

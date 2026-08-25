@@ -25,6 +25,7 @@ import { useFriendStore } from '@/features/friends/store/friend.store';
 import { useChatStore } from '@/features/chat/store/chat.store';
 import { profileService } from '@/services/api/profile.service';
 import { livestreamService } from '@/services/api/livestream.service';
+import { useLiveSessionStore } from '@/features/livestream/store/liveSession.store';
 import { Avatar } from './Avatar';
 import { RoleBadge } from './RoleBadge';
 
@@ -79,6 +80,9 @@ export function Sidebar({ activeSection, onNavigate, isMobileOpen = false, onClo
   // NotificationBell both mounted at once) would double-fire notifications.
   const notifications = useFriendStore((state) => state.notifications);
   const chatUnreadCount = useChatStore((state) => state.unreadCount);
+  // Reuses the already-global live session store (no new API call/poll) -
+  // true only while THIS user is actively hosting a livestream right now.
+  const isCurrentlyLive = useLiveSessionStore((s) => s.isHost && s.streamId !== null);
 
   const announcementUnreadCount = notifications.filter(
     (n) => n.type === 'announcement' && !n.is_read
@@ -198,7 +202,7 @@ export function Sidebar({ activeSection, onNavigate, isMobileOpen = false, onClo
           onClick={() => navigate('/profile')}
           className="w-full flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-white/5 transition-all duration-200"
         >
-          <Avatar src={avatarUrl} name={user?.username} size="sm" />
+          <Avatar src={avatarUrl} name={user?.username} size="sm" isLive={isCurrentlyLive} />
           <div className="flex-1 min-w-0 text-left">
             <p className="text-sm font-medium text-[#F1F5F9] truncate">{user?.username || 'User'}</p>
             <div className="flex items-center gap-2 mt-1">

@@ -126,6 +126,8 @@ class SectionService:
                 "section_id": str(ta.section_id),
                 "professor_id": str(ta.professor_id),
                 "subject": ta.subject,
+                "subject_code": ta.subject_code,
+                "room": ta.room,
                 "schedule_days": ta.schedule_days or [],
                 "schedule_start": ta.schedule_start,
                 "schedule_end": ta.schedule_end,
@@ -236,23 +238,25 @@ class SectionService:
         self.db.add(section)
         await self.db.flush()
 
-        assignments = []
+        created_assignment: Optional[TeachingAssignment] = None
         if data.subject and data.schedule_start is not None and data.schedule_end is not None:
             from app.services.teaching_assignment_service import TeachingAssignmentService
             ta_service = TeachingAssignmentService(self.db)
             await ta_service._check_schedule_conflict(
                 user_id, data.schedule_days or [], data.schedule_start, data.schedule_end
             )
-            assignment = TeachingAssignment(
+            created_assignment = TeachingAssignment(
                 professor_id=user_id,
                 section_id=section.id,
                 subject=data.subject,
+                subject_code=data.subject_code,
+                room=data.room,
                 schedule_days=data.schedule_days or [],
                 schedule_start=data.schedule_start,
                 schedule_end=data.schedule_end,
                 status="active",
             )
-            self.db.add(assignment)
+            self.db.add(created_assignment)
 
         await self.db.commit()
         await self.db.refresh(section)
@@ -266,6 +270,16 @@ class SectionService:
             await SectionConversationService(self.db).get_or_create(str(section.id))
         except Exception:
             logger.exception(f"Failed to auto-provision group chat for new section {section.id}")
+
+        # ✅ If an initial teaching assignment was created above, also
+        # provision its own dedicated subject group chat - only after that
+        # assignment has actually committed successfully.
+        if created_assignment is not None:
+            try:
+                from app.services.teaching_assignment_conversation_service import TeachingAssignmentConversationService
+                await TeachingAssignmentConversationService(self.db).get_or_create(created_assignment)
+            except Exception:
+                logger.exception(f"Failed to auto-provision subject group chat for assignment {created_assignment.id}")
 
         return {
             "id": str(section.id),
@@ -579,6 +593,15 @@ class SectionService:
         except Exception:
             logger.exception(f"Failed to sync group chat membership for user {user_id} joining section {section_id}")
 
+        # ✅ Also add them to every subject group chat already provisioned
+        # for this section - mirrors the section-chat sync just above, one
+        # level down.
+        try:
+            from app.services.teaching_assignment_conversation_service import TeachingAssignmentConversationService
+            await TeachingAssignmentConversationService(self.db).sync_new_section_member(section_id, user_id)
+        except Exception:
+            logger.exception(f"Failed to sync subject group chat membership for user {user_id} joining section {section_id}")
+
         first_name, last_name = await self._get_profile_names(str(user.id), user.role)
         return {
             "id": str(member.id),
@@ -621,6 +644,12 @@ class SectionService:
             await SectionConversationService(self.db).remove_member(section_id, user_id)
         except Exception:
             logger.exception(f"Failed to remove user {user_id} from section {section_id}'s group chat")
+
+        try:
+            from app.services.teaching_assignment_conversation_service import TeachingAssignmentConversationService
+            await TeachingAssignmentConversationService(self.db).remove_section_member(section_id, user_id)
+        except Exception:
+            logger.exception(f"Failed to remove user {user_id} from section {section_id}'s subject group chats")
 
         return {"message": "Member removed successfully"}
 

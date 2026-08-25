@@ -27,6 +27,8 @@ export default function CreateSectionModal({ onClose }: CreateSectionModalProps)
     description: '',
   });
   const [subject, setSubject] = useState('');
+  const [subjectCode, setSubjectCode] = useState('');
+  const [room, setRoom] = useState('');
   const [days, setDays] = useState<string[]>([]);
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
@@ -73,8 +75,15 @@ export default function CreateSectionModal({ onClose }: CreateSectionModalProps)
     try {
       const payload = {
         ...formData,
-        ...(isProfessor && subject.trim() && days.length > 0 && startTime && endTime
-          ? { subject, schedule_days: days, schedule_start: startTime, schedule_end: endTime }
+        ...(isProfessor && subject.trim() && subjectCode.trim() && room.trim() && days.length > 0 && startTime && endTime
+          ? {
+              subject,
+              subject_code: subjectCode,
+              room,
+              schedule_days: days,
+              schedule_start: startTime,
+              schedule_end: endTime,
+            }
           : {}),
       };
       await createSection(payload);
@@ -194,14 +203,36 @@ export default function CreateSectionModal({ onClose }: CreateSectionModalProps)
                 Your Teaching Assignment (optional)
               </p>
               <div>
-                <label className="block text-sm font-medium text-[#94A3B8] mb-1.5">Subject</label>
+                <label className="block text-sm font-medium text-[#94A3B8] mb-1.5">Subject Name</label>
                 <input
                   type="text"
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
                   className={inputClassName}
-                  placeholder="e.g. Web Systems"
+                  placeholder="e.g. Network Security"
                 />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-[#94A3B8] mb-1.5">Subject Code</label>
+                  <input
+                    type="text"
+                    value={subjectCode}
+                    onChange={(e) => setSubjectCode(e.target.value)}
+                    className={inputClassName}
+                    placeholder="e.g. MELEC 8"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#94A3B8] mb-1.5">Room</label>
+                  <input
+                    type="text"
+                    value={room}
+                    onChange={(e) => setRoom(e.target.value)}
+                    className={inputClassName}
+                    placeholder="e.g. COMLAB 1"
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-[#94A3B8] mb-1.5">Days</label>

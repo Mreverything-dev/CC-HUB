@@ -8,6 +8,9 @@ interface ConfirmDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   isLoading?: boolean;
+  /** Text shown on the confirm button while isLoading is true - defaults to
+   * "Please wait..." so every existing caller keeps its current wording. */
+  loadingLabel?: string;
   /** Red/destructive styling by default - pass false for a neutral cyan confirmation. */
   danger?: boolean;
   onConfirm: () => void;
@@ -25,6 +28,7 @@ export function ConfirmDialog({
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
   isLoading = false,
+  loadingLabel = 'Please wait...',
   danger = true,
   onConfirm,
   onCancel,
@@ -67,7 +71,7 @@ export function ConfirmDialog({
                 : 'bg-[#00C8FF] text-[#060B12] hover:opacity-90'
             }`}
           >
-            {isLoading ? 'Please wait...' : confirmLabel}
+            {isLoading ? loadingLabel : confirmLabel}
           </button>
         </div>
       </div>

@@ -344,14 +344,19 @@ export function useLiveStreamSignaling({ streamId, isHost, enabled, onClaimedPip
     let cancelled = false;
 
     (async () => {
-      // Reuse the camera/screen streams already acquired during Go Live
+      // Reuse the camera/mic/screen streams already acquired during Go Live
       // setup (GoLiveModal) instead of prompting for permission again and
       // risking a different device being picked the second time - these are
       // the SAME MediaStream objects, not a new capture. A direct link/page
       // refresh never populates this, so claiming it just returns nulls and
       // the fresh-getUserMedia path below runs exactly as it always has.
       const pending = usePendingStreamStore.getState().claimPendingStreams();
-      if (pending.cameraStream || pending.screenStream) {
+      const pendingCameraLive = !!pending.cameraStream?.getTracks().some((t) => t.readyState === 'live');
+      const pendingMicLive = !!pending.micStream?.getTracks().some((t) => t.readyState === 'live');
+      const pendingScreenLive = !!pending.screenStream?.getTracks().some((t) => t.readyState === 'live');
+      const hasAnyPending = pendingCameraLive || pendingMicLive || pendingScreenLive;
+
+      if (hasAnyPending) {
         // Seed the compositor with the position/size/mirror already chosen
         // in setup, and let the caller sync its own UI to match - reading
         // this straight off `pending` here (not re-querying the store
@@ -363,13 +368,39 @@ export function useLiveStreamSignaling({ streamId, isHost, enabled, onClaimedPip
 
       let mediaStream: MediaStream;
       let reusedPending = false;
-      if (pending.cameraStream && pending.cameraStream.getTracks().some((t) => t.readyState === 'live')) {
-        mediaStream = pending.cameraStream;
+
+      if (hasAnyPending) {
         reusedPending = true;
-        mediaStream.getAudioTracks().forEach((t) => {
-          t.enabled = pending.isMicOn;
+        // Reuse exactly the tracks the user actually chose during setup -
+        // never fall back to a fresh getUserMedia() just because no camera
+        // track was handed off. That fallback used to run unconditionally
+        // whenever pending.cameraStream was null (e.g. a screen-only
+        // broadcast with the camera never turned on), which silently started
+        // the camera hardware the user explicitly chose not to use AND left
+        // the real pending.screenStream completely unclaimed/unused. Camera
+        // and mic were independently acquired in GoLiveModal (see
+        // startCamera/startMic there), so their tracks are simply combined
+        // into one container here - every existing getVideoTracks()/
+        // getAudioTracks() call elsewhere in this file keeps working
+        // unchanged against that container.
+        mediaStream = new MediaStream();
+        if (pendingCameraLive) {
+          pending.cameraStream!.getVideoTracks().forEach((t) => mediaStream.addTrack(t));
+        } else {
+          pending.cameraStream?.getTracks().forEach((t) => t.stop());
+        }
+        if (pendingMicLive) {
+          pending.micStream!.getAudioTracks().forEach((t) => {
+            t.enabled = pending.isMicOn;
+            mediaStream.addTrack(t);
+          });
+        } else {
+          pending.micStream?.getTracks().forEach((t) => t.stop());
+        }
+        console.log('[WebRTC] Reusing camera/mic streams from Go Live setup', {
+          camera: pendingCameraLive,
+          mic: pendingMicLive,
         });
-        console.log('[WebRTC] Reusing camera stream from Go Live setup');
       } else {
         try {
           // Preferred: camera + mic.
@@ -401,15 +432,16 @@ export function useLiveStreamSignaling({ streamId, isHost, enabled, onClaimedPip
       localStreamRef.current = mediaStream;
 
       // Inherit an active screen-share from setup too, so whichever source
-      // (screen or camera) was primary in GoLiveModal stays primary here.
-      const pendingScreen = reusedPending ? pending.screenStream : null;
-      if (pendingScreen && pendingScreen.getTracks().some((t) => t.readyState === 'live')) {
-        screenStreamRef.current = pendingScreen;
+      // (screen or camera) was primary in GoLiveModal stays primary here -
+      // independent of whether a camera/mic track was also reused above.
+      if (reusedPending && pendingScreenLive) {
+        screenStreamRef.current = pending.screenStream;
         setIsScreenSharing(true);
-        const [screenTrack] = pendingScreen.getVideoTracks();
+        const [screenTrack] = pending.screenStream!.getVideoTracks();
         if (screenTrack) screenTrack.onended = () => stopScreenShare();
         console.log('[WebRTC] Reusing screen-share stream from Go Live setup');
       } else {
+        if (reusedPending) pending.screenStream?.getTracks().forEach((t) => t.stop());
         activeVideoTrackRef.current = mediaStream.getVideoTracks()[0] ?? null;
       }
 

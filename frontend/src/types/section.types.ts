@@ -19,6 +19,8 @@ export interface TeachingAssignment {
   section_id: string;
   professor_id: string;
   subject: string;
+  subject_code?: string | null;
+  room?: string | null;
   schedule_days: string[];
   schedule_start: string; // "HH:MM:SS"
   schedule_end: string;
@@ -34,6 +36,8 @@ export interface TeachingAssignment {
 
 export interface TeachingAssignmentCreate {
   subject: string;
+  subject_code?: string;
+  room?: string;
   schedule_days: string[];
   schedule_start: string;
   schedule_end: string;
@@ -42,6 +46,8 @@ export interface TeachingAssignmentCreate {
 
 export interface TeachingAssignmentUpdate {
   subject?: string;
+  subject_code?: string;
+  room?: string;
   schedule_days?: string[];
   schedule_start?: string;
   schedule_end?: string;
@@ -81,6 +87,8 @@ export interface SectionCreate {
   academic_year?: string;
   description?: string;
   subject?: string;
+  subject_code?: string;
+  room?: string;
   schedule_days?: string[];
   schedule_start?: string;
   schedule_end?: string;

@@ -1,4 +1,5 @@
 // frontend/src/features/livestream/components/LiveStreamCard.tsx
+import { useNavigate } from 'react-router-dom';
 import { EyeIcon, GlobeAltIcon, UserIcon, UserGroupIcon, VideoCameraIcon } from '@heroicons/react/24/outline';
 import { Avatar } from '@/features/dashboard/components/Avatar';
 import { RoleBadge } from '@/features/dashboard/components/RoleBadge';
@@ -17,9 +18,15 @@ interface LiveStreamCardProps {
 }
 
 export function LiveStreamCard({ stream, sectionName, onClick }: LiveStreamCardProps) {
+  const navigate = useNavigate();
   const visibility = VISIBILITY_META[stream.visibility] ?? VISIBILITY_META.public;
   const VisibilityIcon = visibility.icon;
   const audienceLabel = stream.visibility === 'section' ? sectionName || 'Section' : visibility.label;
+
+  const goToHostProfile = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigate(`/profile/${stream.host_id}`);
+  };
 
   return (
     <div
@@ -66,13 +73,20 @@ export function LiveStreamCard({ stream, sectionName, onClick }: LiveStreamCardP
 
       {/* Info */}
       <div className="p-3.5">
-        <div className="flex items-center gap-2.5 mb-2">
+        <button
+          type="button"
+          onClick={goToHostProfile}
+          title={`View ${stream.host_username}'s profile`}
+          className="flex items-center gap-2.5 mb-2 text-left hover:opacity-80 transition"
+        >
           <Avatar src={stream.host_avatar} name={stream.host_username} size="sm" />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-[#F1F5F9] truncate">{stream.host_username}</p>
+            <p className="text-sm font-medium text-[#F1F5F9] truncate hover:text-[#00C8FF] hover:underline">
+              {stream.host_username}
+            </p>
             <RoleBadge role={stream.host_role} className="mt-0.5" />
           </div>
-        </div>
+        </button>
 
         <h3 className="text-sm font-semibold text-[#F1F5F9] line-clamp-1 group-hover:text-[#00C8FF] transition-colors">
           {stream.title}

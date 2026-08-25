@@ -8,6 +8,7 @@ from app.models.user import User
 from app.models.friend import Friend
 from app.models.section import Section, SectionMember
 from app.models.teaching_assignment import TeachingAssignment
+from app.models.profile import StudentProfile, ProfessorProfile, AdminProfile
 from app.schemas.livestream import LivestreamCreate, LivestreamUpdate
 from fastapi import HTTPException, status
 from typing import List, Optional
@@ -21,6 +22,23 @@ logger = logging.getLogger(__name__)
 class LivestreamService:
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    async def _get_avatar_url(self, user_id: str, role: str) -> Optional[str]:
+        """Get a user's avatar URL from their role-specific profile - same
+        lookup used by post_service/chat_service/announcement_service/etc,
+        duplicated here rather than shared since every one of those services
+        already keeps its own copy of this exact helper."""
+        model = {
+            "student": StudentProfile,
+            "professor": ProfessorProfile,
+            "admin": AdminProfile,
+        }.get(role)
+        if not model:
+            return None
+        result = await self.db.execute(
+            select(model.avatar_url).where(model.user_id == user_id)
+        )
+        return result.scalar_one_or_none()
 
     async def create_stream(self, user_id: str, data: LivestreamCreate) -> Livestream:
         """Create a new livestream"""

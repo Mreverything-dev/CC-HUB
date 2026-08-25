@@ -93,3 +93,14 @@ export function localInputToUtcIso(localDateTimeValue: string): string {
 export function todayLocalIso(): string {
   return new Date().toLocaleDateString('en-CA');
 }
+
+/** "00:03:42" style elapsed-time clock, e.g. for a live stream's running
+ * duration - always zero-padded HH:MM:SS regardless of how long it's been. */
+export function formatDurationClock(totalSeconds: number): string {
+  const safeSeconds = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const seconds = safeSeconds % 60;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+}

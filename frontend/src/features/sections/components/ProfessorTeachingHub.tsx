@@ -386,10 +386,16 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
                                   <BookOpenIcon className={`h-4 w-4 ${accent.text}`} />
                                 </div>
                                 <div className="min-w-0">
-                                  <p className="text-sm font-semibold text-[#F1F5F9] truncate">{ta.subject}</p>
+                                  <p className="text-sm font-semibold text-[#F1F5F9] truncate">
+                                    {ta.subject}
+                                    {ta.subject_code && (
+                                      <span className="ml-1.5 text-xs font-medium text-[#64748B]">({ta.subject_code})</span>
+                                    )}
+                                  </p>
                                   {ta.schedule_days.length > 0 ? (
                                     <p className="text-xs text-[#64748B] mt-0.5 truncate">
                                       {ta.schedule_days.join(', ')} • {ta.schedule_start?.slice(0, 5)}–{ta.schedule_end?.slice(0, 5)}
+                                      {ta.room ? ` • ${ta.room}` : ''}
                                     </p>
                                   ) : (
                                     ta.status === 'inactive' && (

@@ -17,6 +17,8 @@ class TeachingAssignment(Base):
     professor_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     section_id = Column(UUID(as_uuid=True), ForeignKey("sections.id", ondelete="CASCADE"), nullable=False)
     subject = Column(String(150), nullable=False)
+    subject_code = Column(String(50), nullable=True)  # e.g. "MELEC 8"
+    room = Column(String(100), nullable=True)  # e.g. "COMLAB 1"
     schedule_days = Column(JSON, default=list)  # e.g. ["Mon", "Wed", "Fri"]
     schedule_start = Column(Time, nullable=False)
     schedule_end = Column(Time, nullable=False)
@@ -37,3 +39,24 @@ Index(
     unique=True,
     postgresql_where=TeachingAssignment.status == "active",
 )
+
+
+class TeachingAssignmentConversation(Base):
+    """Links a TeachingAssignment (one subject taught in one section) to its
+    own dedicated group Conversation - mirrors SectionConversation one level
+    down, reusing the same Conversation/ConversationMember chat tables
+    rather than a parallel messaging system. Both FKs are unique, so a
+    subject can never end up with more than one linked conversation."""
+    __tablename__ = "teaching_assignment_conversations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    teaching_assignment_id = Column(
+        UUID(as_uuid=True), ForeignKey("teaching_assignments.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    conversation_id = Column(
+        UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    created_at = Column(UTCDateTime, default=datetime.utcnow)
+
+    teaching_assignment = relationship("TeachingAssignment")
+    conversation = relationship("Conversation")

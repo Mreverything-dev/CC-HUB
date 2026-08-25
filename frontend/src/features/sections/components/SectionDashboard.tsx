@@ -784,11 +784,17 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
                       <div className="space-y-2">
                         {selectedProfessorAssignments.map((ta) => (
                           <div key={ta.id} className="rounded-xl border border-[#1E3447] bg-[#0A111A] p-2.5">
-                            <p className="text-sm font-medium text-[#F1F5F9]">{ta.subject}</p>
+                            <p className="text-sm font-medium text-[#F1F5F9]">
+                              {ta.subject}
+                              {ta.subject_code && (
+                                <span className="ml-1.5 text-xs font-normal text-[#64748B]">({ta.subject_code})</span>
+                              )}
+                            </p>
                             {ta.schedule_days.length > 0 && ta.schedule_start && ta.schedule_end ? (
                               <p className="text-xs text-[#94A3B8] mt-0.5">
                                 {ta.schedule_days.join(', ')} &middot; {formatScheduleTime(ta.schedule_start)}-
                                 {formatScheduleTime(ta.schedule_end)}
+                                {ta.room ? ` · ${ta.room}` : ''}
                               </p>
                             ) : (
                               <p className="text-xs text-[#64748B] mt-0.5">Schedule not set</p>

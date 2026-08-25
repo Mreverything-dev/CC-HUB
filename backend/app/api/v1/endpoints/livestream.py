@@ -28,6 +28,7 @@ async def create_stream(
         "id": str(stream.id),
         "host_id": str(stream.host_id),
         "host_username": current_user.username,
+        "host_avatar": await service._get_avatar_url(str(current_user.id), current_user.role),
         "host_role": current_user.role,
         "title": stream.title,
         "description": stream.description,
@@ -54,12 +55,12 @@ async def get_streams(
     """Get all streams the user can view"""
     service = LivestreamService(db)
     streams = await service.get_streams(str(current_user.id), status)
-    
+
     return [{
         "id": str(s.id),
         "host_id": str(s.host_id),
         "host_username": s.host.username,
-        "host_avatar": None,
+        "host_avatar": await service._get_avatar_url(str(s.host_id), s.host.role),
         "host_role": s.host.role,
         "title": s.title,
         "description": s.description,
@@ -90,7 +91,7 @@ async def get_stream(
         "id": str(stream.id),
         "host_id": str(stream.host_id),
         "host_username": stream.host.username,
-        "host_avatar": None,
+        "host_avatar": await service._get_avatar_url(str(stream.host_id), stream.host.role),
         "host_role": stream.host.role,
         "title": stream.title,
         "description": stream.description,
@@ -122,6 +123,7 @@ async def update_stream(
         "id": str(stream.id),
         "host_id": str(stream.host_id),
         "host_username": stream.host.username,
+        "host_avatar": await service._get_avatar_url(str(stream.host_id), stream.host.role),
         "host_role": stream.host.role,
         "title": stream.title,
         "description": stream.description,
@@ -152,7 +154,7 @@ async def start_stream(
         "id": str(stream.id),
         "host_id": str(stream.host_id),
         "host_username": stream.host.username,
-        "host_avatar": None,
+        "host_avatar": await service._get_avatar_url(str(stream.host_id), stream.host.role),
         "host_role": stream.host.role,
         "title": stream.title,
         "description": stream.description,
@@ -212,6 +214,7 @@ async def end_stream(
         "id": str(stream.id),
         "host_id": str(stream.host_id),
         "host_username": stream.host.username,
+        "host_avatar": await service._get_avatar_url(str(stream.host_id), stream.host.role),
         "host_role": stream.host.role,
         "title": stream.title,
         "description": stream.description,
@@ -262,7 +265,7 @@ async def get_viewers(
         "id": str(v.id),
         "user_id": str(v.user_id),
         "username": v.user.username,
-        "avatar": None,
+        "avatar": await service._get_avatar_url(str(v.user_id), v.user.role),
         "joined_at": v.joined_at
     } for v in viewers]
 

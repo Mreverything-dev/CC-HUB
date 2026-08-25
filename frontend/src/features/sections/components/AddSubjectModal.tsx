@@ -19,6 +19,8 @@ const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 export default function AddSubjectModal({ sectionId, sectionName, onClose }: AddSubjectModalProps) {
   const { joinSection } = useTeachingAssignments();
   const [subject, setSubject] = useState('');
+  const [subjectCode, setSubjectCode] = useState('');
+  const [room, setRoom] = useState('');
   const [days, setDays] = useState<string[]>([]);
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
@@ -36,7 +38,14 @@ export default function AddSubjectModal({ sectionId, sectionName, onClose }: Add
     try {
       await joinSection({
         sectionId,
-        data: { subject, schedule_days: days, schedule_start: startTime, schedule_end: endTime },
+        data: {
+          subject,
+          subject_code: subjectCode,
+          room,
+          schedule_days: days,
+          schedule_start: startTime,
+          schedule_end: endTime,
+        },
       });
       onClose();
     } catch (err: any) {
@@ -46,7 +55,8 @@ export default function AddSubjectModal({ sectionId, sectionName, onClose }: Add
     }
   };
 
-  const canSubmit = subject.trim() && days.length > 0 && startTime && endTime;
+  const canSubmit =
+    subject.trim() && subjectCode.trim() && room.trim() && days.length > 0 && startTime && endTime;
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
@@ -72,15 +82,40 @@ export default function AddSubjectModal({ sectionId, sectionName, onClose }: Add
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-[#94A3B8] mb-1.5">Subject *</label>
+            <label className="block text-sm font-medium text-[#94A3B8] mb-1.5">Subject Name *</label>
             <input
               type="text"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               required
               className={inputClassName}
-              placeholder="e.g. Information Assurance"
+              placeholder="e.g. Network Security"
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-[#94A3B8] mb-1.5">Subject Code *</label>
+              <input
+                type="text"
+                value={subjectCode}
+                onChange={(e) => setSubjectCode(e.target.value)}
+                required
+                className={inputClassName}
+                placeholder="e.g. MELEC 8"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-[#94A3B8] mb-1.5">Room *</label>
+              <input
+                type="text"
+                value={room}
+                onChange={(e) => setRoom(e.target.value)}
+                required
+                className={inputClassName}
+                placeholder="e.g. COMLAB 1"
+              />
+            </div>
           </div>
 
           <div>

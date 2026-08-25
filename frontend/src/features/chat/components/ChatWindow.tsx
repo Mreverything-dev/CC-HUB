@@ -8,7 +8,10 @@ import { formatChatTime } from '@/lib/formatters';
 import { useTick } from '@/hooks/useTick';
 import { Avatar } from '@/features/dashboard/components/Avatar';
 import { ConversationAvatar } from './ConversationAvatar';
+import { GroupMembersModal } from './GroupMembersModal';
+import { ChangeGroupLogoModal } from './ChangeGroupLogoModal';
 import { mediaService } from '@/services/api/media.service';
+import { chatApi } from '@/services/api/chat.service';
 import { MessageReactions } from './MessageReactions';
 import { EmojiPicker } from '@/features/posts/components/EmojiPicker';
 import toast from 'react-hot-toast';
@@ -23,6 +26,7 @@ import {
   VideoCameraIcon,
   EllipsisVerticalIcon,
   UserIcon,
+  CameraIcon,
 } from '@heroicons/react/24/outline';
 
 // Keep in sync with backend ALLOWED_TYPES in app/api/v1/endpoints/media.py
@@ -52,7 +56,7 @@ interface ChatWindowProps {
 export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { currentConversation, messages, getMessages, sendMessage, handleTyping, isLoading, typingByConversation } = useChat();
+  const { currentConversation, messages, getMessages, sendMessage, handleTyping, isLoading, typingByConversation, updateConversation } = useChat();
   const { friends } = useFriends();
   const [newMessage, setNewMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -61,6 +65,9 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
   const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showMembersModal, setShowMembersModal] = useState(false);
+  const [showLogoModal, setShowLogoModal] = useState(false);
+  const [canEditLogo, setCanEditLogo] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -90,6 +97,28 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
       getMessages(conversationId);
     }
   }, [conversationId, getMessages]);
+
+  // Only group chats have a logo to change, and only their professor(s)/
+  // mayor/officer are allowed to - ask the backend rather than guessing the
+  // rule client-side, so this never drifts from ChatService.can_edit_group_logo.
+  useEffect(() => {
+    if (currentConversation?.type !== 'group') {
+      setCanEditLogo(false);
+      return;
+    }
+    let cancelled = false;
+    chatApi
+      .getGroupLogoPermission(currentConversation.id)
+      .then((res) => {
+        if (!cancelled) setCanEditLogo(res.data.can_edit_logo);
+      })
+      .catch(() => {
+        if (!cancelled) setCanEditLogo(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentConversation?.type, currentConversation?.id]);
 
   useEffect(() => {
     scrollToBottom();
@@ -237,7 +266,13 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
           <h3 className="font-semibold text-[#F1F5F9] truncate">{getConversationName()}</h3>
           <p className="text-xs text-[#64748B] flex items-center gap-1.5">
             {currentConversation.type === 'group' ? (
-              `${currentConversation.participants?.length || 0} members`
+              <button
+                type="button"
+                onClick={() => setShowMembersModal(true)}
+                className="hover:text-[#00C8FF] hover:underline transition"
+              >
+                {currentConversation.participants?.length || 0} members
+              </button>
             ) : isOtherOnline !== null ? (
               <>
                 <span className={`h-1.5 w-1.5 rounded-full ${isOtherOnline ? 'bg-[#22C55E]' : 'bg-[#64748B]'}`} />
@@ -288,6 +323,32 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
                   >
                     <UserIcon className="h-4 w-4" />
                     View Profile
+                  </button>
+                )}
+                {currentConversation.type === 'group' && (
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setShowMoreMenu(false);
+                      setShowMembersModal(true);
+                    }}
+                    className="flex items-center gap-2 w-full px-4 py-2 text-sm text-[#94A3B8] hover:bg-white/5 hover:text-[#F1F5F9] transition"
+                  >
+                    <UserIcon className="h-4 w-4" />
+                    View Members
+                  </button>
+                )}
+                {currentConversation.type === 'group' && canEditLogo && (
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setShowMoreMenu(false);
+                      setShowLogoModal(true);
+                    }}
+                    className="flex items-center gap-2 w-full px-4 py-2 text-sm text-[#94A3B8] hover:bg-white/5 hover:text-[#F1F5F9] transition"
+                  >
+                    <CameraIcon className="h-4 w-4" />
+                    Change Group Logo
                   </button>
                 )}
                 <button
@@ -509,6 +570,18 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
             className="max-w-full max-h-full rounded-xl object-contain"
           />
         </div>
+      )}
+
+      {showMembersModal && currentConversation.type === 'group' && (
+        <GroupMembersModal conversationId={currentConversation.id} onClose={() => setShowMembersModal(false)} />
+      )}
+
+      {showLogoModal && currentConversation.type === 'group' && (
+        <ChangeGroupLogoModal
+          conversation={currentConversation}
+          onClose={() => setShowLogoModal(false)}
+          onUpdated={(updated) => updateConversation(updated.id, updated)}
+        />
       )}
     </div>
   );

@@ -2,7 +2,7 @@
 from app.models.user import User, Role, Permission
 from app.models.profile import StudentProfile, ProfessorProfile, AdminProfile
 from app.models.section import Section, SectionMember, SectionConversation
-from app.models.teaching_assignment import TeachingAssignment
+from app.models.teaching_assignment import TeachingAssignment, TeachingAssignmentConversation
 from app.models.announcement import Announcement, AnnouncementTarget, AnnouncementReaction, AnnouncementBookmark
 from app.models.post import Post, PostMedia, PostReaction
 from app.models.comment import Comment, CommentReaction
@@ -25,6 +25,7 @@ __all__ = [
     "SectionMember",
     "SectionConversation",
     "TeachingAssignment",
+    "TeachingAssignmentConversation",
     "Post",
     "PostMedia",
     "PostReaction",

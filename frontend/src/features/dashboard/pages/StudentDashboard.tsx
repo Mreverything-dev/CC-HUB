@@ -10,7 +10,6 @@ import AnnouncementFeedBody from '@/features/announcements/components/Announceme
 import { useAnnouncements } from '@/features/announcements/hooks/useAnnouncements';
 import { useSections } from '@/features/sections/hooks/useSections';
 import SectionDashboard from '@/features/sections/components/SectionDashboard';
-import { useAuthStore } from '@/features/auth/store/auth.store';
 import { profileService } from '@/services/api/profile.service';
 import { Sidebar, SidebarSection } from '@/features/dashboard/components/Sidebar';
 import { Topbar } from '@/features/dashboard/components/Topbar';
@@ -31,7 +30,6 @@ function professorLabel(ta: { professor_first_name?: string | null; professor_la
 }
 
 export default function StudentDashboard() {
-  const { user } = useAuthStore();
   const location = useLocation();
   // Allows other pages (e.g. Profile) to deep-link back into a specific
   // dashboard section via navigate(path, { state: { section } }).
@@ -163,10 +161,8 @@ export default function StudentDashboard() {
             <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6">
               {/* Center - Feed */}
               <div className="space-y-6 min-w-0">
-                {/* Greeting / Today's Class Reminder */}
+                {/* Today's Class Reminder */}
                 <ClassReminderCard
-                  greetingTitle={`Welcome back, ${user?.username || 'Student'}! 👋`}
-                  greetingSubtitle="Stay informed, connected, and up to date with the College of Computer Studies."
                   scheduleLabel="Today's Schedule"
                   entries={todayEntries}
                   nextUpcoming={nextUpcomingClass}

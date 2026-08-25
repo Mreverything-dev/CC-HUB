@@ -15,20 +15,34 @@ class ConversationResponse(BaseModel):
     id: str
     type: str
     name: Optional[str] = None
+    avatar_url: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     last_message: Optional['MessageResponse'] = None
     unread_count: int = 0
     participants: List[dict] = []
-    
+
     model_config = ConfigDict(from_attributes=True)
-    
+
     @field_validator('id', mode='before')
     @classmethod
     def convert_uuid_to_str(cls, v):
         if isinstance(v, uuid.UUID):
             return str(v)
         return v
+
+class ConversationLogoUpdate(BaseModel):
+    avatar_url: str = Field(..., min_length=1, max_length=500)
+
+class GroupMemberResponse(BaseModel):
+    id: str
+    username: str
+    full_name: str
+    avatar_url: Optional[str] = None
+    role: str  # 'student' | 'professor' | 'admin'
+    is_professor: bool = False
+    is_mayor: bool = False
+    is_officer: bool = False
 
 class MessageBase(BaseModel):
     content: str = Field(..., min_length=1, max_length=5000)

@@ -20,6 +20,14 @@ const CONTAINER_SIZE: Record<string, string> = {
  */
 export function ConversationAvatar({ conversation, currentUserId, size = 'md' }: ConversationAvatarProps) {
   if (conversation.type === 'group') {
+    if (conversation.avatar_url) {
+      return (
+        <div className={`${CONTAINER_SIZE[size]} rounded-full overflow-hidden flex-shrink-0 bg-[#0D1722]`}>
+          <img src={conversation.avatar_url} alt={conversation.name || 'Group'} className="w-full h-full object-cover" />
+        </div>
+      );
+    }
+
     const members = (conversation.participants || []).filter((p) => p.id !== currentUserId);
     const shown = members.slice(0, 2);
 

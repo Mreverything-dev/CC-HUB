@@ -182,13 +182,17 @@ export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalPro
   // Advanced (informational only - see note below the section)
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  // Camera / mic - camera and screen/window/game are independent local
-  // MediaStreams, each with its own ref/lifecycle, so either can be started,
-  // stopped, or swapped without disturbing the other.
+  // Camera / mic / screen are three fully independent local MediaStreams,
+  // each with its own ref/lifecycle, so any one can be started, stopped, or
+  // swapped without disturbing the others - in particular, the microphone is
+  // never bundled into the camera's own getUserMedia() call, so "screen +
+  // mic, camera off" never has to touch camera hardware at all.
   const [isCameraOn, setIsCameraOn] = useState(false);
-  const [isMicOn, setIsMicOn] = useState(true);
+  const [isMicOn, setIsMicOn] = useState(false);
   const [isStartingCamera, setIsStartingCamera] = useState(false);
+  const [isStartingMic, setIsStartingMic] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [micError, setMicError] = useState<string | null>(null);
   const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedVideoDeviceId, setSelectedVideoDeviceId] = useState('');
@@ -225,12 +229,21 @@ export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalPro
   // preview deliberately avoids it from the start.
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
+  // Independent audio-only stream for the microphone - deliberately never
+  // shares a getUserMedia() call with the camera (see startCamera/startMic),
+  // so toggling either one never starts, stops, or restarts the other.
+  const micStreamRef = useRef<MediaStream | null>(null);
   const mainVideoRef = useRef<HTMLVideoElement>(null);
   const pipVideoRef = useRef<HTMLVideoElement>(null);
   // Set right before a successful "Go Live" hands these same MediaStream
   // objects to LiveStreamStage (via pendingStream.store) - the unmount
   // cleanup below must NOT stop tracks it no longer owns.
   const handedOffStreamsRef = useRef(false);
+  // Mic defaults to "on" the first time the user starts ANY video source
+  // (camera or screen), matching the previous camera+mic-together
+  // convenience - but only ever auto-attempted once, so it never overrides
+  // a mic the user has since explicitly turned off.
+  const micAutoStartedRef = useRef(false);
 
   const isProfessor = user?.role === 'professor';
   const isAdmin = user?.role === 'admin';
@@ -266,6 +279,8 @@ export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalPro
       cameraStreamRef.current = null;
       screenStreamRef.current?.getTracks().forEach((track) => track.stop());
       screenStreamRef.current = null;
+      micStreamRef.current?.getTracks().forEach((track) => track.stop());
+      micStreamRef.current = null;
     };
   }, []);
 
@@ -321,14 +336,15 @@ export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalPro
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCameraOn, screenSourceType]);
 
-  const startCamera = async (opts?: { videoDeviceId?: string; audioDeviceId?: string; mic?: boolean }) => {
+  const startCamera = async (opts?: { videoDeviceId?: string }) => {
     setCameraError(null);
     setIsStartingCamera(true);
-    const micOn = opts?.mic ?? isMicOn;
     try {
+      // Video only - the microphone is acquired completely separately (see
+      // startMic) so this never has to be re-run just because the mic was
+      // toggled, and stopping the camera never silently kills the mic too.
       const stream = await navigator.mediaDevices.getUserMedia({
         video: opts?.videoDeviceId ? { deviceId: { exact: opts.videoDeviceId } } : true,
-        audio: micOn ? (opts?.audioDeviceId ? { deviceId: { exact: opts.audioDeviceId } } : true) : false,
       });
 
       cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -337,17 +353,16 @@ export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalPro
 
       const videoTrackId = stream.getVideoTracks()[0]?.getSettings().deviceId;
       if (videoTrackId) setSelectedVideoDeviceId(videoTrackId);
-      const audioTrackId = stream.getAudioTracks()[0]?.getSettings().deviceId;
-      if (audioTrackId) setSelectedAudioDeviceId(audioTrackId);
 
       await refreshDeviceList();
+      maybeAutoStartMic();
     } catch (error: any) {
       console.error('Camera access denied:', error);
       const message =
         error?.name === 'NotAllowedError'
-          ? 'Camera/microphone access was denied. Allow access in your browser settings and try again.'
+          ? 'Camera access was denied. Allow access in your browser settings and try again.'
           : error?.name === 'NotFoundError'
-          ? 'No camera or microphone was found on this device.'
+          ? 'No camera was found on this device.'
           : 'Unable to access your camera. Please check your permissions.';
       setCameraError(message);
       toast.error(message);
@@ -364,20 +379,64 @@ export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalPro
 
   const toggleCamera = () => (isCameraOn ? stopCamera() : startCamera());
 
-  const toggleMic = () => {
-    const next = !isMicOn;
-    setIsMicOn(next);
-    cameraStreamRef.current?.getAudioTracks().forEach((track) => (track.enabled = next));
+  const startMic = async (opts?: { audioDeviceId?: string }) => {
+    setMicError(null);
+    setIsStartingMic(true);
+    micAutoStartedRef.current = true;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: opts?.audioDeviceId ? { deviceId: { exact: opts.audioDeviceId } } : true,
+      });
+
+      micStreamRef.current?.getTracks().forEach((track) => track.stop());
+      micStreamRef.current = stream;
+      setIsMicOn(true);
+
+      const audioTrackId = stream.getAudioTracks()[0]?.getSettings().deviceId;
+      if (audioTrackId) setSelectedAudioDeviceId(audioTrackId);
+
+      await refreshDeviceList();
+    } catch (error: any) {
+      console.error('Microphone access denied:', error);
+      const message =
+        error?.name === 'NotAllowedError'
+          ? 'Microphone access was denied. Allow access in your browser settings and try again.'
+          : error?.name === 'NotFoundError'
+          ? 'No microphone was found on this device.'
+          : 'Unable to access your microphone. Please check your permissions.';
+      setMicError(message);
+      setIsMicOn(false);
+    } finally {
+      setIsStartingMic(false);
+    }
+  };
+
+  const stopMic = () => {
+    micStreamRef.current?.getTracks().forEach((track) => track.stop());
+    micStreamRef.current = null;
+    micAutoStartedRef.current = true;
+    setIsMicOn(false);
+  };
+
+  const toggleMic = () => (isMicOn ? stopMic() : startMic());
+
+  // Convenience only, matching the previous "camera turns on mic by
+  // default" UX - fires at most once per modal session (see
+  // micAutoStartedRef) and is a no-op if the user already made an explicit
+  // choice about the mic before starting their first video source.
+  const maybeAutoStartMic = () => {
+    if (micAutoStartedRef.current) return;
+    startMic();
   };
 
   const handleVideoDeviceChange = (deviceId: string) => {
     setSelectedVideoDeviceId(deviceId);
-    if (isCameraOn) startCamera({ videoDeviceId: deviceId, audioDeviceId: selectedAudioDeviceId });
+    if (isCameraOn) startCamera({ videoDeviceId: deviceId });
   };
 
   const handleAudioDeviceChange = (deviceId: string) => {
     setSelectedAudioDeviceId(deviceId);
-    if (isCameraOn) startCamera({ videoDeviceId: selectedVideoDeviceId, audioDeviceId: deviceId });
+    if (isMicOn) startMic({ audioDeviceId: deviceId });
   };
 
   const stopScreenShare = useCallback(() => {
@@ -426,6 +485,7 @@ export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalPro
         // Browser's native "Stop sharing" bar/button ends the track directly.
         screenTrack.onended = () => stopScreenShare();
       }
+      maybeAutoStartMic();
     } catch (err: any) {
       // User cancelling the picker rejects the promise - not a real error.
       if (err?.name !== 'NotAllowedError' && err?.name !== 'AbortError') {
@@ -542,6 +602,7 @@ export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalPro
         usePendingStreamStore.getState().setPendingStreams({
           cameraStream: cameraStreamRef.current,
           screenStream: screenStreamRef.current,
+          micStream: micStreamRef.current,
           isMicOn,
           isSystemAudioOn: systemAudioAvailable && isSystemAudioOn,
           pipConfig: { position: pipPosition, size: pipSize, mirrored: isPipMirrored, hidden: isPipHidden },
@@ -574,11 +635,11 @@ export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalPro
     : cameraError?.includes('denied')
     ? 'permission-required'
     : 'unavailable';
-  const micHealth: HealthState = isStartingCamera
+  const micHealth: HealthState = isStartingMic
     ? 'initializing'
-    : isCameraOn && isMicOn
+    : isMicOn
     ? 'ready'
-    : cameraError?.includes('denied')
+    : micError?.includes('denied')
     ? 'permission-required'
     : 'unavailable';
   const screenHealth: HealthState = isStartingScreen
@@ -796,10 +857,11 @@ export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalPro
               <div className="rounded-xl border border-[#1E3447] bg-[#0A111A] p-3.5 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-2 text-sm text-[#F1F5F9]">
-                    <MicrophoneIcon className={`h-4 w-4 ${isCameraOn && isMicOn ? 'text-[#22C55E]' : 'text-[#64748B]'}`} />
+                    <MicrophoneIcon className={`h-4 w-4 ${isMicOn ? 'text-[#22C55E]' : 'text-[#64748B]'}`} />
                     Microphone
+                    {micError && <span className="text-[11px] font-normal text-[#EF4444]">{micError}</span>}
                   </span>
-                  <ToggleSwitch checked={isMicOn} onChange={toggleMic} disabled={!isCameraOn} />
+                  <ToggleSwitch checked={isMicOn} onChange={toggleMic} disabled={isStartingMic} />
                 </div>
 
                 {/* System sound - independent of the microphone above; both

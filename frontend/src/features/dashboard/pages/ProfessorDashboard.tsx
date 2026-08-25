@@ -12,7 +12,6 @@ import { useTeachingAssignments } from '@/features/sections/hooks/useTeachingAss
 import SectionDashboard from '@/features/sections/components/SectionDashboard';
 import ProfessorTeachingHub from '@/features/sections/components/ProfessorTeachingHub';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
-import { useAuthStore } from '@/features/auth/store/auth.store';
 import { profileService } from '@/services/api/profile.service';
 import { Sidebar, SidebarSection } from '@/features/dashboard/components/Sidebar';
 import { Topbar } from '@/features/dashboard/components/Topbar';
@@ -28,7 +27,6 @@ import FriendsPage from '@/features/friends/components/FriendsPage';
 import ChatPanel from '@/features/chat/components/ChatPanel';
 
 export default function ProfessorDashboard() {
-  const { user } = useAuthStore();
   const location = useLocation();
   // Allows other pages (e.g. Profile) to deep-link back into a specific
   // dashboard section via navigate(path, { state: { section } }).
@@ -168,10 +166,8 @@ export default function ProfessorDashboard() {
             <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6">
               {/* Center - Feed */}
               <div className="space-y-6 min-w-0">
-                {/* Greeting / Today's Teaching Reminder */}
+                {/* Today's Teaching Reminder */}
                 <ClassReminderCard
-                  greetingTitle={`Welcome back, ${user?.username || 'Professor'}! 👋`}
-                  greetingSubtitle="Manage your classes, posts, and announcements."
                   scheduleLabel="Today's Teaching"
                   entries={todayEntries}
                   nextUpcoming={nextUpcomingClass}
