@@ -1,421 +1,334 @@
-# 🗺️ CCS HUB - Complete Project Roadmap & Progress Report
+# CCS HUB Roadmap
+
+## Project Overview
+
+CCS HUB is a centralized web-based platform for the College of Computer
+Studies that combines academic communication, section management,
+announcements, messaging, social interaction, livestreaming, and
+administration into a single hub for students, professors, and admins.
+
+## Current Project Status
+
+**Overall Progress: ~83%**
+
+The project is currently transitioning from active feature development into
+refinement, testing, and deployment preparation. Almost every core system
+described below is functionally complete; the remaining work is concentrated
+in automated testing, mobile QA, security review, and fixing known issues in
+the deployment tooling.
+
+The percentages below are **development estimates**, not measured metrics.
+
+| Area | Estimate |
+|---|---|
+| Core Architecture | 95% |
+| Authentication & Security | 95% |
+| Section System | 95% |
+| Professor System | 90% |
+| Admin System | 90% |
+| Announcements | 85% |
+| Chat | 90% |
+| Livestream | 90% |
+| Social Feed | 85% |
+| UI/UX | 88% |
+| Mobile Responsiveness | 75% |
+| Testing / QA | 20% |
+| Deployment | 45% |
 
 ---
 
-## 📊 EXECUTIVE SUMMARY
+# ✅ Completed / Implemented
 
-| Metric | Value |
-|--------|-------|
-| **Overall Progress** | **58% Complete** |
-| **Completed Features** | 28 out of 48 |
-| **In Progress** | 4 features |
-| **Not Started** | 16 features |
-| **Estimated Completion** | 10-12 weeks |
+## Authentication & Security
 
----
+- [x] Registration (email, username, password) with role selection
+- [x] Email verification on registration, plus resend-verification
+- [x] Login with JWT access + refresh tokens, role-based access control
+- [x] Forgot password (emailed reset link)
+- [x] Change password from Settings — validates the current password, then
+      requires clicking an emailed confirmation link before the new password
+      is applied (does not reuse the forgot-password flow's user-facing
+      page, but reuses the same token/email architecture)
+- [x] Password hashing via bcrypt (`passlib`); JWT via `python-jose`
+- [x] Professor/Admin registration codes — single-use, expiring invitation
+      codes, atomically consumed so a code can't be used twice in a race
+- [x] Admin can generate and revoke invitation codes
 
-## 🎯 PHASE 1: FOUNDATION ✅ 100% COMPLETE
+## User & Profile System
 
-### 1. Authentication (JWT, Roles) ✅ 100%
+- [x] Role-specific profiles (Student, Professor, Admin) with their own
+      fields (e.g. student ID/course/year level; employee ID/department;
+      admin position)
+- [x] Profile editing
+- [x] Avatar upload (stored in MinIO)
+- [x] Profile page with posts/shares/saved/about tabs, plus a Security tab
+      (change password) on your own profile
+- [x] Clickable profile navigation from avatars/usernames throughout the app
+      (posts, chat, sections, livestream, admin tools)
+- [x] "Live" indicator on a user's avatar while they are actively streaming
 
-| Task | Status | Details |
-|------|--------|---------|
-| User Registration | ✅ Done | Email, username, password |
-| User Login | ✅ Done | JWT token generation |
-| JWT Implementation | ✅ Done | Access/Refresh tokens |
-| Role-Based Access | ✅ Done | Admin, Professor, Student |
-| Password Hashing | ✅ Done | bcrypt |
-| Token Refresh | ✅ Done | Automatic refresh mechanism |
-| Logout | ✅ Done | Client-side token removal |
-| Invitation Codes | ✅ Done | For professor/admin registration |
-| Change Password | ✅ Done | Secure password update |
-| Get Current User | ✅ Done | /auth/me endpoint |
+## Section Management
 
-**Files Created:**
-- `backend/app/models/user.py`
-- `backend/app/core/security.py`
-- `backend/app/services/auth_service.py`
-- `backend/app/api/v1/endpoints/auth.py`
-- `frontend/src/features/auth/` (Complete)
+- [x] Create a section; join an existing section (by year level)
+- [x] **Multiple professors per section**, each with their own **Teaching
+      Assignment** (subject, subject code, room, schedule days/time)
+- [x] Automatic schedule-conflict checking when a professor adds a subject
+- [x] Mayor and Officer roles (promote/demote, single-holder invariants)
+- [x] Add student to a section; student search
+- [x] "What's your real name?" prompt for a newly invited student whose
+      profile name is still blank
+- [x] Section-scoped announcements and posts
+- [x] **Section group chat**, auto-created and kept in sync with membership
+- [x] **Subject group chat** — a separate group chat per Teaching Assignment,
+      named `"{Section Name} {Subject Code}"`, auto-created and kept in sync
+- [x] Group chat members list (avatar, name, Professor/Mayor/Officer/Student
+      role) and a professor/mayor/officer-only group logo upload
 
----
+## Professor / Teaching Assignments
 
-### 2. User Profiles ✅ 100%
+- [x] "My Teaching Assignments" hub — grid of sections with stats
+      (sections, subjects, total hours, total students)
+- [x] Add a subject to a section already taught; edit or remove a subject
+- [x] Join another existing section
+- [x] Create a new section (with an optional first subject/schedule)
+- [x] Weekly Classes/Schedule page (shared with students) showing a
+      day-by-day timetable with subject code, room, and section/professor
+- [x] Student Directory / search within a section
 
-| Task | Status | Details |
-|------|--------|---------|
-| Student Profile | ✅ Done | student_id, course, year_level |
-| Professor Profile | ✅ Done | employee_id, department, title |
-| Admin Profile | ✅ Done | position |
-| Profile CRUD | ✅ Done | Create, Read, Update |
-| Profile Endpoints | ✅ Done | /profiles/* |
-| Avatar Upload | ✅ Done | MinIO integration |
-| Profile Page | ✅ Done | Frontend with edit capability |
-| Profile Avatar | ✅ Done | Display in dashboard header |
+> **Note:** Attendance and Violations UI exists as read-only, honestly-empty
+> placeholders (`StudentRecordModal.tsx`) — there is intentionally no backend
+> for either yet. See [Future Enhancements](#-future-enhancements).
 
-**Files Created:**
-- `backend/app/models/profile.py`
-- `backend/app/schemas/profile.py`
-- `backend/app/services/profile_service.py`
-- `backend/app/api/v1/endpoints/profiles.py`
-- `frontend/src/features/profile/`
+## Announcements
 
----
+- [x] Create, edit, delete announcements
+- [x] Section-targeted and admin/global visibility
+- [x] Reactions (emoji) and bookmarks
+- [x] Announcement feed and a dedicated detail page
+- [x] Category/type sidebar (e.g. "Popular Announcements")
 
-### 3. Sections ✅ 100%
+## Social Feed
 
-| Task | Status | Details |
-|------|--------|---------|
-| Section CRUD | ✅ Done | Create, Read, Update, Delete |
-| Section Members | ✅ Done | Add/Remove students |
-| Officer Role | ✅ Done | Promote/Demote Officer |
-| Mayor Role | ✅ Done | Promote/Demote Class Mayor |
-| Permission System | ✅ Done | Role-based section management |
-| Section Endpoints | ✅ Done | Full REST API |
-| Section UI | ✅ Done | Manage sections in dashboard |
+- [x] Posts with text and media (images/videos), stored via MinIO
+- [x] Likes and multi-emoji reactions
+- [x] Comments (with replies) and comment reactions
+- [x] Sharing a post
+- [x] Post detail modal, dashboard feed, and profile-scoped post lists
+- [x] Real-time delivery of reactions/comments where wired through sockets
 
-**Files Created:**
-- `backend/app/models/section.py`
-- `backend/app/schemas/section.py`
-- `backend/app/services/section_service.py`
-- `backend/app/api/v1/endpoints/sections.py`
-- `frontend/src/features/sections/`
+## Chat
 
----
+- [x] Direct messaging between two users
+- [x] Section and Subject group chats (see Section Management above)
+- [x] Real-time delivery over Socket.IO — typing indicators, read receipts
+- [x] Emoji reactions on messages
+- [x] Image/video/file attachments in chat
+- [x] "Message Professor" / "Message Student" entry points from sections,
+      classes, and livestream viewer lists
+- [x] Floating chat widget available from anywhere in the app, plus a full
+      chat page
 
-## 🔄 PHASE 2: SOCIAL CORE - 85% COMPLETE
+## Livestreaming
 
-### 4. Announcements ✅ 100%
+- [x] Go Live setup — camera, screen/window share, camera-in-corner (PiP)
+      compositing, independent microphone control, thumbnail upload
+- [x] WebRTC host/viewer streaming over the existing Socket.IO signaling
+- [x] Live chat, reactions, and viewer count during a stream
+- [x] Viewer list with avatar/name and Professor/Mayor/Officer/Student roles
+- [x] Automatic thumbnail capture from the live video when the host doesn't
+      upload one
+- [x] Minimize a livestream into a small picture-in-picture widget and keep
+      browsing the rest of CCS HUB while it keeps playing
+- [x] Live streams surfaced on the dashboard (widget) and a dedicated
+      Livestreams browse page
+- [x] Auto-hide player controls, fullscreen, volume control, live duration
+      display, streamer avatar/name on the player
 
-| Task | Status | Details |
-|------|--------|---------|
-| Announcement Model | ✅ Done | title, content, type, priority |
-| AnnouncementTarget | ✅ Done | Visibility targeting |
-| Professor Announcements | ✅ Done | Only their sections |
-| Admin Global Announcements | ✅ Done | Visible to everyone |
-| Student View | ✅ Done | Only their section's announcements |
-| CRUD Operations | ✅ Done | Create, Read, Update, Delete |
-| Publish/Unpublish | ✅ Done | Toggle visibility |
-| Frontend Feed | ✅ Done | Announcement list |
-| Create Modal | ✅ Done | With section selection |
-| Detail Modal | ✅ Done | Full announcement view |
+## Admin Dashboard
 
-**Files Created:**
-- `backend/app/models/announcement.py`
-- `backend/app/schemas/announcement.py`
-- `backend/app/services/announcement_service.py`
-- `backend/app/api/v1/endpoints/announcements.py`
-- `frontend/src/features/announcements/`
+- [x] User management — list, search, and filter by role/status
+- [x] Manually create a user account
+- [x] Suspend / reactivate a user account
+- [x] Professor/Admin invitation code generation, listing, and deletion
+      (single-use, expiring)
+- [x] Role and permission seeding runs automatically on backend startup,
+      including a superadmin account from environment variables
 
----
+## UI/UX
 
-### 5. Social Feed (Posts) ✅ 100%
-
-| Task | Status | Details |
-|------|--------|---------|
-| Post Model | ✅ Done | content, type, visibility |
-| Post Media | ✅ Done | images, videos |
-| Create Post | ✅ Done | Text + Media |
-| Feed with Pagination | ✅ Done | Infinite scroll |
-| Edit Post | ✅ Done | Update content |
-| Delete Post | ✅ Done | Soft delete |
-| Visibility Settings | ✅ Done | public, friends, section, private |
-| Post Detail Modal | ✅ Done | Full view |
-| MinIO Integration | ✅ Done | Media storage |
-| Like System | ✅ Done | Toggle like/unlike |
-
-**Files Created:**
-- `backend/app/models/post.py`
-- `backend/app/models/like.py`
-- `backend/app/schemas/post.py`
-- `backend/app/services/post_service.py`
-- `backend/app/api/v1/endpoints/posts.py`
-- `frontend/src/features/posts/`
-- `frontend/src/features/media/`
+- [x] Consistent dark charcoal/glassmorphism theme across Login, Register,
+      Dashboards (Student/Professor/Admin), Profile, Sections, Teaching
+      Assignments, Announcements, Posts, Chat, Livestream, and Admin/User
+      Management
+- [x] Global search (people, posts, announcements, sections) from the top bar
+- [x] Mobile-responsive navigation (collapsible sidebar drawer, mobile search)
+- [x] Redesigned Classes/Schedule page as a clean weekly timetable
 
 ---
 
-### 6. Comments & Likes 🔄 70%
+# 🟡 In Progress
 
-| Task | Status | Details |
-|------|--------|---------|
-| Comment Model | ✅ Done | Post comments |
-| Like Model | ✅ Done | Polymorphic likes |
-| Post Likes | ✅ Done | Working |
-| Create Comments | 🔄 50% | Basic implementation |
-| Reply to Comments | ⏳ 0% | Not started |
-| Edit Comments | ⏳ 0% | Not started |
-| Delete Comments | ⏳ 0% | Not started |
-| Comment Likes | ⏳ 0% | Not started |
-
-**Files Created:**
-- `backend/app/models/comment.py`
-- `backend/app/schemas/comment.py`
-- `backend/app/services/comment_service.py`
-- `backend/app/api/v1/endpoints/comments.py`
+- [ ] Cross-feature integration testing (chat + sections + livestream
+      interactions under real usage)
+- [ ] Mobile responsiveness QA pass across every feature (most screens have
+      been built responsively, but a full device/browser pass hasn't been
+      done)
+- [ ] Final UI consistency polish (a few older screens still differ slightly
+      in spacing/detail from the latest redesigns)
+- [ ] Realtime reaction/notification testing under concurrent multi-user load
 
 ---
 
-### 7. Friend System 🔄 30%
+# 🔵 Pending / Next Development
 
-| Task | Status | Details |
-|------|--------|---------|
-| Friend Model | ✅ Done | Friend relationships |
-| FriendRequest Model | ✅ Done | Pending requests |
-| Send Request | 🔄 30% | Basic implementation |
-| Accept/Reject | ⏳ 0% | Not started |
-| List Friends | ⏳ 0% | Not started |
-| Unfriend | ⏳ 0% | Not started |
-| Friend Suggestions | ⏳ 0% | Not started |
+### High Priority
+- [ ] Authentication edge-case testing (expired/reused tokens, concurrent
+      password-change confirmations, invitation-code race conditions)
+- [ ] Realtime feature testing (chat, livestream signaling, notifications)
+      under real network conditions
+- [ ] Mobile device testing (not just responsive layout — touch interactions,
+      livestream controls, chat widget)
+- [ ] Security review (see [Phase 2](#phase-2--security) below)
+- [ ] Error-handling review across API failure paths
+- [ ] Fix the known issues in `docker-compose.yml` (duplicate/misplaced
+      `minio` service block) and `database/init.sql` (out of date vs. the
+      real schema) before relying on the Docker setup path
 
-**Files Created:**
-- `backend/app/models/friend.py`
-- `backend/app/schemas/friend.py`
+### Medium Priority
+- [ ] Performance optimization (bundle size — the production build currently
+      exceeds Vite's 500kB chunk-size warning threshold)
+- [ ] Database query optimization for high-traffic endpoints (feed, sections)
+- [ ] Loading-state and empty-state consistency review
+- [ ] Notification system refinement (delivery consistency, read/unread state)
+- [ ] UI consistency review across older vs. newly redesigned pages
 
----
-
-## 🔄 PHASE 3: COMMUNICATION - 40% COMPLETE
-
-### 8. Chat (WebSockets) ⏳ 20%
-
-| Task | Status | Details |
-|------|--------|---------|
-| WebSocket Setup | ✅ Done | Socket.IO configured |
-| Conversation Model | ✅ Done | Chat rooms |
-| Message Model | ✅ Done | Message storage |
-| Real-time Messaging | 🔄 40% | Basic implementation |
-| Typing Indicators | ⏳ 0% | Not started |
-| Read Receipts | ⏳ 0% | Not started |
-| Chat List | ⏳ 0% | Not started |
-| Unread Count | ⏳ 0% | Not started |
-
-**Files Created:**
-- `backend/app/websocket/manager.py`
-- `backend/app/models/message.py`
-- `backend/app/schemas/message.py`
+### Low Priority
+- [ ] Minor visual polish and micro-animations
+- [ ] Additional convenience/UX refinements based on pilot feedback
 
 ---
 
-### 9. Notifications ⏳ 10%
+# 🚀 Deployment Roadmap
 
-| Task | Status | Details |
-|------|--------|---------|
-| Notification Model | ✅ Done | Database schema |
-| WebSocket Integration | ⏳ 0% | Not started |
-| In-app Notifications | ⏳ 0% | Not started |
-| Mark as Read | ⏳ 0% | Not started |
-| Notification Types | ⏳ 0% | Not started |
-| Push Notifications | ⏳ 0% | Not started |
+## Phase 1 — Development Complete
+- [x] Core authentication, sections, teaching assignments, chat, feed,
+      announcements, livestream, and admin systems implemented
+- [ ] Remaining bugs from the in-progress list above fixed
+- [ ] Cross-feature integration testing complete
 
-**Files Created:**
-- `backend/app/models/notification.py`
-- `backend/app/schemas/notification.py`
+## Phase 2 — Security
+- [ ] Review authentication and token-expiry edge cases
+- [ ] Review authorization/permission checks on every endpoint
+- [ ] Secure and rotate all environment variables/secrets (`SECRET_KEY`,
+      database, SMTP, MinIO credentials all currently use development
+      placeholders)
+- [ ] Configure production CORS (the current config permissively allows
+      private-LAN origins, which is a development convenience only)
+- [ ] Review password/token security end to end
+- [ ] Review file upload validation (type/size limits already exist —
+      confirm they're sufficient for production)
 
----
+## Phase 3 — Testing
+- [ ] Student flow testing
+- [ ] Professor flow testing
+- [ ] Admin flow testing
+- [ ] Realtime (chat/livestream/notifications) testing
+- [ ] Mobile testing
+- [ ] Cross-browser testing
+- [ ] Email delivery testing (verification, forgot-password, change-password
+      confirmation)
+- [ ] Database testing under realistic data volume
+- [ ] Write actual automated tests — `backend/app/tests/` currently only has
+      a `conftest.py`, no test modules; the frontend's `npm test` script is a
+      placeholder stub
 
-### 10. Media Upload ✅ 100%
+## Phase 4 — Deployment
+- [ ] Configure a VPS/server
+- [ ] Configure production PostgreSQL
+- [ ] Configure production Redis
+- [ ] Configure production environment variables
+- [ ] Configure a domain and HTTPS
+- [ ] Configure the frontend build/serve pipeline
+- [ ] Configure FastAPI for production (disable `DEBUG`, restrict `DEBUG`
+      docs if desired)
+- [ ] Configure WebSocket forwarding through the production reverse proxy
+- [ ] Configure the production email service
+- [ ] Configure database backups
 
-| Task | Status | Details |
-|------|--------|---------|
-| MinIO Integration | ✅ Done | File storage |
-| Multiple Upload | ✅ Done | Batch upload |
-| File Validation | ✅ Done | Type & size |
-| Post Media Display | ✅ Done | Images & videos |
-| Avatar Upload | ✅ Done | Profile pictures |
-| Media Preview | ✅ Done | Before posting |
-| Upload Progress | ✅ Done | Loading indicator |
-
-**Files Created:**
-- `backend/app/storage/minio.py`
-- `backend/app/api/v1/endpoints/media.py`
-- `frontend/src/services/api/media.service.ts`
-
----
-
-## 🔄 PHASE 4: ADVANCED - 25% COMPLETE
-
-### 11. Live Streaming ✅ 100%
-
-| Task | Status | Details |
-|------|--------|---------|
-| Livestream Model | ✅ Done | Stream management |
-| StreamViewer Model | ✅ Done | Viewer tracking |
-| StreamMessage Model | ✅ Done | Real-time chat |
-| WebSocket Integration | ✅ Done | Real-time communication |
-| Start Stream | ✅ Done | Create stream |
-| End Stream | ✅ Done | Stop stream |
-| Viewer Count | ✅ Done | Live updates |
-| Real-time Chat | ✅ Done | WebSocket messages |
-| Stream Controls | ✅ Done | UI controls |
-| Frontend Player | ✅ Done | Video player |
-
-**Files Created:**
-- `backend/app/models/livestream.py`
-- `backend/app/websocket/stream_handler.py`
-- `backend/app/services/livestream_service.py`
-- `frontend/src/features/livestream/`
+## Phase 5 — Pilot Testing
+- [ ] Deploy a test version
+- [ ] Invite a small group of students
+- [ ] Invite participating professors
+- [ ] Collect feedback
+- [ ] Fix reported issues
+- [ ] Final release
 
 ---
 
-### 12. Search ⏳ 0%
+# 🔮 Future Enhancements
 
-| Task | Status | Details |
-|------|--------|---------|
-| Search Posts | ⏳ 0% | Not started |
-| Search Users | ⏳ 0% | Not started |
-| Search Sections | ⏳ 0% | Not started |
-| Search History | ⏳ 0% | Not started |
-| Full-text Search | ⏳ 0% | Not started |
+**Future / Optional** — not required for the current MVP:
 
----
-
-### 13. Reports & Moderation ⏳ 0%
-
-| Task | Status | Details |
-|------|--------|---------|
-| Report Model | ⏳ 0% | Not started |
-| Report Content | ⏳ 0% | Not started |
-| Admin Moderation | ⏳ 0% | Not started |
-| Content Removal | ⏳ 0% | Not started |
-
----
-
-### 14. Dashboard Analytics ⏳ 0%
-
-| Task | Status | Details |
-|------|--------|---------|
-| User Analytics | ⏳ 0% | Not started |
-| Post Statistics | ⏳ 0% | Not started |
-| Engagement Metrics | ⏳ 0% | Not started |
-| Admin Dashboard | ⏳ 0% | Not started |
+- Attendance tracking (no backend exists yet; only an intentionally-empty
+  UI placeholder is present today)
+- Student violations/discipline tracking (same status as Attendance)
+- Advanced notification system (categorization, preferences)
+- Academic performance dashboard / advanced analytics
+- Advanced admin reports
+- Push notifications (mobile)
+- Progressive Web App / native mobile app
+- Advanced full-text search
+- Additional livestream capabilities (recording history, scheduled streams
+  browsing beyond what exists today)
+- Additional moderation tools (the `Report`/`UserReport` model exists for
+  user-to-user reporting, but there is no admin moderation queue/workflow
+  built on top of it yet)
+- Advanced content management tools
+- System-wide usage analytics
+- Backup/restore management tooling
+- AI features (chatbot, content recommendations) — not started, no code
+  exists for this today
 
 ---
 
-## 🔄 PHASE 5: AI & DEPLOYMENT - 35% COMPLETE
+# 📊 Progress Summary
 
-### 15. AI Features ⏳ 0%
+| Area | Status | Progress |
+|---|---|---|
+| Core Architecture | Completed | 95% |
+| Authentication | Completed | 95% |
+| Section System | Completed | 95% |
+| Professor System | Completed | 90% |
+| Admin System | Completed | 90% |
+| Announcements | Completed | 85% |
+| Chat | Completed | 90% |
+| Livestream | Completed | 90% |
+| Social Feed | Completed / Refinement | 85% |
+| UI/UX | Refinement | 88% |
+| Mobile | Refinement | 75% |
+| Testing / QA | Early | 20% |
+| Deployment | Pending | 45% |
 
-| Task | Status | Details |
-|------|--------|---------|
-| AI Chatbot | ⏳ 0% | Not started |
-| Content Recommendations | ⏳ 0% | Not started |
-| Smart Notifications | ⏳ 0% | Not started |
+These are **development estimates only**, not measured metrics.
 
----
+**Overall: ~83% Complete**
 
-### 16. Docker Deployment ✅ 80%
-
-| Task | Status | Details |
-|------|--------|---------|
-| Docker Compose | ✅ Done | Multi-container |
-| PostgreSQL | ✅ Done | Database container |
-| Redis | ✅ Done | Cache container |
-| MinIO | ✅ Done | Storage container |
-| Nginx | ✅ Done | Reverse proxy |
-| Production Config | 🔄 50% | In progress |
-
-**Files Created:**
-- `docker-compose.yml`
-- `docker-compose.dev.yml`
-- `nginx/nginx.conf`
-- `backend/Dockerfile`
+> CCS HUB has completed most of its major functional systems and is
+> currently transitioning from feature development into testing,
+> refinement, security review, and deployment preparation.
 
 ---
 
-### 17. Automated Testing ⏳ 0%
+# 🎯 Current Development Focus
 
-| Task | Status | Details |
-|------|--------|---------|
-| Backend Unit Tests | ⏳ 0% | Not started |
-| Backend Integration | ⏳ 0% | Not started |
-| Frontend Unit Tests | ⏳ 0% | Not started |
-| E2E Tests | ⏳ 0% | Not started |
-| Coverage Reporting | ⏳ 0% | Not started |
-
----
-
-### 18. CI/CD Pipeline ⏳ 0%
-
-| Task | Status | Details |
-|------|--------|---------|
-| GitHub Actions | ⏳ 0% | Not started |
-| Automated Testing | ⏳ 0% | Not started |
-| Build Automation | ⏳ 0% | Not started |
-| Deployment Scripts | ⏳ 0% | Not started |
-
----
-
-## 📊 PROGRESS SUMMARY
-
-### By Phase
-
-| Phase | Completion | Status |
-|-------|------------|--------|
-| Phase 1: Foundation | ✅ 100% | Complete |
-| Phase 2: Social Core | 🔄 85% | Nearly Complete |
-| Phase 3: Communication | 🔄 40% | In Progress |
-| Phase 4: Advanced | 🔄 25% | Started |
-| Phase 5: AI & Deployment | 🔄 35% | In Progress |
-| **Overall** | **🔄 58%** | **On Track** |
-
-### Feature Count
-
-| Status | Count | Percentage |
-|--------|-------|------------|
-| ✅ Complete | 28 | 58% |
-| 🔄 In Progress | 4 | 8% |
-| ⏳ Not Started | 16 | 34% |
-
----
-
-## 🚀 NEXT MILESTONES
-
-### Immediate (Week 1-2)
-- [ ] Complete Comments System (Reply, Edit, Delete)
-- [ ] Complete Friend System (Requests, List, Unfriend)
-- [ ] Start Notification System
-
-### Short-term (Week 3-5)
-- [ ] Complete Chat (WebSockets)
-- [ ] Complete Notifications
-- [ ] Start Search Implementation
-
-### Mid-term (Week 6-8)
-- [ ] Complete Search
-- [ ] Start Reports & Moderation
-- [ ] Start Dashboard Analytics
-
-### Long-term (Week 9-12)
-- [ ] AI Features
-- [ ] Automated Testing
-- [ ] CI/CD Pipeline
-- [ ] Production Deployment
-
----
-
-## 🎯 KEY ACHIEVEMENTS
-
-### Backend
-- ✅ 30+ API Endpoints
-- ✅ 25+ Database Models
-- ✅ JWT Authentication
-- ✅ WebSocket Integration
-- ✅ MinIO Storage
-- ✅ Redis Caching
-
-### Frontend
-- ✅ 3 Role-based Dashboards
-- ✅ 15+ UI Components
-- ✅ Real-time Features
-- ✅ Responsive Design
-- ✅ State Management
-
-### Infrastructure
-- ✅ Docker Multi-container
-- ✅ PostgreSQL + Redis + MinIO
-- ✅ Nginx Reverse Proxy
-- ✅ Environment Configuration
-
----
-
-**Project is on track with 58% completion! 🚀**
+1. Finish remaining in-progress polish items
+2. Fix the known `docker-compose.yml` / `database/init.sql` issues
+3. Write automated backend and frontend tests
+4. Test authentication edge cases (token expiry, reused/expired
+   confirmation links)
+5. Test realtime features (chat, livestream, notifications) under load
+6. Complete a full mobile responsiveness/device QA pass
+7. Perform a security review (secrets, CORS, permissions, uploads)
+8. Prepare the production environment and deployment configuration
+9. Deploy to a VPS
+10. Conduct pilot testing with real students and professors

@@ -9,10 +9,10 @@ import {
   UsersIcon,
   IdentificationIcon,
   AcademicCapIcon,
-  VideoCameraIcon,
   ChatBubbleLeftIcon,
   CalendarIcon,
   BookOpenIcon,
+  SignalIcon,
   UserGroupIcon,
   UserPlusIcon,
   Cog6ToothIcon,
@@ -40,14 +40,17 @@ interface NavItem {
   comingSoon?: boolean;
   adminOnly?: boolean;
 }
+const PulsingSignalIcon = (props: React.ComponentProps<'svg'>) => (
+  <SignalIcon {...props} className={`${props.className || ''} text-red-500 animate-pulse`} />
+);
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'feed', label: 'Feed', icon: HomeIcon, section: 'feed' },
   { id: 'announcements', label: 'Campus News', icon: MegaphoneIcon, section: 'announcements' },
   { id: 'sections', label: 'Sections', icon: UsersIcon, section: 'sections' },
   { id: 'users', label: 'Users', icon: IdentificationIcon, section: 'users', adminOnly: true },
-  { id: 'classes', label: 'Classes', icon: AcademicCapIcon, section: 'classes' },
-  { id: 'live', label: 'Live Streams', icon: VideoCameraIcon, href: '/livestreams' },
+  { id: 'classes', label: 'Schedule', icon: AcademicCapIcon, section: 'classes' },
+  { id: 'live', label: 'Live Now', icon: PulsingSignalIcon as typeof HomeIcon, href: '/livestreams' }, // 👈 Modified
   { id: 'chat', label: 'Chat', icon: ChatBubbleLeftIcon, section: 'chat' },
   { id: 'friends', label: 'Friends', icon: UserPlusIcon, section: 'friends' },
   { id: 'events', label: 'Events', icon: CalendarIcon, comingSoon: true },

@@ -16,6 +16,7 @@ import {
 import { HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
 import { Button } from '@/components/ui/Button/Button';
 import { Badge } from '@/components/ui/Badge/Badge';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { postService } from '@/services/api/post.service';
 import toast from 'react-hot-toast';
@@ -96,6 +97,7 @@ export function PostCard({
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(content);
   const [showDetail, setShowDetail] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const { user } = useAuthStore();
@@ -150,10 +152,9 @@ export function PostCard({
   };
 
   const handleDelete = async () => {
-    if (confirm('Are you sure you want to delete this post?')) {
-      await onDelete(id);
-      setShowDetail(false);
-    }
+    setShowDeleteConfirm(false);
+    await onDelete(id);
+    setShowDetail(false);
   };
 
   const handleEdit = async () => {
@@ -293,7 +294,10 @@ export function PostCard({
                     )}
                     {(is_owned_by_current_user || user?.role === 'admin') && (
                       <button
-                        onClick={handleDelete}
+                        onClick={() => {
+                          setShowMenu(false);
+                          setShowDeleteConfirm(true);
+                        }}
                         className={`flex items-center space-x-2 w-full px-4 py-2 text-sm transition ${
                           dark ? 'text-[#EF4444] hover:bg-[#EF4444]/10' : 'text-red-600 hover:bg-red-50'
                         }`}
@@ -573,6 +577,16 @@ export function PostCard({
           onClose={() => setShowDetail(false)}
           onDelete={handleDelete}
           onEdit={onEdit}
+        />
+      )}
+
+      {showDeleteConfirm && (
+        <ConfirmDialog
+          title="Delete Post"
+          message="Are you sure you want to delete this post? This action cannot be undone."
+          confirmLabel="Delete"
+          onConfirm={handleDelete}
+          onCancel={() => setShowDeleteConfirm(false)}
         />
       )}
     </>

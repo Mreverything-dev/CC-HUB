@@ -164,7 +164,7 @@ export default function CreateSectionModal({ onClose }: CreateSectionModalProps)
                 onChange={(e) => setFormData({ ...formData, year_level: parseInt(e.target.value) })}
                 className={inputClassName}
               >
-                {[1, 2, 3, 4, 5, 6].map((year) => (
+                {[1, 2, 3, 4].map((year) => (
                   <option key={year} value={year}>{year}</option>
                 ))}
               </select>
