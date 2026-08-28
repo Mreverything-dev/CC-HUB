@@ -138,6 +138,23 @@ class TeachingAssignmentResponse(BaseModel):
             return str(v)
         return v
 
+
+class TeachingAssignmentAttendanceEntry(BaseModel):
+    """One persisted attendance record from one Meethub session held for a
+    teaching assignment - the same rows the in-meeting Attendance tab wrote,
+    surfaced here for the Professor Teaching Assignment / student-record views."""
+    session_id: str
+    session_title: str
+    started_at: Optional[datetime] = None
+    ended_at: Optional[datetime] = None
+    user_id: str
+    username: str
+    avatar: Optional[str] = None
+    status: str
+    marked_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
 class SectionBrowseItem(BaseModel):
     id: str
     name: str

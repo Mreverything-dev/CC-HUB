@@ -20,6 +20,7 @@ import { AnnouncementWidget } from '@/features/dashboard/components/Announcement
 import { SectionWidget } from '@/features/dashboard/components/SectionWidget';
 import { EventCardList } from '@/features/dashboard/components/EventCard';
 import { LiveStreamsWidget } from '@/features/dashboard/components/admin/LiveStreamsWidget';
+import { MeethubWidget } from '@/features/dashboard/components/admin/MeethubWidget';
 import { useLiveStreamsFeed } from '@/features/livestream/hooks/useLiveStreamsFeed';
 import FriendsPage from '@/features/friends/components/FriendsPage';
 import ChatPanel from '@/features/chat/components/ChatPanel';
@@ -223,6 +224,7 @@ export default function StudentDashboard() {
                   onGoToSection={() => setActiveSection('sections')}
                 />
                 <LiveStreamsWidget liveStreams={liveStreams} upcomingStreams={[]} isLoading={liveStreamsLoading} />
+                <MeethubWidget />
                 <EventCardList />
               </div>
             </div>

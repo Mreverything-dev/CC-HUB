@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.dependencies.auth import get_current_user
 from app.models.user import User
 from app.services.teaching_assignment_service import TeachingAssignmentService
-from app.schemas.section import TeachingAssignmentUpdate, TeachingAssignmentResponse
+from app.schemas.section import TeachingAssignmentUpdate, TeachingAssignmentResponse, TeachingAssignmentAttendanceEntry
 from typing import List
 
 router = APIRouter()
@@ -20,6 +20,17 @@ async def get_my_teaching_assignments(
     """The current professor's teaching assignments across all sections"""
     service = TeachingAssignmentService(db)
     return await service.list_mine(str(current_user.id))
+
+@router.get("/{assignment_id}/attendance", response_model=List[TeachingAssignmentAttendanceEntry])
+async def get_teaching_assignment_attendance(
+    assignment_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Persisted attendance across every official Meethub session ever held
+    for this teaching assignment - owner professor or admin only."""
+    service = TeachingAssignmentService(db)
+    return await service.get_attendance(assignment_id, current_user)
 
 @router.put("/{assignment_id}", response_model=TeachingAssignmentResponse)
 async def update_teaching_assignment(

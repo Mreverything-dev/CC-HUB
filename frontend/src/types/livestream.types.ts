@@ -46,6 +46,8 @@ export interface StreamViewer {
   user_id: string;
   username: string;
   avatar?: string;
+  first_name?: string | null;
+  last_name?: string | null;
   joined_at: string;
 }
 

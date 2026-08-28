@@ -12,6 +12,7 @@ from app.models.friend import Friend, FriendRequest, BlockedUser, UserReport
 from app.models.conversation import Conversation, ConversationMember, Message, MessageReaction
 from app.models.notification import Notification
 from app.models.livestream import Livestream, StreamViewer, StreamComment, StreamCommentReaction
+from app.models.meethub import MeethubSession, MeethubSpeakRequest, MeethubAttendanceRecord
 from app.models.invitation_code import InvitationCode
 
 __all__ = [
@@ -47,6 +48,9 @@ __all__ = [
     "StreamViewer",
     "StreamComment",
     "StreamCommentReaction",
+    "MeethubSession",
+    "MeethubSpeakRequest",
+    "MeethubAttendanceRecord",
     "Announcement", "AnnouncementTarget", "AnnouncementReaction", "AnnouncementBookmark",
     "Report",
     "InvitationCode"

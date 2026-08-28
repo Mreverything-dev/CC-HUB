@@ -1,5 +1,6 @@
 # backend/app/api/v1/endpoints/livestream.py
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from app.core.database import get_db
@@ -52,9 +53,11 @@ async def get_streams(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get all streams the user can view"""
+    """Get all streams the user can view - excludes Meethub sessions, which
+    have their own separate listing (GET /meethub/sessions) and are never
+    surfaced as plain Livestream cards."""
     service = LivestreamService(db)
-    streams = await service.get_streams(str(current_user.id), status)
+    streams = await service.get_streams(str(current_user.id), status, include_meethub=False)
 
     return [{
         "id": str(s.id),
@@ -175,12 +178,17 @@ async def start_stream(
     # list/detail endpoints already enforce, so a Dashboard's realtime feed
     # respects public/friends/section visibility identically to its initial
     # page-load fetch instead of leaking every stream to every connection.
+    # Skipped entirely for a Meethub session - Meethub has its own separate
+    # listing/realtime surface and must never flash into the Livestream feed.
     from app.websocket.manager import manager
+    from app.models.meethub import MeethubSession
 
-    recipient_user_ids = {conn['user_id'] for conn in manager.active_connections.values()}
-    for uid in recipient_user_ids:
-        if await service.can_view_stream(uid, stream_id):
-            await manager.send_to_user(uid, 'stream:started', payload)
+    meethub_result = await db.execute(select(MeethubSession).where(MeethubSession.livestream_id == stream_id))
+    if not meethub_result.scalar_one_or_none():
+        recipient_user_ids = {conn['user_id'] for conn in manager.active_connections.values()}
+        for uid in recipient_user_ids:
+            if await service.can_view_stream(uid, stream_id):
+                await manager.send_to_user(uid, 'stream:started', payload)
 
     return {**payload, "is_host": True, "can_view": True}
 
@@ -200,6 +208,7 @@ async def end_stream(
     # ever find out the stream ended by fully closing/logging out, so
     # broadcast it immediately and clear the in-memory host/viewer tracking.
     from app.websocket.manager import manager, sio
+    from app.models.meethub import MeethubSession
 
     await sio.emit('stream:host_left', {'stream_id': stream_id}, room=f"stream_{stream_id}")
     manager.stream_hosts.pop(stream_id, None)
@@ -207,8 +216,11 @@ async def end_stream(
 
     # Separate, no-room broadcast (everyone connected, not just this stream's
     # room) so a dashboard that never opened this stream still removes its
-    # card immediately instead of waiting on the next poll/refetch.
-    await sio.emit('stream:ended', {'stream_id': stream_id})
+    # card immediately instead of waiting on the next poll/refetch. Skipped
+    # for a Meethub session, which was never broadcast as started either.
+    meethub_result = await db.execute(select(MeethubSession).where(MeethubSession.livestream_id == stream_id))
+    if not meethub_result.scalar_one_or_none():
+        await sio.emit('stream:ended', {'stream_id': stream_id})
 
     return {
         "id": str(stream.id),
@@ -260,14 +272,20 @@ async def get_viewers(
     """Get active viewers of a stream"""
     service = LivestreamService(db)
     viewers = await service.get_viewers(stream_id, str(current_user.id))
-    
-    return [{
-        "id": str(v.id),
-        "user_id": str(v.user_id),
-        "username": v.user.username,
-        "avatar": await service._get_avatar_url(str(v.user_id), v.user.role),
-        "joined_at": v.joined_at
-    } for v in viewers]
+
+    result = []
+    for v in viewers:
+        first_name, last_name = await service._get_profile_names(str(v.user_id), v.user.role)
+        result.append({
+            "id": str(v.id),
+            "user_id": str(v.user_id),
+            "username": v.user.username,
+            "avatar": await service._get_avatar_url(str(v.user_id), v.user.role),
+            "first_name": first_name,
+            "last_name": last_name,
+            "joined_at": v.joined_at,
+        })
+    return result
 
 @router.get("/{stream_id}/comments")
 async def get_comments(

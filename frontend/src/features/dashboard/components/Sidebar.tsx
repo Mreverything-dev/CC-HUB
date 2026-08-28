@@ -19,6 +19,7 @@ import {
   QuestionMarkCircleIcon,
   ArrowRightOnRectangleIcon,
   XMarkIcon,
+  VideoCameraIcon,
 } from '@heroicons/react/24/outline';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { useFriendStore } from '@/features/friends/store/friend.store';
@@ -51,6 +52,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'users', label: 'Users', icon: IdentificationIcon, section: 'users', adminOnly: true },
   { id: 'classes', label: 'Schedule', icon: AcademicCapIcon, section: 'classes' },
   { id: 'live', label: 'Live Now', icon: PulsingSignalIcon as typeof HomeIcon, href: '/livestreams' }, // 👈 Modified
+  { id: 'meethub', label: 'Meethub', icon: VideoCameraIcon, href: '/meethub' },
   { id: 'chat', label: 'Chat', icon: ChatBubbleLeftIcon, section: 'chat' },
   { id: 'friends', label: 'Friends', icon: UserPlusIcon, section: 'friends' },
   { id: 'events', label: 'Events', icon: CalendarIcon, comingSoon: true },

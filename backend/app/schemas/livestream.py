@@ -63,6 +63,8 @@ class StreamViewerResponse(BaseModel):
     user_id: str
     username: str
     avatar: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     joined_at: datetime
     
     model_config = ConfigDict(from_attributes=True)

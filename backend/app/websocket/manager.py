@@ -24,6 +24,18 @@ class SocketManager:
         # since it only matters for the lifetime of the live connection.
         self.stream_hosts: Dict[str, str] = {}  # stream_id -> host sid
         self.stream_viewers: Dict[str, set] = {}  # stream_id -> {viewer sid, ...}
+        # Meethub mesh: user_ids removed from a session by its organizer,
+        # in-memory and session-lifetime only (mirrors stream_hosts/
+        # stream_viewers above) - stream_viewer_join rejects a rejoin attempt
+        # from anyone in this set for that stream_id. A no-op for every
+        # plain livestream, which never populates this dict.
+        self.meeting_kicked: Dict[str, set] = {}  # stream_id -> {user_id, ...}
+        # Meethub single-presenter lock: at most one person's screen may be
+        # the active presentation per stream at a time. In-memory,
+        # session-lifetime only, same as the three dicts above - a no-op for
+        # every plain livestream, which never populates this dict. Camera/
+        # mic are NOT gated by this - only screen share.
+        self.meeting_presenters: Dict[str, dict] = {}  # stream_id -> {"user_id", "username", "sid"}
 
     async def connect(self, sid: str, token: str):
         """Handle user connection"""
@@ -126,6 +138,26 @@ class SocketManager:
                     },
                     room=f"stream_{stream_id}",
                 )
+                # Meethub mesh: a no-op for every plain livestream (nothing
+                # subscribes to this event there) - tells remaining
+                # participants to close their one peer connection to this sid.
+                await sio.emit(
+                    'meeting:mesh_peer_left',
+                    {'stream_id': stream_id, 'sid': sid},
+                    room=f"stream_{stream_id}",
+                )
+                # Meethub: an abrupt disconnect while presenting must free
+                # the presenter lock - otherwise the slot stays stuck until
+                # someone else forces it, even though nobody is actually
+                # sharing anything anymore. A no-op for every plain
+                # livestream/non-presenting viewer.
+                if self.meeting_presenters.get(stream_id, {}).get('sid') == sid:
+                    del self.meeting_presenters[stream_id]
+                    await sio.emit(
+                        'meeting:presenter_changed',
+                        {'stream_id': stream_id, 'presenter_user_id': None, 'presenter_username': None, 'presenter_sid': None},
+                        room=f"stream_{stream_id}",
+                    )
 
     async def join_room(self, sid: str, room: str):
         """Join a room (conversation)"""
@@ -447,6 +479,16 @@ async def stream_viewer_join(sid, data):
     if not stream_id:
         return
 
+    # Meethub: a user removed by the organizer this session can't rejoin it.
+    # A no-op set for every plain livestream.
+    if user_id in manager.meeting_kicked.get(stream_id, set()):
+        await sio.emit(
+            'stream:error',
+            {'code': 'REMOVED_FROM_MEETING', 'message': 'You were removed from this meeting.'},
+            room=sid,
+        )
+        return
+
     # Idempotent: if this sid already joined this stream (duplicate/retry
     # call, reconnect race, etc.), don't re-run authorization or re-notify
     # the host - that would make the host spin up a second, orphaned
@@ -460,6 +502,7 @@ async def stream_viewer_join(sid, data):
         async with AsyncSessionLocal() as db:
             from app.services.livestream_service import LivestreamService
             from app.models.user import User
+            from app.models.meethub import MeethubSession
 
             service = LivestreamService(db)
             allowed = await service.can_view_stream(user_id, stream_id)
@@ -474,9 +517,52 @@ async def stream_viewer_join(sid, data):
             user_result = await db.execute(select(User).where(User.id == user_id))
             user = user_result.scalar_one_or_none()
 
+            meethub_result = await db.execute(
+                select(MeethubSession).where(MeethubSession.livestream_id == stream_id)
+            )
+            is_meethub = meethub_result.scalar_one_or_none() is not None
+
+        # Meethub mesh: snapshot who's already in the room BEFORE adding this
+        # sid, so the new joiner knows exactly who to open a peer connection
+        # + send an offer to (new-joiner-initiates convention - existing
+        # participants just wait for that offer). A no-op for every plain
+        # livestream (is_meethub is False, nothing emitted here).
+        existing_peers = []
+        if is_meethub:
+            for peer_sid in manager.stream_viewers.get(stream_id, set()):
+                peer_conn = manager.active_connections.get(peer_sid)
+                if peer_conn:
+                    existing_peers.append(
+                        {'sid': peer_sid, 'user_id': peer_conn['user_id'], 'username': peer_conn.get('username')}
+                    )
+
         manager.stream_viewers.setdefault(stream_id, set()).add(sid)
         await sio.enter_room(sid, _stream_room(stream_id))
         logger.info(f"👁️ Viewer {user_id} joined stream {stream_id}")
+
+        if is_meethub:
+            await sio.emit('meeting:mesh_peers', {'stream_id': stream_id, 'peers': existing_peers}, room=sid)
+            await sio.emit(
+                'meeting:mesh_peer_joined',
+                {'stream_id': stream_id, 'sid': sid, 'user_id': user_id, 'username': user.username if user else None},
+                room=_stream_room(stream_id),
+                skip_sid=sid,
+            )
+            # Catch the new joiner up on whoever's already presenting, if
+            # anyone - reuses the exact same event the live broadcast uses,
+            # so the client only needs one meeting:presenter_changed handler.
+            current_presenter = manager.meeting_presenters.get(stream_id)
+            if current_presenter:
+                await sio.emit(
+                    'meeting:presenter_changed',
+                    {
+                        'stream_id': stream_id,
+                        'presenter_user_id': current_presenter['user_id'],
+                        'presenter_username': current_presenter['username'],
+                        'presenter_sid': current_presenter['sid'],
+                    },
+                    room=sid,
+                )
 
         # Announced once per genuine join - the idempotent early-return above
         # (already-joined sid) means a retry/reconnect race never double-posts.
@@ -550,6 +636,9 @@ async def stream_leave(sid, data):
             },
             room=_stream_room(stream_id),
         )
+        # Meethub mesh: a no-op for every plain livestream (nothing
+        # subscribes to this event there).
+        await sio.emit('meeting:mesh_peer_left', {'stream_id': stream_id, 'sid': sid}, room=_stream_room(stream_id))
 
 @sio.on('stream:offer')
 async def stream_offer(sid, data):
@@ -593,6 +682,184 @@ async def stream_ice_candidate(sid, data):
     if not is_host and not is_viewer:
         return
     await sio.emit('stream:ice_candidate', {'stream_id': stream_id, 'from_sid': sid, 'candidate': candidate}, room=target_sid)
+
+# ============================================
+# MEETHUB MESH SIGNALING (WebRTC offer/answer/ICE relay, N-to-N)
+# ============================================
+# Every Meethub participant opens a direct peer connection to every other
+# participant (mesh) - unlike the single-host Livestream signaling above,
+# there's no host/viewer distinction here: both sides of a relay just need
+# to already be a registered viewer of the stream (see stream:viewer_join,
+# reused unchanged for room membership/permission/chat-authorization). The
+# server still never touches media, only relays SDP/ICE between the two sids.
+
+def _is_registered_viewer(stream_id: str, sid: str) -> bool:
+    return sid in manager.stream_viewers.get(stream_id, set())
+
+@sio.on('meeting:mesh_offer')
+async def meeting_mesh_offer(sid, data):
+    """Relay an SDP offer from one mesh participant to another."""
+    stream_id = data.get('stream_id')
+    target_sid = data.get('target_sid')
+    sdp = data.get('sdp')
+    if not stream_id or not target_sid or not sdp:
+        return
+    if not _is_registered_viewer(stream_id, sid) or not _is_registered_viewer(stream_id, target_sid):
+        await sio.emit('stream:error', {'message': 'Not a recognized participant of this meeting'}, room=sid)
+        return
+    await sio.emit('meeting:mesh_offer', {'stream_id': stream_id, 'from_sid': sid, 'sdp': sdp}, room=target_sid)
+
+@sio.on('meeting:mesh_answer')
+async def meeting_mesh_answer(sid, data):
+    """Relay an SDP answer from one mesh participant back to another."""
+    stream_id = data.get('stream_id')
+    target_sid = data.get('target_sid')
+    sdp = data.get('sdp')
+    if not stream_id or not target_sid or not sdp:
+        return
+    if not _is_registered_viewer(stream_id, sid) or not _is_registered_viewer(stream_id, target_sid):
+        await sio.emit('stream:error', {'message': 'Not a recognized participant of this meeting'}, room=sid)
+        return
+    await sio.emit('meeting:mesh_answer', {'stream_id': stream_id, 'from_sid': sid, 'sdp': sdp}, room=target_sid)
+
+@sio.on('meeting:mesh_ice_candidate')
+async def meeting_mesh_ice_candidate(sid, data):
+    """Relay an ICE candidate between two mesh participants."""
+    stream_id = data.get('stream_id')
+    target_sid = data.get('target_sid')
+    candidate = data.get('candidate')
+    if not stream_id or not target_sid or not candidate:
+        return
+    if not _is_registered_viewer(stream_id, sid) or not _is_registered_viewer(stream_id, target_sid):
+        return
+    await sio.emit(
+        'meeting:mesh_ice_candidate', {'stream_id': stream_id, 'from_sid': sid, 'candidate': candidate}, room=target_sid
+    )
+
+async def _require_organizer_sid(sid: str, stream_id: str):
+    """Returns (user_id, session) if sid's user is the Meethub organizer of
+    this stream, else emits an error and returns (None, None)."""
+    if sid not in manager.active_connections:
+        return None, None
+    user_id = manager.active_connections[sid]['user_id']
+    async with AsyncSessionLocal() as db:
+        from app.models.meethub import MeethubSession
+
+        result = await db.execute(select(MeethubSession).where(MeethubSession.livestream_id == stream_id))
+        session = result.scalar_one_or_none()
+    if not session or str(session.organizer_id) != user_id:
+        await sio.emit('stream:error', {'message': 'Only the meeting organizer can do this'}, room=sid)
+        return None, None
+    return user_id, session
+
+def _sids_for_user(stream_id: str, target_user_id: str):
+    return [
+        peer_sid
+        for peer_sid in manager.stream_viewers.get(stream_id, set())
+        if manager.active_connections.get(peer_sid, {}).get('user_id') == target_user_id
+    ]
+
+@sio.on('meeting:force_mute')
+async def meeting_force_mute(sid, data):
+    """Organizer-only: ask a participant's own client to disable its mic.
+    Best-effort/cooperative - there's no SFU to silence someone else's
+    outgoing audio at the media layer without their client's cooperation."""
+    stream_id = data.get('stream_id')
+    target_user_id = data.get('target_user_id')
+    if not stream_id or not target_user_id:
+        return
+    organizer_id, _ = await _require_organizer_sid(sid, stream_id)
+    if not organizer_id:
+        return
+    for target_sid in _sids_for_user(stream_id, target_user_id):
+        await sio.emit('meeting:force_muted', {'stream_id': stream_id}, room=target_sid)
+
+@sio.on('meeting:remove_participant')
+async def meeting_remove_participant(sid, data):
+    """Organizer-only: disconnect a participant from this meeting and block
+    them from rejoining it for the rest of the session (manager.meeting_kicked,
+    in-memory - same lifetime guarantee as stream_hosts/stream_viewers)."""
+    stream_id = data.get('stream_id')
+    target_user_id = data.get('target_user_id')
+    if not stream_id or not target_user_id:
+        return
+    organizer_id, session = await _require_organizer_sid(sid, stream_id)
+    if not organizer_id:
+        return
+    if target_user_id == str(session.organizer_id):
+        await sio.emit('stream:error', {'message': "You can't remove yourself"}, room=sid)
+        return
+
+    manager.meeting_kicked.setdefault(stream_id, set()).add(target_user_id)
+    for target_sid in _sids_for_user(stream_id, target_user_id):
+        manager.stream_viewers.get(stream_id, set()).discard(target_sid)
+        await sio.emit('meeting:removed', {'stream_id': stream_id}, room=target_sid)
+        await sio.leave_room(target_sid, _stream_room(stream_id))
+        await sio.emit('meeting:mesh_peer_left', {'stream_id': stream_id, 'sid': target_sid}, room=_stream_room(stream_id))
+
+@sio.on('meeting:request_present')
+async def meeting_request_present(sid, data):
+    """Claim the single presenter slot for this meeting, if free (or already
+    ours). Screen sharing only - camera/mic are never gated by this. The
+    check-and-set below happens with no `await` in between, which is what
+    makes it race-safe: asyncio is cooperative/single-threaded, so nothing
+    can interleave between two synchronous statements in the same handler
+    invocation, even if two clients' requests arrive back to back."""
+    stream_id = data.get('stream_id')
+    if not stream_id:
+        return
+    if not _is_registered_viewer(stream_id, sid):
+        await sio.emit('stream:error', {'message': 'Not a recognized participant of this meeting'}, room=sid)
+        return
+    user_id = manager.active_connections[sid]['user_id']
+    username = manager.active_connections[sid].get('username')
+
+    current = manager.meeting_presenters.get(stream_id)
+    granted = not current or current['user_id'] == user_id
+    if granted:
+        manager.meeting_presenters[stream_id] = {'user_id': user_id, 'username': username, 'sid': sid}
+
+    await sio.emit(
+        'meeting:present_response',
+        {'granted': granted, 'presenter_user_id': user_id if granted else current['user_id'],
+         'presenter_username': username if granted else current['username']},
+        room=sid,
+    )
+    if granted:
+        await sio.emit(
+            'meeting:presenter_changed',
+            {'stream_id': stream_id, 'presenter_user_id': user_id, 'presenter_username': username, 'presenter_sid': sid},
+            room=_stream_room(stream_id),
+        )
+
+@sio.on('meeting:stop_presenting')
+async def meeting_stop_presenting(sid, data):
+    """Release the presenter slot - allowed for the current presenter
+    themselves, or the meeting organizer as a moderation override."""
+    stream_id = data.get('stream_id')
+    if not stream_id:
+        return
+    if sid not in manager.active_connections:
+        return
+    user_id = manager.active_connections[sid]['user_id']
+
+    current = manager.meeting_presenters.get(stream_id)
+    if not current:
+        return
+    is_current_presenter = current['user_id'] == user_id
+    is_organizer = False
+    if not is_current_presenter:
+        organizer_id, _ = await _require_organizer_sid(sid, stream_id)
+        is_organizer = organizer_id is not None
+    if not is_current_presenter and not is_organizer:
+        return
+
+    del manager.meeting_presenters[stream_id]
+    await sio.emit(
+        'meeting:presenter_changed',
+        {'stream_id': stream_id, 'presenter_user_id': None, 'presenter_username': None, 'presenter_sid': None},
+        room=_stream_room(stream_id),
+    )
 
 @sio.on('stream:chat_message')
 async def stream_chat_message(sid, data):

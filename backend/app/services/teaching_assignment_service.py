@@ -4,7 +4,9 @@ from sqlalchemy import select, func
 from app.models.section import Section
 from app.models.teaching_assignment import TeachingAssignment
 from app.models.user import User
-from app.models.profile import ProfessorProfile
+from app.models.profile import ProfessorProfile, StudentProfile, AdminProfile
+from app.models.meethub import MeethubSession, MeethubAttendanceRecord
+from app.models.livestream import Livestream
 from app.schemas.section import TeachingAssignmentCreate, TeachingAssignmentUpdate
 from fastapi import HTTPException, status
 from typing import List, Optional
@@ -69,6 +71,19 @@ class TeachingAssignmentService:
             "professor_avatar": profile.avatar_url if profile else None,
             "section_name": section_name,
         }
+
+    async def _get_avatar_url(self, user_id: str, role: str) -> Optional[str]:
+        """Same duplicated per-service lookup pattern as
+        LivestreamService._get_avatar_url."""
+        model = {
+            "student": StudentProfile,
+            "professor": ProfessorProfile,
+            "admin": AdminProfile,
+        }.get(role)
+        if not model:
+            return None
+        result = await self.db.execute(select(model.avatar_url).where(model.user_id == user_id))
+        return result.scalar_one_or_none()
 
     async def _check_schedule_conflict(
         self,
@@ -224,6 +239,44 @@ class TeachingAssignmentService:
         await self.db.commit()
         await self.db.refresh(assignment)
         return await self._enrich(assignment)
+
+    async def get_attendance(self, assignment_id: str, requesting_user: User) -> List[dict]:
+        """Every persisted attendance record across every official Meethub
+        session ever held for this teaching assignment - the source data
+        behind both the Professor Teaching Assignment view and each
+        student's own record, so both surfaces stay reflections of the same
+        rows Meethub's in-meeting attendance tab already wrote."""
+        assignment = await self._get_assignment(assignment_id)
+
+        if requesting_user.role != "admin" and str(assignment.professor_id) != str(requesting_user.id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to view attendance for this teaching assignment",
+            )
+
+        result = await self.db.execute(
+            select(MeethubAttendanceRecord, MeethubSession, Livestream, User)
+            .join(MeethubSession, MeethubAttendanceRecord.meethub_session_id == MeethubSession.id)
+            .join(Livestream, MeethubSession.livestream_id == Livestream.id)
+            .join(User, MeethubAttendanceRecord.user_id == User.id)
+            .where(MeethubSession.teaching_assignment_id == assignment_id)
+            .order_by(Livestream.started_at.desc().nullslast())
+        )
+
+        return [
+            {
+                "session_id": str(session.id),
+                "session_title": stream.title,
+                "started_at": stream.started_at,
+                "ended_at": stream.ended_at,
+                "user_id": str(record.user_id),
+                "username": user_obj.username,
+                "avatar": await self._get_avatar_url(str(user_obj.id), user_obj.role),
+                "status": record.status,
+                "marked_at": record.marked_at,
+            }
+            for record, session, stream, user_obj in result.all()
+        ]
 
     async def delete_assignment(self, assignment_id: str, requesting_user: User) -> dict:
         assignment = await self._get_assignment(assignment_id)

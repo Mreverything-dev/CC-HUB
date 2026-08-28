@@ -3,6 +3,7 @@ from app.api.v1.endpoints import auth, users, posts, students, professors, profi
 from app.api.v1.endpoints import teaching_assignments
 from app.api.v1.endpoints import chat, friends
 from app.api.v1.endpoints import livestream
+from app.api.v1.endpoints import meethub
 from app.api.v1.endpoints import admin
 api_router = APIRouter()
 
@@ -24,4 +25,9 @@ api_router.include_router(
     livestream.router,
     prefix="/livestream",
     tags=["LiveStream"]
+)
+api_router.include_router(
+    meethub.router,
+    prefix="/meethub",
+    tags=["Meethub"]
 )

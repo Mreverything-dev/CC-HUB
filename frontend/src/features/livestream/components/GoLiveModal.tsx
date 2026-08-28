@@ -3,6 +3,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { useSections } from '@/features/sections/hooks/useSections';
 import { livestreamService } from '@/services/api/livestream.service';
+import { meethubService } from '@/services/api/meethub.service';
+import { teachingAssignmentApi } from '@/services/api/teaching_assignment.service';
+import { TeachingAssignment } from '@/types/section.types';
 import { mediaService } from '@/services/api/media.service';
 import { usePendingStreamStore } from '../store/pendingStream.store';
 import { StreamVisibility } from '@/types/livestream.types';
@@ -42,6 +45,12 @@ const MAX_THUMBNAIL_SIZE = 5 * 1024 * 1024; // 5MB
 interface GoLiveModalProps {
   onClose: () => void;
   onStreamCreated: (streamId: string) => void;
+  /** 'meethub' adds the teaching-assignment/entry-timer/participant-policy
+   * fields below and creates a MeethubSession instead of a plain Livestream -
+   * everything else (camera/screen/mic setup, thumbnail, visibility,
+   * schedule) is identical, since a Meethub session's underlying broadcast
+   * is a plain Livestream too. Defaults to the existing behavior. */
+  variant?: 'livestream' | 'meethub';
 }
 
 const inputClassName =
@@ -155,9 +164,28 @@ function ToggleSwitch({ checked, onChange, disabled }: { checked: boolean; onCha
   );
 }
 
-export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalProps) {
+export default function GoLiveModal({ onClose, onStreamCreated, variant = 'livestream' }: GoLiveModalProps) {
+  const isMeethub = variant === 'meethub';
   const { user } = useAuthStore();
   const { sections, refetch: refetchSections } = useSections();
+
+  // Meethub-only fields. teachingAssignmentId === '' means "no official
+  // class" (student-created / unofficial) - the same session-creation
+  // endpoint, just without a teaching_assignment_id, which is also what
+  // structurally prevents it from ever recording official attendance.
+  const [teachingAssignments, setTeachingAssignments] = useState<TeachingAssignment[]>([]);
+  const [teachingAssignmentId, setTeachingAssignmentId] = useState('');
+  const [entryDeadline, setEntryDeadline] = useState('');
+  const [allowParticipantCamera, setAllowParticipantCamera] = useState(true);
+  const [allowParticipantMic, setAllowParticipantMic] = useState(true);
+
+  useEffect(() => {
+    if (!isMeethub || user?.role !== 'professor') return;
+    teachingAssignmentApi
+      .getMine()
+      .then((res) => setTeachingAssignments(res.data.filter((ta) => ta.status === 'active')))
+      .catch(() => setTeachingAssignments([]));
+  }, [isMeethub, user?.role]);
 
   // Stream info
   const [title, setTitle] = useState('');
@@ -554,7 +582,10 @@ export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalPro
   const scheduleValid = scheduleMode === 'now' || isFutureSchedule();
   const titleValid = title.trim().length > 0;
   const hasMediaSource = isCameraOn || screenSourceType !== null;
-  const isFormValid = titleValid && sectionValid && scheduleValid && hasMediaSource;
+  // Meethub doesn't require the organizer to pre-acquire a camera at
+  // creation time - they toggle it independently inside the meeting room
+  // like every other participant (see MeethubRoom/useMeethubMeshSignaling).
+  const isFormValid = titleValid && sectionValid && scheduleValid && (isMeethub || hasMediaSource);
 
   const timezoneLabel = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const todayIso = todayLocalIso();
@@ -587,18 +618,38 @@ export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalPro
         }
       }
 
-      const response = await livestreamService.createStream(data);
+      if (isMeethub) {
+        data.teaching_assignment_id = teachingAssignmentId || null;
+        data.allow_participant_camera = allowParticipantCamera;
+        data.allow_participant_mic = allowParticipantMic;
+        if (entryDeadline) data.entry_deadline = new Date(entryDeadline).toISOString();
+      }
+
+      const response = isMeethub
+        ? await meethubService.createSession(data)
+        : await livestreamService.createStream(data);
+      // For Meethub, the caller navigates to /meethub/:sessionId (the room
+      // page looks itself up from there) - for a plain livestream it's still
+      // the livestream id, navigating to /live/:streamId as before.
+      const createdId = isMeethub ? (response.data as any).id : response.data.id;
 
       if (scheduleMode === 'later') {
-        toast.success("Stream scheduled! Open it from Live Streams whenever you're ready to go live.");
+        toast.success(
+          isMeethub
+            ? "Meeting scheduled! Open it from Meethub whenever you're ready to start."
+            : "Stream scheduled! Open it from Live Streams whenever you're ready to go live."
+        );
         onClose();
       } else {
-        // Hand the already-acquired camera/screen streams straight to
-        // LiveStreamStage instead of letting them get stopped on unmount and
-        // re-acquired from scratch there - same MediaStream objects, no
-        // second permission prompt, no risk of picking a different device.
-        // Only for "start now": a scheduled stream may not actually go live
-        // for a while, so there's nothing sensible to hand off here.
+        // Hand the already-acquired camera/screen/mic streams straight to
+        // LiveStreamStage (plain livestream) or useMeethubMeshSignaling
+        // (Meethub) instead of letting them get stopped on unmount and
+        // re-acquired from scratch - same MediaStream objects, no second
+        // permission prompt (critical for screen share, which always
+        // re-prompts), no risk of picking a different device. Both variants
+        // claim this same one-shot store on their own mount. A scheduled
+        // stream never reaches this branch at all (see scheduleMode
+        // handling above), so there's nothing to hand off in that case.
         usePendingStreamStore.getState().setPendingStreams({
           cameraStream: cameraStreamRef.current,
           screenStream: screenStreamRef.current,
@@ -609,8 +660,8 @@ export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalPro
         });
         handedOffStreamsRef.current = true;
 
-        toast.success('Stream created successfully!');
-        onStreamCreated(response.data.id);
+        toast.success(isMeethub ? 'Meeting started!' : 'Stream created successfully!');
+        onStreamCreated(createdId);
         onClose();
       }
     } catch (error: any) {
@@ -664,7 +715,7 @@ export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalPro
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-[#1E3447] flex-shrink-0">
           <div className="flex items-center gap-2.5">
-            <h2 className="text-lg font-bold text-[#F1F5F9]">Go Live</h2>
+            <h2 className="text-lg font-bold text-[#F1F5F9]">{isMeethub ? 'Start Meethub Meeting' : 'Go Live'}</h2>
             <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[#EF4444]/10 border border-[#EF4444]/30 text-[#EF4444] text-[11px] font-semibold">
               <span className="h-1.5 w-1.5 rounded-full bg-[#EF4444]" />
               Setup
@@ -1203,6 +1254,58 @@ export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalPro
                   </div>
                 )}
               </div>
+
+              {/* Step 5 (Meethub only): Meeting Settings */}
+              {isMeethub && (
+                <div>
+                  <StepLabel n={5}>Meeting Settings</StepLabel>
+                  <div className="space-y-3">
+                    {user?.role === 'professor' && (
+                      <div>
+                        <label className="block text-[11px] font-medium text-[#64748B] mb-1">Official class (optional)</label>
+                        <select
+                          value={teachingAssignmentId}
+                          onChange={(e) => setTeachingAssignmentId(e.target.value)}
+                          className={inputClassName}
+                        >
+                          <option value="">No official class (unofficial meeting)</option>
+                          {teachingAssignments.map((ta) => (
+                            <option key={ta.id} value={ta.id}>
+                              {ta.subject}
+                              {ta.subject_code ? ` (${ta.subject_code})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-[11px] text-[#64748B] mt-1">
+                          Linking an official class enables attendance tracking for this meeting.
+                        </p>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-[11px] font-medium text-[#64748B] mb-1">Entry deadline (optional)</label>
+                      <input
+                        type="datetime-local"
+                        value={entryDeadline}
+                        onChange={(e) => setEntryDeadline(e.target.value)}
+                        className={`${inputClassName} [color-scheme:dark]`}
+                      />
+                      <p className="text-[11px] text-[#64748B] mt-1">
+                        Students can't join after this time. Anyone already in the meeting is never removed.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-[#F1F5F9]">Allow participants to use camera</span>
+                      <ToggleSwitch checked={allowParticipantCamera} onChange={() => setAllowParticipantCamera((v) => !v)} />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-[#F1F5F9]">Allow participants to use microphone</span>
+                      <ToggleSwitch checked={allowParticipantMic} onChange={() => setAllowParticipantMic((v) => !v)} />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1225,7 +1328,7 @@ export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalPro
             {isLoading ? (
               <>
                 <span className="h-4 w-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />
-                {scheduleMode === 'later' ? 'Scheduling...' : 'Starting livestream...'}
+                {scheduleMode === 'later' ? 'Scheduling...' : isMeethub ? 'Starting meeting...' : 'Starting livestream...'}
               </>
             ) : (
               <>
@@ -1234,7 +1337,7 @@ export default function GoLiveModal({ onClose, onStreamCreated }: GoLiveModalPro
                 ) : (
                   <CheckCircleIcon className="h-4 w-4" />
                 )}
-                {scheduleMode === 'later' ? 'Schedule Stream' : 'Go Live'}
+                {scheduleMode === 'later' ? 'Schedule Stream' : isMeethub ? 'Start Meeting' : 'Go Live'}
               </>
             )}
           </button>

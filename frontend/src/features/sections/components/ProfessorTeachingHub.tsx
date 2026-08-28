@@ -17,7 +17,8 @@ import { useSections } from '../hooks/useSections';
 import { useTeachingAssignments } from '../hooks/useTeachingAssignments';
 import { Avatar } from '@/features/dashboard/components/Avatar';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import { Section, SectionMember, TeachingAssignment } from '@/types/section.types';
+import { Section, SectionMember, TeachingAssignment, TeachingAssignmentAttendanceEntry } from '@/types/section.types';
+import { teachingAssignmentApi } from '@/services/api/teaching_assignment.service';
 import JoinSectionModal from './JoinSectionModal';
 import AddSubjectModal from './AddSubjectModal';
 import CreateSectionModal from './CreateSectionModal';
@@ -123,6 +124,7 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
   const [addSubjectFor, setAddSubjectFor] = useState<SectionGroup | null>(null);
   const [editTarget, setEditTarget] = useState<TeachingAssignment | null>(null);
   const [selectedStudent, setSelectedStudent] = useState<StudentRecordTarget | null>(null);
+  const [selectedStudentAssignments, setSelectedStudentAssignments] = useState<TeachingAssignment[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<SectionGroup | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [openMenuFor, setOpenMenuFor] = useState<string | null>(null);
@@ -168,6 +170,57 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
     }
     return Array.from(map.values());
   }, [mine, sections]);
+
+  // Present/absent count for each subject's most recent Meethub session -
+  // a lightweight aggregate over the same persisted attendance rows the
+  // student record modal reads, fetched once per subject the professor
+  // teaches (not blocking the rest of the page while it loads).
+  const [subjectSummaries, setSubjectSummaries] = useState<
+    Record<string, { present: number; absent: number; total: number }>
+  >({});
+
+  useEffect(() => {
+    if (mine.length === 0) return;
+    let cancelled = false;
+    Promise.all(
+      mine.map((ta) =>
+        teachingAssignmentApi
+          .getAttendance(ta.id)
+          .then((res) => ({ id: ta.id, data: res.data }))
+          .catch(() => ({ id: ta.id, data: [] as TeachingAssignmentAttendanceEntry[] }))
+      )
+    ).then((results) => {
+      if (cancelled) return;
+      const summaries: Record<string, { present: number; absent: number; total: number }> = {};
+      for (const { id, data } of results) {
+        if (data.length === 0) continue;
+        const bySession = new Map<string, typeof data>();
+        for (const entry of data) {
+          if (!bySession.has(entry.session_id)) bySession.set(entry.session_id, []);
+          bySession.get(entry.session_id)!.push(entry);
+        }
+        let latestSessionId: string | null = null;
+        let latestTime = '';
+        for (const [sessionId, entries] of bySession) {
+          const t = entries[0]?.started_at || '';
+          if (!latestSessionId || t > latestTime) {
+            latestSessionId = sessionId;
+            latestTime = t;
+          }
+        }
+        const latestEntries = latestSessionId ? bySession.get(latestSessionId)! : [];
+        summaries[id] = {
+          present: latestEntries.filter((e) => e.status === 'present' || e.status === 'late').length,
+          absent: latestEntries.filter((e) => e.status === 'absent').length,
+          total: latestEntries.length,
+        };
+      }
+      setSubjectSummaries(summaries);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [mine]);
 
   const totalSubjects = useMemo(() => groups.reduce((sum, g) => sum + g.subjects.length, 0), [groups]);
   const totalStudents = useMemo(() => groups.reduce((sum, g) => sum + g.memberCount, 0), [groups]);
@@ -220,6 +273,7 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
       yearLevel: section.year_level,
       roleLabel: memberRoleLabel(member),
     });
+    setSelectedStudentAssignments(mine.filter((ta) => ta.section_id === section.id));
   };
 
   const isLoading = sectionsLoading || assignmentsLoading;
@@ -407,6 +461,14 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
                                 </div>
                               </div>
                               <div className="flex items-center gap-1 flex-shrink-0">
+                                {subjectSummaries[ta.id] && subjectSummaries[ta.id].total > 0 && (
+                                  <span
+                                    className="hidden sm:inline text-[10px] font-medium text-[#94A3B8] bg-white/5 border border-[#1E3447] rounded-full px-2 py-0.5"
+                                    title="Present / Total in the most recent session"
+                                  >
+                                    {subjectSummaries[ta.id].present}/{subjectSummaries[ta.id].total} present
+                                  </span>
+                                )}
                                 {hours > 0 && (
                                   <span className="hidden sm:inline text-[10px] font-medium text-[#94A3B8] bg-white/5 border border-[#1E3447] rounded-full px-2 py-0.5">
                                     {hours}h
@@ -558,7 +620,13 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
       {editSectionTarget && (
         <EditSectionModal section={editSectionTarget} onClose={() => setEditSectionTarget(null)} />
       )}
-      {selectedStudent && <StudentRecordModal student={selectedStudent} onClose={() => setSelectedStudent(null)} />}
+      {selectedStudent && (
+        <StudentRecordModal
+          student={selectedStudent}
+          assignments={selectedStudentAssignments}
+          onClose={() => setSelectedStudent(null)}
+        />
+      )}
 
       {deleteTarget && (
         <ConfirmDialog

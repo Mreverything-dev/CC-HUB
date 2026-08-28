@@ -34,6 +34,21 @@ export interface TeachingAssignment {
   section_name?: string | null;
 }
 
+/** One persisted attendance record from one Meethub session held for a
+ * teaching assignment - the same rows Meethub's in-meeting Attendance tab
+ * writes, surfaced here for the Teaching Assignment / student-record views. */
+export interface TeachingAssignmentAttendanceEntry {
+  session_id: string;
+  session_title: string;
+  started_at?: string | null;
+  ended_at?: string | null;
+  user_id: string;
+  username: string;
+  avatar?: string | null;
+  status: 'present' | 'late' | 'excused' | 'absent';
+  marked_at?: string | null;
+}
+
 export interface TeachingAssignmentCreate {
   subject: string;
   subject_code?: string;

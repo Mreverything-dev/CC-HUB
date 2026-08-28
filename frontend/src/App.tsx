@@ -23,6 +23,8 @@ import { ChatWidget } from './features/chat/components/ChatWidget';
 import { SocketProvider } from './app/providers/SocketProvider';
 
 import LivestreamsPage from '@/features/livestream/components/pages/LivestreamsPage';
+import MeethubPage from '@/features/livestream/components/pages/MeethubPage';
+import MeethubRoom from '@/features/livestream/components/pages/MeethubRoom';
 import LivePage from '@/features/livestream/components/pages/LivePage';
 import { LiveStreamStage } from '@/features/livestream/components/LiveStreamStage';
 
@@ -70,13 +72,29 @@ function App() {
                 </ProtectedRoute>
           } 
           />
-          <Route 
-              path="/live/:streamId" 
+          <Route
+              path="/live/:streamId"
               element={
                 <ProtectedRoute>
                   <LivePage />
                 </ProtectedRoute>
-            } 
+            }
+          />
+          <Route
+              path="/meethub"
+              element={
+                <ProtectedRoute>
+                  <MeethubPage />
+                </ProtectedRoute>
+              }
+          />
+          <Route
+              path="/meethub/:sessionId"
+              element={
+                <ProtectedRoute>
+                  <MeethubRoom />
+                </ProtectedRoute>
+              }
           />
 
             {/* ============================================

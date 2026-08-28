@@ -12,7 +12,7 @@ from app.models.profile import StudentProfile, ProfessorProfile, AdminProfile
 from app.schemas.livestream import LivestreamCreate, LivestreamUpdate
 from fastapi import HTTPException, status
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 import secrets
 import logging
@@ -39,6 +39,23 @@ class LivestreamService:
             select(model.avatar_url).where(model.user_id == user_id)
         )
         return result.scalar_one_or_none()
+
+    async def _get_profile_names(self, user_id: str, role: str) -> tuple[Optional[str], Optional[str]]:
+        """First/last name from a user's role-specific profile - same
+        duplicated-per-service lookup pattern as _get_avatar_url and as
+        section_service.py/chat_service.py's own copies of this helper."""
+        model = {
+            "student": StudentProfile,
+            "professor": ProfessorProfile,
+            "admin": AdminProfile,
+        }.get(role)
+        if not model:
+            return None, None
+        result = await self.db.execute(
+            select(model.first_name, model.last_name).where(model.user_id == user_id)
+        )
+        row = result.first()
+        return (row[0], row[1]) if row else (None, None)
 
     async def create_stream(self, user_id: str, data: LivestreamCreate) -> Livestream:
         """Create a new livestream"""
@@ -104,8 +121,18 @@ class LivestreamService:
         
         return stream
 
-    async def get_streams(self, user_id: str, status_filter: Optional[str] = None) -> List[Livestream]:
-        """Get streams the user can view"""
+    async def get_streams(
+        self, user_id: str, status_filter: Optional[str] = None, include_meethub: bool = True
+    ) -> List[Livestream]:
+        """Get streams the user can view.
+
+        include_meethub=False excludes any stream that's actually a Meethub
+        session - used by the plain-Livestream REST listing so a Meethub
+        meeting never shows up as a Livestream card. Defaults to True so
+        MeethubService.get_my_sessions (which calls this method to reuse its
+        visibility filtering, then cross-references the result against
+        meethub_sessions) keeps working unchanged.
+        """
         user = await self.db.execute(
             select(User).where(User.id == user_id)
         )
@@ -125,16 +152,20 @@ class LivestreamService:
         # Only show LIVE streams by default
         if not status_filter:
             query = query.where(Livestream.status == StreamStatus.LIVE)
-        
+
+        if not include_meethub:
+            from app.models.meethub import MeethubSession
+            query = query.where(Livestream.id.notin_(select(MeethubSession.livestream_id)))
+
         streams = await self.db.execute(query)
         streams = streams.scalars().all()
-        
+
         # Filter by visibility
         visible_streams = []
         for stream in streams:
             if await self.can_view_stream(user_id, stream.id):
                 visible_streams.append(stream)
-        
+
         return visible_streams
 
     async def get_stream(self, stream_id: str, user_id: str) -> Livestream:
@@ -285,7 +316,34 @@ class LivestreamService:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to view this stream"
             )
-        
+
+        # Meethub entry-timer enforcement: a no-op for every plain livestream
+        # (no MeethubSession row exists for it). Only guards the join path -
+        # it never evicts anyone already active, so a deadline passing mid-
+        # session doesn't touch existing StreamViewer rows.
+        from app.models.meethub import MeethubSession
+
+        meethub_result = await self.db.execute(
+            select(MeethubSession).where(MeethubSession.livestream_id == stream_id)
+        )
+        meethub_session = meethub_result.scalar_one_or_none()
+        if meethub_session:
+            # entry_start/entry_deadline come back timezone-aware (UTCDateTime
+            # attaches UTC tzinfo on read) - datetime.utcnow() is naive, so
+            # comparing them directly raises TypeError. now(timezone.utc)
+            # matches what was actually read from the column.
+            now = datetime.now(timezone.utc)
+            if meethub_session.entry_start and now < meethub_session.entry_start:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="This meeting hasn't started accepting participants yet"
+                )
+            if meethub_session.entry_deadline and now > meethub_session.entry_deadline:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="The entry window for this meeting has closed"
+                )
+
         try:
             result = await self.db.execute(
                 select(StreamViewer)
