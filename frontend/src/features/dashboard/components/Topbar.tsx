@@ -1,7 +1,7 @@
 // frontend/src/features/dashboard/components/Topbar.tsx
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CodeXml } from 'lucide-react';
+import { LogoIcon } from '@/components/ui/Logo/Logo';
 import {
   MagnifyingGlassIcon,
   ChatBubbleLeftIcon,
@@ -41,6 +41,12 @@ interface TopbarProps {
   /** Switches to the Sections view for one specific section (each dashboard
    * already supports this via SectionDashboard's initialSectionId). */
   onOpenSection?: (sectionId: string) => void;
+  /** Called when the mobile-only compact brand mark is clicked (the full
+   * Sidebar - and its own clickable logo - is hidden below lg:). Each
+   * caller passes whatever it already uses to reach the Home/Feed section
+   * (e.g. `() => setActiveSection('feed')`). Omitted entirely, the mark is
+   * just non-interactive, same as before. */
+  onNavigateHome?: () => void;
 }
 
 export function Topbar({
@@ -52,6 +58,7 @@ export function Topbar({
   searchSections = [],
   onOpenPost,
   onOpenSection,
+  onNavigateHome,
 }: TopbarProps) {
   const navigate = useNavigate();
   const { user } = useAuthStore();
@@ -103,9 +110,20 @@ export function Topbar({
           <Bars3Icon className="h-6 w-6" />
         </button>
       )}
-      <div className="lg:hidden flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-[#00C8FF]/40 bg-[#00C8FF]/10">
-        <CodeXml className="h-4 w-4 text-[#00C8FF]" />
-      </div>
+      {onNavigateHome ? (
+        <button
+          type="button"
+          onClick={onNavigateHome}
+          title="Go to Feed"
+          className="lg:hidden flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-[#00C8FF]/40 bg-[#00C8FF]/10 hover:bg-[#00C8FF]/20 transition-colors"
+        >
+          <LogoIcon size="xs" background="dark" />
+        </button>
+      ) : (
+        <div className="lg:hidden flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-[#00C8FF]/40 bg-[#00C8FF]/10">
+          <LogoIcon size="xs" background="dark" />
+        </div>
+      )}
 
       {/* Search - hidden below sm: to keep the hamburger/brand/actions from
           overflowing on the narrowest phone widths. */}

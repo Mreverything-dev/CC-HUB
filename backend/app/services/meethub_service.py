@@ -247,19 +247,23 @@ class MeethubService:
             select(TeachingAssignment).where(TeachingAssignment.id == session.teaching_assignment_id)
         )
         ta = ta_result.scalar_one_or_none()
-        if ta:
-            member_result = await self.db.execute(
-                select(SectionMember).where(
-                    SectionMember.section_id == ta.section_id,
-                    SectionMember.user_id == data.user_id,
-                    SectionMember.role == "student",
-                )
+        if not ta:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This class's teaching assignment could not be found",
             )
-            if not member_result.scalar_one_or_none():
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="This user is not a student member of this class's section",
-                )
+        member_result = await self.db.execute(
+            select(SectionMember).where(
+                SectionMember.section_id == ta.section_id,
+                SectionMember.user_id == data.user_id,
+                SectionMember.role == "student",
+            )
+        )
+        if not member_result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This user is not a student member of this class's section",
+            )
 
         meethub_session_id = session.id  # captured before any possible rollback - see request_to_speak
 

@@ -196,7 +196,11 @@ class TeachingAssignmentService:
 
         return await self._enrich(assignment)
 
-    async def list_for_section(self, section_id: str) -> List[dict]:
+    async def list_for_section(self, section_id: str, requesting_user_id: str) -> List[dict]:
+        section = await self._get_section(section_id)
+        from app.services.section_service import SectionService
+        await SectionService(self.db)._check_section_view_access(section, requesting_user_id)
+
         result = await self.db.execute(
             select(TeachingAssignment).where(TeachingAssignment.section_id == section_id)
         )

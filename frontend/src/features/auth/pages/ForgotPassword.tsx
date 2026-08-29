@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, ArrowLeft, CheckCircle, AlertCircle, CodeXml } from 'lucide-react';
+import { Mail, ArrowLeft, CheckCircle, AlertCircle } from 'lucide-react';
 import heroImage from '@/assets/images/backgrounds/img-bg.png';
 import { useAuth } from '../hooks/useAuth';
+import { LogoIcon } from '@/components/ui/Logo/Logo';
 
 export function ForgotPassword() {
   const [email, setEmail] = useState('');
@@ -37,7 +38,7 @@ export function ForgotPassword() {
           </button>
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#00C8FF]/40 bg-[#00C8FF]/10">
-              <CodeXml className="h-6 w-6 text-[#00C8FF]" />
+              <LogoIcon size="sm" background="dark" />
             </div>
             <div>
               <h1 className="text-2xl font-bold">Forgot password</h1>

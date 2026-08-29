@@ -208,7 +208,7 @@ async def get_section_teaching_assignments(
 ):
     """List all professors teaching a section, via their teaching assignments"""
     service = TeachingAssignmentService(db)
-    return await service.list_for_section(section_id)
+    return await service.list_for_section(section_id, str(current_user.id))
 
 # ============================================
 # SECTION GROUP CHAT

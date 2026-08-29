@@ -1,8 +1,8 @@
 // frontend/src/features/dashboard/components/Sidebar.tsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CodeXml } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { LogoIcon } from '@/components/ui/Logo/Logo';
 import {
   HomeIcon,
   MegaphoneIcon,
@@ -148,10 +148,17 @@ export function Sidebar({ activeSection, onNavigate, isMobileOpen = false, onClo
   // the two never drift out of sync with each other.
   const sidebarContent = (
     <>
-      {/* Logo */}
-      <div className="flex items-center gap-3 px-5 py-5 border-b border-[rgba(0,200,245,0.1)]">
+      {/* Logo - clicking it goes to the Home/Feed section, same as clicking
+          the "Feed" nav item below (Sidebar is shared across pages that
+          switch sections in-place rather than routing, so this calls
+          onNavigate directly instead of using a <Link>). */}
+      <button
+        type="button"
+        onClick={() => onNavigate('feed')}
+        className="flex items-center gap-3 px-5 py-5 border-b border-[rgba(0,200,245,0.1)] text-left hover:bg-white/5 transition-colors duration-200"
+      >
         <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#00C8FF]/40 bg-[#00C8FF]/10 shadow-[0_0_20px_rgba(0,200,245,0.15)]">
-          <CodeXml className="h-5 w-5 text-[#00C8FF]" />
+          <LogoIcon size="sm" background="dark" />
         </div>
         <div>
           <h1 className="text-base font-bold tracking-tight text-[#F1F5F9] leading-tight">CCS HUB</h1>
@@ -159,7 +166,7 @@ export function Sidebar({ activeSection, onNavigate, isMobileOpen = false, onClo
             COLLEGE OF COMPUTER STUDIES
           </p>
         </div>
-      </div>
+      </button>
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-4 py-4 space-y-0.5 themed-scrollbar">

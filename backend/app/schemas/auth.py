@@ -2,14 +2,14 @@
 from datetime import datetime
 import re
 import uuid
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_serializer, validator
 
 class UserBase(BaseModel):
     email: EmailStr
     username: str
-    role: str = "student"
+    role: Literal["student", "professor", "admin"] = "student"
 
 class UserCreate(UserBase):
     password: str = Field(..., min_length=6)

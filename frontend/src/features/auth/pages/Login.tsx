@@ -6,9 +6,10 @@ import { useAuth } from '../hooks/useAuth';
 import { Link } from 'react-router-dom';
 import { FcGoogle } from 'react-icons/fc';
 import { FaFacebook, FaGithub } from 'react-icons/fa';
-import { CodeXml, Mail, AlertCircle, Lock, Eye, EyeOff } from 'lucide-react';
+import { Mail, AlertCircle, Lock, Eye, EyeOff } from 'lucide-react';
 import { useState } from 'react';
 import heroImage from '@/assets/images/backgrounds/img-bg.png';
+import { LogoIcon } from '@/components/ui/Logo/Logo';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -61,7 +62,7 @@ export function Login() {
         <div className="hidden flex-col lg:flex">
           <div className="flex items-center gap-3">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[#00C8FF]/40 bg-[#00C8FF]/10 shadow-[0_0_20px_rgba(0,200,245,0.18)] backdrop-blur-sm">
-              <CodeXml className="h-7 w-7 text-[#00C8FF]" />
+              <LogoIcon size="sm" background="dark" />
             </div>
             <div>
               <h2 className="text-2xl font-bold tracking-tight text-[#F1F5F9]">CCS HUB</h2>
@@ -88,7 +89,7 @@ export function Login() {
             <div className="mb-6">
               <div className="flex items-center gap-2 lg:hidden">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#00C8FF]/40 bg-[#00C8FF]/10">
-                  <CodeXml className="h-5 w-5 text-[#00C8FF]" />
+                  <LogoIcon size="sm" background="dark" />
                 </div>
                 <div>
                   <h2 className="text-lg font-bold tracking-tight text-[#F1F5F9]">CCS HUB</h2>

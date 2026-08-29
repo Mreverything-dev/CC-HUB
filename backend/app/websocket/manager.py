@@ -50,6 +50,10 @@ class SocketManager:
                 await sio.emit('error', {'message': 'Invalid token payload'}, room=sid)
                 return False
 
+            if payload.get('type') != 'access':
+                await sio.emit('error', {'message': 'Invalid token type'}, room=sid)
+                return False
+
             # Cached once per connection so livestream join/leave system
             # messages (and anything else that wants a display name) don't
             # need a fresh DB lookup on every event - best effort, a failed
@@ -192,6 +196,22 @@ class SocketManager:
 
 manager = SocketManager()
 
+async def _is_conversation_member(user_id: str, conversation_id: str) -> bool:
+    """Shared membership guard for the chat socket handlers below - mirrors
+    the same check ChatService.send_message/get_conversation_messages
+    already enforce on the REST path, so a user can't join a conversation's
+    room, receive its typing indicators, or bulk-mark it read unless they're
+    actually a member of it."""
+    from app.models.conversation import ConversationMember
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(ConversationMember).where(
+                ConversationMember.conversation_id == conversation_id,
+                ConversationMember.user_id == user_id,
+            )
+        )
+        return result.scalar_one_or_none() is not None
+
 # ============================================
 # SOCKET.IO EVENT HANDLERS
 # ============================================
@@ -231,8 +251,18 @@ async def disconnect(sid):
 async def join_room(sid, data):
     """Join a conversation room"""
     room = data.get('room')
-    if room:
-        await manager.join_room(sid, room)
+    if not room:
+        return
+
+    if room.startswith('conversation_'):
+        if sid not in manager.active_connections:
+            return
+        user_id = manager.active_connections[sid]['user_id']
+        conversation_id = room[len('conversation_'):]
+        if not await _is_conversation_member(user_id, conversation_id):
+            return
+
+    await manager.join_room(sid, room)
 
 @sio.event
 async def leave_room(sid, data):
@@ -361,8 +391,8 @@ async def typing(sid, data):
     user_id = manager.active_connections[sid]['user_id']
     conversation_id = data.get('conversation_id')
     is_typing = data.get('is_typing', False)
-    
-    if conversation_id:
+
+    if conversation_id and await _is_conversation_member(user_id, conversation_id):
         room = f"conversation_{conversation_id}"
         await manager.send_to_room(
             room,
@@ -382,10 +412,13 @@ async def mark_read(sid, data):
     
     user_id = manager.active_connections[sid]['user_id']
     conversation_id = data.get('conversation_id')
-    
+
     if not conversation_id:
         return
-    
+
+    if not await _is_conversation_member(user_id, conversation_id):
+        return
+
     try:
         async with AsyncSessionLocal() as db:
             from sqlalchemy import update

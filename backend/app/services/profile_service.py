@@ -11,6 +11,7 @@ from app.schemas.profile import (
 )
 from fastapi import HTTPException, status
 from datetime import datetime
+from typing import Optional
 class ProfileService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -19,8 +20,12 @@ class ProfileService:
     # GET PROFILE
     # ============================================
     
-    async def get_user_profile(self, user_id: str) -> UserProfileResponse:
-        """Get user profile based on role"""
+    async def get_user_profile(self, user_id: str, requesting_user: Optional[User] = None) -> UserProfileResponse:
+        """Get user profile based on role. Email is only included for the
+        profile owner or an admin - any other authenticated viewer gets
+        every other field (username, role, bio, avatar, etc.) but an empty
+        email, since email is PII this endpoint was never meant to expose
+        to arbitrary other users."""
         result = await self.db.execute(
             select(User).where(User.id == user_id)
         )
@@ -30,7 +35,12 @@ class ProfileService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
-        
+
+        is_owner_or_admin = (
+            requesting_user is not None
+            and (str(requesting_user.id) == str(user.id) or requesting_user.role == "admin")
+        )
+
         profile = None
         if user.role == "student":
             result = await self.db.execute(
@@ -50,7 +60,7 @@ class ProfileService:
         
         return {
             "user_id": str(user.id),
-            "email": user.email,
+            "email": user.email if is_owner_or_admin else "",
             "username": user.username,
             "role": user.role,
             "profile": profile
@@ -60,11 +70,13 @@ class ProfileService:
     # STUDENT PROFILE CRUD
     # ============================================
     
-    async def create_student_profile(self, data: StudentProfileCreate) -> StudentProfile:
-        """Create student profile"""
+    async def create_student_profile(self, data: StudentProfileCreate, requesting_user_id: str) -> StudentProfile:
+        """Create student profile. Always uses the authenticated caller's own
+        id - the `user_id` field on `data` is ignored so one account can't
+        create/populate another account's profile row."""
         # Check if user exists
         result = await self.db.execute(
-            select(User).where(User.id == data.user_id)
+            select(User).where(User.id == requesting_user_id)
         )
         user = result.scalar_one_or_none()
         if not user:
@@ -72,23 +84,23 @@ class ProfileService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
-        
+
         if user.role != "student":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="User is not a student"
             )
-        
+
         # Check if profile exists
         result = await self.db.execute(
-            select(StudentProfile).where(StudentProfile.user_id == data.user_id)
+            select(StudentProfile).where(StudentProfile.user_id == requesting_user_id)
         )
         if result.scalar_one_or_none():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Student profile already exists"
             )
-        
+
         # Check if student_id is unique
         if data.student_id:
             result = await self.db.execute(
@@ -99,8 +111,10 @@ class ProfileService:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Student ID already exists"
                 )
-        
-        profile = StudentProfile(**data.model_dump())
+
+        profile_data = data.model_dump()
+        profile_data["user_id"] = requesting_user_id
+        profile = StudentProfile(**profile_data)
         self.db.add(profile)
         await self.db.commit()
         await self.db.refresh(profile)
@@ -154,10 +168,12 @@ class ProfileService:
     # PROFESSOR PROFILE CRUD
     # ============================================
     
-    async def create_professor_profile(self, data: ProfessorProfileCreate) -> ProfessorProfile:
-        """Create professor profile"""
+    async def create_professor_profile(self, data: ProfessorProfileCreate, requesting_user_id: str) -> ProfessorProfile:
+        """Create professor profile. Always uses the authenticated caller's
+        own id - the `user_id` field on `data` is ignored so one account
+        can't create/populate another account's profile row."""
         result = await self.db.execute(
-            select(User).where(User.id == data.user_id)
+            select(User).where(User.id == requesting_user_id)
         )
         user = result.scalar_one_or_none()
         if not user:
@@ -165,22 +181,22 @@ class ProfileService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
-        
+
         if user.role != "professor":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="User is not a professor"
             )
-        
+
         result = await self.db.execute(
-            select(ProfessorProfile).where(ProfessorProfile.user_id == data.user_id)
+            select(ProfessorProfile).where(ProfessorProfile.user_id == requesting_user_id)
         )
         if result.scalar_one_or_none():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Professor profile already exists"
             )
-        
+
         if data.employee_id:
             result = await self.db.execute(
                 select(ProfessorProfile).where(ProfessorProfile.employee_id == data.employee_id)
@@ -190,8 +206,10 @@ class ProfileService:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Employee ID already exists"
                 )
-        
-        profile = ProfessorProfile(**data.model_dump())
+
+        profile_data = data.model_dump()
+        profile_data["user_id"] = requesting_user_id
+        profile = ProfessorProfile(**profile_data)
         self.db.add(profile)
         await self.db.commit()
         await self.db.refresh(profile)
@@ -244,10 +262,12 @@ class ProfileService:
     # ADMIN PROFILE CRUD
     # ============================================
     
-    async def create_admin_profile(self, data: AdminProfileCreate) -> AdminProfile:
-        """Create admin profile"""
+    async def create_admin_profile(self, data: AdminProfileCreate, requesting_user_id: str) -> AdminProfile:
+        """Create admin profile. Always uses the authenticated caller's own
+        id - the `user_id` field on `data` is ignored so one account can't
+        create/populate another account's profile row."""
         result = await self.db.execute(
-            select(User).where(User.id == data.user_id)
+            select(User).where(User.id == requesting_user_id)
         )
         user = result.scalar_one_or_none()
         if not user:
@@ -255,23 +275,25 @@ class ProfileService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
-        
+
         if user.role != "admin":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="User is not an admin"
             )
-        
+
         result = await self.db.execute(
-            select(AdminProfile).where(AdminProfile.user_id == data.user_id)
+            select(AdminProfile).where(AdminProfile.user_id == requesting_user_id)
         )
         if result.scalar_one_or_none():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Admin profile already exists"
             )
-        
-        profile = AdminProfile(**data.model_dump())
+
+        profile_data = data.model_dump()
+        profile_data["user_id"] = requesting_user_id
+        profile = AdminProfile(**profile_data)
         self.db.add(profile)
         await self.db.commit()
         await self.db.refresh(profile)

@@ -14,6 +14,13 @@ import logging
 import secrets
 import string
 
+# Fixed bcrypt hash checked against on a "user not found" login attempt, so
+# that path takes about as long as a real "wrong password" check (which
+# calls bcrypt.checkpw) - without this, the presence/absence of a bcrypt
+# call is a timing side-channel that lets an attacker enumerate registered
+# emails. The plaintext behind this hash is never used for anything.
+_DUMMY_PASSWORD_HASH = get_password_hash("dummy-password-for-timing-parity")
+
 logger = logging.getLogger(__name__)
 
 
@@ -607,11 +614,12 @@ class AuthService:
             
             if not user:
                 logger.warning(f"❌ User not found: {request.email}")
+                verify_password(request.password, _DUMMY_PASSWORD_HASH)
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid credentials"
                 )
-            
+
             try:
                 password_valid = verify_password(request.password, user.password_hash)
             except Exception as e:

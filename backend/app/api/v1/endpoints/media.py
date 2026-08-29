@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, get_current_admin_user
 from app.models.user import User
 from app.storage.minio import minio_service
 from typing import List
@@ -11,7 +11,10 @@ router = APIRouter()
 
 # Allowed file types
 ALLOWED_TYPES = [
-    'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
+    # image/svg+xml intentionally excluded: SVGs can embed <script> and the
+    # storage bucket is public-read with no way to force
+    # X-Content-Type-Options: nosniff, making SVG upload a stored-XSS vector.
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp',
     'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo',
     # Generic file attachments (chat "send a file" support)
     'application/pdf', 'application/msword', 'text/plain', 'application/zip',
@@ -76,9 +79,12 @@ async def upload_media(
 @router.delete("/{object_name:path}")
 async def delete_media(
     object_name: str,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_admin_user)
 ):
-    """Delete a media file from MinIO"""
+    """Delete a media file from MinIO. Admin-only: uploads don't record who
+    uploaded what, so there's no ownership check possible - restricting to
+    admin closes the IDOR without a schema change. Not used anywhere in the
+    current frontend (uploads are otherwise never deleted by users)."""
     success = minio_service.delete_file(object_name)
     if not success:
         raise HTTPException(

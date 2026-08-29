@@ -44,16 +44,17 @@ import { HeartIcon as HeartSolidIcon } from '@heroicons/react/24/solid';
 
 const REACTIONS = ['❤️', '👍', '😂', '😮', '😢'];
 
-// Bottom placements sit at bottom-20 (not bottom-4, matching the top
-// offsets) because the video player has its own full-width control bar
-// pinned to bottom-0 (play/pause, mute, fullscreen) with an always-visible
-// gradient background - a PiP box at bottom-4 overlapped it directly, and
-// the two elements' independent hover/transition states fighting over the
-// same screen region was what caused the reported lag specifically at the
-// bottom positions (never at the top, which has no equivalent overlap).
+// Bottom placements sit at bottom-20 (not bottom-4) because the video
+// player has its own full-width control bar pinned to bottom-0 (play/pause,
+// mute, fullscreen) with an always-visible gradient background - a PiP box
+// at bottom-4 overlapped it directly. Top placements sit at top-16 (not
+// top-4) for the same reason on the other edge: top-4 is exactly where the
+// LIVE/duration/viewer badge row (left) and the host's mic/screen-share/
+// record controls (right) already live, so a camera box at top-4 would sit
+// directly on top of that chrome instead of beside it.
 const PIP_POSITION_CLASSES: Record<PipPosition, string> = {
-  'top-left': 'top-4 left-4',
-  'top-right': 'top-4 right-4',
+  'top-left': 'top-16 left-4',
+  'top-right': 'top-16 right-4',
   'bottom-left': 'bottom-20 left-4',
   'bottom-right': 'bottom-20 right-4',
 };
@@ -1007,12 +1008,12 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
             {/* Video player */}
             <div
               ref={playerRef}
-              className={`rounded-2xl border border-[#1E3447] bg-[#0D1722] overflow-hidden flex flex-col ${
-                isChatOpen ? 'lg:w-3/4' : 'w-full'
+              className={`rounded-2xl border border-[#1E3447] bg-[#0D1722] overflow-hidden flex flex-col min-h-0 ${
+                isChatOpen ? 'flex-[3] lg:flex-none lg:w-3/4' : 'flex-1 w-full'
               }`}
             >
               <div
-                className="relative flex-1 aspect-video lg:aspect-auto bg-[#060B12]"
+                className="relative flex-1 min-h-0 bg-[#060B12]"
                 onMouseMove={revealControls}
                 onClick={revealControls}
                 onTouchStart={revealControls}
@@ -1025,7 +1026,7 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                       playsInline
                       muted={isHost || isMuted}
                       poster={videoPoster}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-contain"
                     />
                     {!isHost && (phase === 'connecting' || phase === 'reconnecting') && (
                       <div className="absolute inset-0 flex items-center justify-center bg-[#060B12]/80">
@@ -1324,7 +1325,7 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
 
             {/* Chat panel */}
             {isChatOpen && (
-            <div className="lg:w-1/4 rounded-2xl border border-[#1E3447] bg-[#0D1722] flex flex-col h-[40vh] lg:h-full">
+            <div className="lg:w-1/4 rounded-2xl border border-[#1E3447] bg-[#0D1722] flex flex-col flex-[2] min-h-0 lg:flex-none lg:h-full">
               <div className="flex items-center gap-2 px-4 py-3 border-b border-[#1E3447] flex-shrink-0">
                 <ChatBubbleLeftIcon className="h-4 w-4 text-[#00C8FF]" />
                 <span className="text-sm font-semibold text-[#F1F5F9]">Live Chat</span>

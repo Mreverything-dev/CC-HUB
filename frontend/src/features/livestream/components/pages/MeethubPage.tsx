@@ -173,7 +173,11 @@ export default function MeethubPage() {
       <Sidebar activeSection={null} onNavigate={handleSidebarNavigate} />
 
       <div className="flex-1 min-w-0 flex flex-col">
-        <Topbar avatarUrl={sidebarAvatarUrl} onOpenFriends={() => handleSidebarNavigate('friends')} />
+        <Topbar
+          avatarUrl={sidebarAvatarUrl}
+          onNavigateHome={() => handleSidebarNavigate('feed')}
+          onOpenFriends={() => handleSidebarNavigate('friends')}
+        />
 
         <main className="relative flex-1 max-w-7xl w-full mx-auto px-4 py-6 lg:px-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">

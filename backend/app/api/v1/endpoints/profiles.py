@@ -25,7 +25,7 @@ async def get_my_profile(
 ):
     """Get current user's profile"""
     service = ProfileService(db)
-    return await service.get_user_profile(str(current_user.id))
+    return await service.get_user_profile(str(current_user.id), requesting_user=current_user)
 
 # ============================================
 # GET USER PROFILE BY ID
@@ -39,7 +39,7 @@ async def get_user_profile(
 ):
     """Get any user's profile (requires authentication)"""
     service = ProfileService(db)
-    return await service.get_user_profile(user_id)
+    return await service.get_user_profile(user_id, requesting_user=current_user)
 
 # ============================================
 # STUDENT PROFILE ENDPOINTS
@@ -53,7 +53,7 @@ async def create_student_profile(
 ):
     """Create student profile"""
     service = ProfileService(db)
-    return await service.create_student_profile(data)
+    return await service.create_student_profile(data, str(current_user.id))
 
 @router.get("/student/me", response_model=StudentProfileResponse)
 async def get_my_student_profile(
@@ -86,7 +86,7 @@ async def create_professor_profile(
 ):
     """Create professor profile"""
     service = ProfileService(db)
-    return await service.create_professor_profile(data)
+    return await service.create_professor_profile(data, str(current_user.id))
 
 @router.get("/professor/me", response_model=ProfessorProfileResponse)
 async def get_my_professor_profile(
@@ -119,7 +119,7 @@ async def create_admin_profile(
 ):
     """Create admin profile"""
     service = ProfileService(db)
-    return await service.create_admin_profile(data)
+    return await service.create_admin_profile(data, str(current_user.id))
 
 @router.get("/admin/me", response_model=AdminProfileResponse)
 async def get_my_admin_profile(

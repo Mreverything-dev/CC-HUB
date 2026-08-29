@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { CheckCircle2, AlertCircle, Loader2, Mail, CodeXml, RefreshCw } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Loader2, Mail, RefreshCw } from 'lucide-react';
+import { LogoIcon } from '@/components/ui/Logo/Logo';
 import heroImage from '@/assets/images/backgrounds/img-bg.png';
 import { authApi } from '../api/auth.api';
 
@@ -68,7 +69,7 @@ export function VerifyEmail() {
         <div className="w-full rounded-3xl border border-[rgba(0,200,245,0.18)] bg-[rgba(13,23,34,0.88)] p-6 shadow-2xl backdrop-blur-xl md:p-8">
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#00C8FF]/40 bg-[#00C8FF]/10">
-              <CodeXml className="h-6 w-6 text-[#00C8FF]" />
+              <LogoIcon size="sm" background="dark" />
             </div>
             <div>
               <h1 className="text-2xl font-bold">Verify your email</h1>

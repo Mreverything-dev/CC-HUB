@@ -150,6 +150,7 @@ export default function ProfessorDashboard() {
       <div className="flex-1 min-w-0 flex flex-col">
         <Topbar
           avatarUrl={avatarUrl}
+          onNavigateHome={() => setActiveSection('feed')}
           onOpenFriends={() => setActiveSection('friends')}
           onOpenMenu={() => setIsMobileNavOpen(true)}
           searchPosts={postList}

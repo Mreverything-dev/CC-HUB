@@ -50,7 +50,11 @@ export default function AnnouncementFeed() {
       <Sidebar activeSection="announcements" onNavigate={handleNavigate} />
 
       <div className="flex-1 min-w-0 flex flex-col">
-        <Topbar avatarUrl={avatarUrl} onOpenFriends={() => handleNavigate('friends')} />
+        <Topbar
+          avatarUrl={avatarUrl}
+          onNavigateHome={() => handleNavigate('feed')}
+          onOpenFriends={() => handleNavigate('friends')}
+        />
 
         <main className="relative flex-1 max-w-7xl w-full mx-auto px-4 py-6 sm:px-6 lg:px-8">
           <AnnouncementFeedBody />

@@ -442,7 +442,19 @@ class ChatService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Message not found"
             )
-        
+
+        member_result = await self.db.execute(
+            select(ConversationMember).where(
+                ConversationMember.conversation_id == message.conversation_id,
+                ConversationMember.user_id == user_id,
+            )
+        )
+        if not member_result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not a member of this conversation"
+            )
+
         if message.sender_id != user_id:
             message.is_read = True
             message.read_at = datetime.utcnow()
