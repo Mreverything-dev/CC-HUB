@@ -2,7 +2,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, and_, or_, func
 from sqlalchemy.orm import selectinload
-from app.models.conversation import Conversation, ConversationMember, Message, MessageReaction
+from app.models.conversation import Conversation, ConversationMember, Message, MessageReaction, MessageHiddenFor
 from app.models.user import User
 from app.models.profile import StudentProfile, ProfessorProfile, AdminProfile
 from app.models.section import Section, SectionMember, SectionConversation
@@ -143,11 +143,16 @@ class ChatService:
         return conversation
 
     async def get_user_conversations(self, user_id: str, limit: int = 50):
-        """Get all conversations for a user"""
+        """Get all conversations for a user - excludes any this user has
+        hidden via delete_conversation_for_user (their own membership row is
+        untouched, so this is purely a list filter, not a real removal)."""
         result = await self.db.execute(
             select(Conversation)
             .join(ConversationMember)
-            .where(ConversationMember.user_id == user_id)
+            .where(
+                ConversationMember.user_id == user_id,
+                ConversationMember.hidden_at.is_(None),
+            )
             .order_by(desc(Conversation.updated_at))
             .limit(limit)
             .options(selectinload(Conversation.members))
@@ -187,8 +192,33 @@ class ChatService:
 
             # Get participants (as plain dicts - ConversationResponse.participants is typed as List[dict])
             conv.participants = await self._build_participants(str(conv.id))
-        
+
         return conversations
+
+    async def delete_conversation_for_user(self, conversation_id: str, user_id: str) -> dict:
+        """'Delete Chat' - hides this conversation from the caller's own chat
+        list only. Never deletes the Conversation, never removes any other
+        member, never touches messages/reactions - other members keep full,
+        unaffected access. Reversed automatically the next time a new
+        message arrives (see send_message) or the caller re-opens it via a
+        path that ensures membership (see
+        SectionConversationService._ensure_member for the section-chat case)."""
+        member_result = await self.db.execute(
+            select(ConversationMember).where(
+                ConversationMember.conversation_id == conversation_id,
+                ConversationMember.user_id == user_id,
+            )
+        )
+        member = member_result.scalar_one_or_none()
+        if not member:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found",
+            )
+
+        member.hidden_at = datetime.utcnow()
+        await self.db.commit()
+        return {"message": "Chat removed from your list"}
 
     # ============================================
     # GROUP CHAT MEMBERS + LOGO
@@ -374,10 +404,23 @@ class ChatService:
             media_name=data.media_name
         )
         self.db.add(message)
-        
+
         # Update conversation timestamp
         conversation.updated_at = datetime.utcnow()
-        
+
+        # New activity un-hides this conversation for anyone who'd previously
+        # "deleted" it from their own list (see delete_conversation_for_user) -
+        # matches the common chat-app behavior of a deleted chat coming back
+        # once there's something new in it.
+        await self.db.execute(
+            update(ConversationMember)
+            .where(
+                ConversationMember.conversation_id == data.conversation_id,
+                ConversationMember.hidden_at.isnot(None),
+            )
+            .values(hidden_at=None)
+        )
+
         await self.db.commit()
         await self.db.refresh(message)
         message.reactions = []  # brand new message, nothing to react to yet
@@ -399,7 +442,16 @@ class ChatService:
                 detail="You are not a member of this conversation"
             )
         
-        query = select(Message).where(Message.conversation_id == conversation_id).options(selectinload(Message.sender))
+        query = (
+            select(Message)
+            .where(
+                Message.conversation_id == conversation_id,
+                ~Message.id.in_(
+                    select(MessageHiddenFor.message_id).where(MessageHiddenFor.user_id == user_id)
+                ),
+            )
+            .options(selectinload(Message.sender))
+        )
 
         if before:
             query = query.where(Message.created_at < before)
@@ -430,6 +482,66 @@ class ChatService:
         await self.db.commit()
         
         return messages[::-1]  # Return in chronological order
+
+    async def unsend_message(self, message_id: str, user_id: str) -> dict:
+        """'Unsend' - soft-deletes the message for EVERY participant (same
+        pattern as StreamCommentService.delete_comment: content/media wiped,
+        row kept). Sender-only, no exceptions (unlike stream comments, which
+        also let the host delete) - the group's professor/mayor/officer have
+        no override here, matching the explicit requirement that only the
+        sender may unsend their own message."""
+        result = await self.db.execute(select(Message).where(Message.id == message_id))
+        message = result.scalar_one_or_none()
+        if not message or message.is_deleted:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
+
+        if str(message.sender_id) != str(user_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only unsend your own messages",
+            )
+
+        message.is_deleted = True
+        message.content = ""
+        message.media_url = None
+        message.media_name = None
+        message.updated_at = datetime.utcnow()
+        await self.db.commit()
+
+        return {"message_id": str(message_id), "conversation_id": str(message.conversation_id)}
+
+    async def remove_message_for_user(self, message_id: str, user_id: str) -> dict:
+        """'Remove for Me' - hides this one message from the caller's own
+        view only (mirrors delete_conversation_for_user, one level down).
+        Every other participant, and the message itself, are untouched."""
+        result = await self.db.execute(select(Message).where(Message.id == message_id))
+        message = result.scalar_one_or_none()
+        if not message:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
+
+        member_result = await self.db.execute(
+            select(ConversationMember).where(
+                ConversationMember.conversation_id == message.conversation_id,
+                ConversationMember.user_id == user_id,
+            )
+        )
+        if not member_result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not a member of this conversation",
+            )
+
+        existing_result = await self.db.execute(
+            select(MessageHiddenFor).where(
+                MessageHiddenFor.message_id == message_id,
+                MessageHiddenFor.user_id == user_id,
+            )
+        )
+        if not existing_result.scalar_one_or_none():
+            self.db.add(MessageHiddenFor(message_id=message_id, user_id=user_id))
+            await self.db.commit()
+
+        return {"message_id": str(message_id)}
 
     async def mark_message_as_read(self, message_id: str, user_id: str):
         """Mark a specific message as read"""

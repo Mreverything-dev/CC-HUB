@@ -1,8 +1,9 @@
 # backend/app/services/section_service.py
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_, exists
-from app.models.section import Section, SectionMember
-from app.models.teaching_assignment import TeachingAssignment
+from sqlalchemy import select, func, or_, exists, delete as sa_delete
+from app.models.section import Section, SectionMember, SectionConversation
+from app.models.teaching_assignment import TeachingAssignment, TeachingAssignmentConversation
+from app.models.conversation import Conversation, Message
 from app.models.user import User
 from app.models.profile import StudentProfile, ProfessorProfile, AdminProfile
 from app.schemas.section import SectionCreate, SectionUpdate
@@ -529,7 +530,44 @@ class SectionService:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to delete this section"
             )
-        
+
+        # Delete every Conversation this section (and its teaching
+        # assignments) owns BEFORE deleting the section itself. The DB's own
+        # ON DELETE CASCADE on SectionConversation.section_id/
+        # TeachingAssignmentConversation.teaching_assignment_id already
+        # correctly removes those thin link rows when the section (and its
+        # cascaded teaching assignments) are deleted below - but neither FK
+        # points the other way, so nothing ever cascades from there to the
+        # actual Conversation row. Left alone, that conversation (plus its
+        # members/messages, which DO cascade off Conversation itself) simply
+        # survives with no owning section - a fully working, orphaned group
+        # chat. Deleting the Conversation rows here first closes that gap.
+        conversation_ids: set = set()
+
+        section_conv = await self.db.execute(
+            select(SectionConversation.conversation_id).where(SectionConversation.section_id == section.id)
+        )
+        conversation_ids.update(row[0] for row in section_conv.all())
+
+        ta_conv = await self.db.execute(
+            select(TeachingAssignmentConversation.conversation_id)
+            .join(TeachingAssignment, TeachingAssignment.id == TeachingAssignmentConversation.teaching_assignment_id)
+            .where(TeachingAssignment.section_id == section.id)
+        )
+        conversation_ids.update(row[0] for row in ta_conv.all())
+
+        if conversation_ids:
+            # Messages are deleted explicitly rather than left to cascade off
+            # the Conversation delete below: unlike ConversationMember
+            # (which does cascade correctly), the live messages table's
+            # conversation_id foreign key was found to have no ON DELETE
+            # CASCADE at all, so relying on it here would silently leave
+            # every message behind as dead, unreachable rows. Explicit
+            # deletion doesn't depend on that constraint either way.
+            # MessageReaction rows do cascade correctly off Message.
+            await self.db.execute(sa_delete(Message).where(Message.conversation_id.in_(conversation_ids)))
+            await self.db.execute(sa_delete(Conversation).where(Conversation.id.in_(conversation_ids)))
+
         await self.db.delete(section)
         await self.db.commit()
         return {"message": "Section deleted successfully"}

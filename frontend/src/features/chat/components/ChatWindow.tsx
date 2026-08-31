@@ -14,6 +14,7 @@ import { mediaService } from '@/services/api/media.service';
 import { chatApi } from '@/services/api/chat.service';
 import { MessageReactions } from './MessageReactions';
 import { EmojiPicker } from '@/features/posts/components/EmojiPicker';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import toast from 'react-hot-toast';
 import {
   PaperAirplaneIcon,
@@ -27,6 +28,7 @@ import {
   EllipsisVerticalIcon,
   UserIcon,
   CameraIcon,
+  TrashIcon,
 } from '@heroicons/react/24/outline';
 
 // Keep in sync with backend ALLOWED_TYPES in app/api/v1/endpoints/media.py
@@ -56,7 +58,7 @@ interface ChatWindowProps {
 export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { currentConversation, messages, getMessages, sendMessage, handleTyping, isLoading, typingByConversation, updateConversation } = useChat();
+  const { currentConversation, messages, getMessages, sendMessage, handleTyping, isLoading, typingByConversation, updateConversation, deleteConversation, unsendMessage, removeMessageForMe } = useChat();
   const { friends } = useFriends();
   const [newMessage, setNewMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -68,10 +70,16 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
   const [showMembersModal, setShowMembersModal] = useState(false);
   const [showLogoModal, setShowLogoModal] = useState(false);
   const [canEditLogo, setCanEditLogo] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeletingChat, setIsDeletingChat] = useState(false);
+  const [messageMenuFor, setMessageMenuFor] = useState<string | null>(null);
+  const [unsendTarget, setUnsendTarget] = useState<string | null>(null);
+  const [isUnsending, setIsUnsending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
+  const messageMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!showMoreMenu) return;
@@ -83,6 +91,20 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
     document.addEventListener('mousedown', handleOutsideClick);
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, [showMoreMenu]);
+
+  // Per-message "..." menu (Unsend / Remove for Me) - a single piece of
+  // state (which message's menu is open) rather than one per row, same
+  // approach as showMoreMenu above.
+  useEffect(() => {
+    if (!messageMenuFor) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (messageMenuRef.current && !messageMenuRef.current.contains(e.target as Node)) {
+        setMessageMenuFor(null);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [messageMenuFor]);
 
   // Re-render periodically so "2 mins ago" style timestamps stay accurate.
   useTick(30000);
@@ -237,6 +259,47 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
     setNewMessage((prev) => prev + emoji);
   };
 
+  // "Delete Chat" - removes it from THIS user's own conversation list only.
+  // The conversation, its messages, and every other member's access are
+  // untouched (see ChatService.delete_conversation_for_user); it reappears
+  // automatically once there's new activity, or (for a section/subject
+  // group) the next time the user re-opens it from the section itself.
+  const handleDeleteChat = async () => {
+    if (!currentConversation) return;
+    setIsDeletingChat(true);
+    try {
+      await deleteConversation(currentConversation.id);
+      setShowDeleteConfirm(false);
+      onBack?.();
+    } finally {
+      setIsDeletingChat(false);
+    }
+  };
+
+  // "Unsend" - visible to everyone in the conversation, so it gets a
+  // confirmation first. The actual removal (is_deleted/content wiped) is
+  // applied via the real-time message:unsent broadcast, not optimistically
+  // here - see useChat.unsendMessage.
+  const handleConfirmUnsend = async () => {
+    if (!unsendTarget) return;
+    setIsUnsending(true);
+    try {
+      unsendMessage(unsendTarget);
+      setUnsendTarget(null);
+    } finally {
+      setIsUnsending(false);
+    }
+  };
+
+  // "Remove for Me" - local-only, no confirmation needed (nothing visible
+  // to anyone else changes, and it's the exact kind of low-stakes action
+  // this app already treats as instant elsewhere, e.g. blocking a
+  // suggestion card).
+  const handleRemoveForMe = async (messageId: string) => {
+    setMessageMenuFor(null);
+    await removeMessageForMe(messageId);
+  };
+
   if (!currentConversation) {
     return (
       <div className="flex items-center justify-center h-full w-full bg-[#0A111A]">
@@ -351,16 +414,17 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
                     Change Group Logo
                   </button>
                 )}
+                <div className="my-1 border-t border-[#1E3447]" />
                 <button
                   role="menuitem"
                   onClick={() => {
                     setShowMoreMenu(false);
-                    toast('More options coming soon');
+                    setShowDeleteConfirm(true);
                   }}
-                  className="flex items-center gap-2 w-full px-4 py-2 text-sm text-[#94A3B8] hover:bg-white/5 hover:text-[#F1F5F9] transition"
+                  className="flex items-center gap-2 w-full px-4 py-2 text-sm text-[#EF4444] hover:bg-[#EF4444]/10 transition"
                 >
-                  <EllipsisVerticalIcon className="h-4 w-4" />
-                  More Options
+                  <TrashIcon className="h-4 w-4" />
+                  Delete Chat
                 </button>
               </div>
             )}
@@ -399,6 +463,52 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
                     )}
                   </div>
                 )}
+
+                {/* Sender-only "..." menu (Unsend / Remove for Me) - hover-
+                    revealed, matching the existing group-hover reveal
+                    pattern already used for comment reactions/reply
+                    elsewhere in this app. Never rendered for someone else's
+                    message or an already-unsent one. */}
+                {isOwn && !message.is_deleted && (
+                  <div className="relative self-center opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setMessageMenuFor(messageMenuFor === message.id ? null : message.id)}
+                      title="Message options"
+                      aria-haspopup="menu"
+                      className="p-1 rounded-lg text-[#64748B] hover:text-[#F1F5F9] hover:bg-white/5 transition"
+                    >
+                      <EllipsisVerticalIcon className="h-4 w-4" />
+                    </button>
+                    {messageMenuFor === message.id && (
+                      <div
+                        ref={messageMenuRef}
+                        role="menu"
+                        className="absolute right-0 bottom-full mb-1 w-40 rounded-xl border border-[#1E3447] bg-[#111E2B] shadow-xl py-1 z-20"
+                      >
+                        <button
+                          role="menuitem"
+                          onClick={() => handleRemoveForMe(message.id)}
+                          className="flex items-center gap-2 w-full px-3 py-2 text-sm text-[#94A3B8] hover:bg-white/5 hover:text-[#F1F5F9] transition"
+                        >
+                          Remove for Me
+                        </button>
+                        <button
+                          role="menuitem"
+                          onClick={() => {
+                            setMessageMenuFor(null);
+                            setUnsendTarget(message.id);
+                          }}
+                          className="flex items-center gap-2 w-full px-3 py-2 text-sm text-[#EF4444] hover:bg-[#EF4444]/10 transition"
+                        >
+                          <TrashIcon className="h-3.5 w-3.5" />
+                          Unsend
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className={`flex flex-col max-w-[75%] sm:max-w-[70%] ${isOwn ? 'items-end' : 'items-start'}`}>
                   {!isOwn && showAvatar && (
                     <p className="text-xs font-semibold text-[#00C8FF] mb-1 px-1">
@@ -406,47 +516,57 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
                     </p>
                   )}
 
-                  {/* Media renders on its own, without the colored/padded bubble around it */}
-                  {message.type === 'image' && message.media_url && (
-                    <button
-                      type="button"
-                      onClick={() => setLightboxUrl(message.media_url!)}
-                      className="block rounded-2xl overflow-hidden max-w-full"
-                    >
-                      <img
-                        src={message.media_url}
-                        alt=""
-                        className="max-w-full max-h-72 rounded-2xl object-cover cursor-pointer hover:brightness-90 transition"
-                      />
-                    </button>
-                  )}
-                  {message.type === 'video' && message.media_url && (
-                    <video src={message.media_url} controls className="rounded-2xl max-w-full max-h-72" />
-                  )}
-                  {message.type === 'file' && message.media_url && (
-                    <a
-                      href={message.media_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-[#101D2A] border border-[#1E3447] hover:bg-white/5 transition max-w-full"
-                    >
-                      <DocumentIcon className="h-5 w-5 flex-shrink-0 text-[#94A3B8]" />
-                      <span className="text-sm text-[#F1F5F9] truncate">{message.media_name || 'File'}</span>
-                      <ArrowDownTrayIcon className="h-4 w-4 flex-shrink-0 text-[#64748B]" />
-                    </a>
-                  )}
-
-                  {/* Colored bubble only for plain text or a real caption */}
-                  {(message.type === 'text' || hasCaption) && (
-                    <div
-                      className={`px-4 py-2 rounded-2xl ${message.type !== 'text' ? 'mt-1.5' : ''} ${
-                        isOwn
-                          ? 'bg-gradient-to-br from-[#00C8FF] to-[#3B82F6] text-[#060B12] shadow-[0_0_16px_rgba(0,200,255,0.15)]'
-                          : 'bg-[#101D2A] text-[#F1F5F9] border border-[#1E3447]'
-                      }`}
-                    >
-                      <p className="break-words">{message.content}</p>
+                  {message.is_deleted ? (
+                    <div className="px-4 py-2 rounded-2xl bg-[#101D2A]/50 border border-[#1E3447]">
+                      <p className="italic text-sm text-[#64748B]">
+                        {isOwn ? 'You unsent this message' : 'This message was unsent'}
+                      </p>
                     </div>
+                  ) : (
+                    <>
+                      {/* Media renders on its own, without the colored/padded bubble around it */}
+                      {message.type === 'image' && message.media_url && (
+                        <button
+                          type="button"
+                          onClick={() => setLightboxUrl(message.media_url!)}
+                          className="block rounded-2xl overflow-hidden max-w-full"
+                        >
+                          <img
+                            src={message.media_url}
+                            alt=""
+                            className="max-w-full max-h-72 rounded-2xl object-cover cursor-pointer hover:brightness-90 transition"
+                          />
+                        </button>
+                      )}
+                      {message.type === 'video' && message.media_url && (
+                        <video src={message.media_url} controls className="rounded-2xl max-w-full max-h-72" />
+                      )}
+                      {message.type === 'file' && message.media_url && (
+                        <a
+                          href={message.media_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-[#101D2A] border border-[#1E3447] hover:bg-white/5 transition max-w-full"
+                        >
+                          <DocumentIcon className="h-5 w-5 flex-shrink-0 text-[#94A3B8]" />
+                          <span className="text-sm text-[#F1F5F9] truncate">{message.media_name || 'File'}</span>
+                          <ArrowDownTrayIcon className="h-4 w-4 flex-shrink-0 text-[#64748B]" />
+                        </a>
+                      )}
+
+                      {/* Colored bubble only for plain text or a real caption */}
+                      {(message.type === 'text' || hasCaption) && (
+                        <div
+                          className={`px-4 py-2 rounded-2xl ${message.type !== 'text' ? 'mt-1.5' : ''} ${
+                            isOwn
+                              ? 'bg-gradient-to-br from-[#00C8FF] to-[#3B82F6] text-[#060B12] shadow-[0_0_16px_rgba(0,200,255,0.15)]'
+                              : 'bg-[#101D2A] text-[#F1F5F9] border border-[#1E3447]'
+                          }`}
+                        >
+                          <p className="break-words">{message.content}</p>
+                        </div>
+                      )}
+                    </>
                   )}
 
                   <p className={`text-xs text-[#64748B] mt-1 px-1`}>
@@ -454,11 +574,13 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
                     {isOwn && message.is_read && ' ✓✓'}
                   </p>
 
-                  <MessageReactions
-                    messageId={message.id}
-                    reactions={message.reactions}
-                    align={isOwn ? 'right' : 'left'}
-                  />
+                  {!message.is_deleted && (
+                    <MessageReactions
+                      messageId={message.id}
+                      reactions={message.reactions}
+                      align={isOwn ? 'right' : 'left'}
+                    />
+                  )}
                 </div>
                 {isOwn && (
                   <div className="w-7 flex-shrink-0">
@@ -581,6 +703,36 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
           conversation={currentConversation}
           onClose={() => setShowLogoModal(false)}
           onUpdated={(updated) => updateConversation(updated.id, updated)}
+        />
+      )}
+
+      {showDeleteConfirm && (
+        <ConfirmDialog
+          title="Delete this chat?"
+          message={
+            currentConversation.type === 'group'
+              ? `"${getConversationName()}" will be removed from your chat list. The group and its messages stay intact for everyone else, and it will reappear here if there's new activity or you reopen it.`
+              : `This conversation will be removed from your chat list. It stays intact for ${getConversationName()}, and will reappear here if they message you again.`
+          }
+          confirmLabel="Delete Chat"
+          loadingLabel="Deleting..."
+          isLoading={isDeletingChat}
+          danger
+          onConfirm={handleDeleteChat}
+          onCancel={() => setShowDeleteConfirm(false)}
+        />
+      )}
+
+      {unsendTarget && (
+        <ConfirmDialog
+          title="Unsend this message?"
+          message="This message will be removed for everyone in this conversation. This can't be undone."
+          confirmLabel="Unsend"
+          loadingLabel="Unsending..."
+          isLoading={isUnsending}
+          danger
+          onConfirm={handleConfirmUnsend}
+          onCancel={() => setUnsendTarget(null)}
         />
       )}
     </div>

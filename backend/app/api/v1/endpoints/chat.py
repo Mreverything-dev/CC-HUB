@@ -53,6 +53,21 @@ async def create_group_conversation(
     service = ChatService(db)
     return await service.create_group_conversation(str(current_user.id), data)
 
+@router.delete("/conversations/{conversation_id}")
+async def delete_conversation(
+    conversation_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """'Delete Chat' for the current user only - removes it from their own
+    chat list (ChatService.get_user_conversations). The conversation, its
+    other members, and all messages are completely unaffected; this never
+    deletes a group or removes anyone else's access. Automatically restored
+    the next time a new message arrives, or the user re-opens it (e.g. via
+    GET /sections/{id}/conversation for a section chat)."""
+    service = ChatService(db)
+    return await service.delete_conversation_for_user(conversation_id, str(current_user.id))
+
 # ============================================
 # GROUP CHAT MEMBERS + LOGO
 # ============================================
@@ -137,9 +152,21 @@ async def send_message(
         "media_name": message.media_name,
         "reactions": [],
         "is_read": message.is_read,
+        "is_deleted": message.is_deleted,
         "created_at": message.created_at,
         "updated_at": message.updated_at
     }
+
+@router.post("/messages/{message_id}/remove-for-me")
+async def remove_message_for_me(
+    message_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """'Remove for Me' - hides this message from the caller's own view only.
+    Every other participant's view, and the message itself, are unaffected."""
+    service = ChatService(db)
+    return await service.remove_message_for_user(message_id, str(current_user.id))
 
 @router.post("/messages/{message_id}/read")
 async def mark_message_read(

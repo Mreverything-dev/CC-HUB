@@ -50,13 +50,20 @@ class TeachingAssignmentConversationService:
         return conversation
 
     async def _ensure_member(self, conversation_id, user_id: str):
-        existing = await self.db.execute(
+        existing_result = await self.db.execute(
             select(ConversationMember).where(
                 ConversationMember.conversation_id == conversation_id,
                 ConversationMember.user_id == user_id,
             )
         )
-        if existing.scalar_one_or_none():
+        existing = existing_result.scalar_one_or_none()
+        if existing:
+            # Mirrors SectionConversationService._ensure_member - re-opening
+            # this subject's chat also restores it if the caller had
+            # previously "deleted" it from their own chat list.
+            if existing.hidden_at is not None:
+                existing.hidden_at = None
+                await self.db.commit()
             return
         self.db.add(ConversationMember(conversation_id=conversation_id, user_id=self._as_uuid(user_id)))
         await self.db.commit()

@@ -35,6 +35,8 @@ export function useChat() {
     setCurrentConversation,
     addConversation,
     updateConversation,
+    removeConversation,
+    removeMessage,
     setMessages,
     setUnreadCount,
     resetUnreadCount,
@@ -108,6 +110,22 @@ export function useChat() {
     },
   });
 
+  // Delete Chat - hides this conversation from the current user's own list
+  // only (see ChatService.delete_conversation_for_user). Removed from local
+  // state immediately rather than waiting on a refetch, matching how
+  // addConversation already does for the opposite (create) case.
+  const deleteConversation = useMutation({
+    mutationFn: (conversationId: string) => chatApi.deleteConversation(conversationId),
+    onSuccess: (_response, conversationId) => {
+      removeConversation(conversationId);
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      toast.success('Chat removed');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.detail || 'Failed to remove chat');
+    },
+  });
+
   // Handle typing
   const handleTyping = useCallback((conversationId: string, isTyping: boolean) => {
     socketService.sendTyping(conversationId, isTyping);
@@ -119,6 +137,26 @@ export function useChat() {
   const reactToMessage = useCallback((messageId: string, reaction: string) => {
     socketService.reactToMessage(messageId, reaction);
   }, []);
+
+  // "Unsend" - visible to everyone. Same round-trip pattern as
+  // reactToMessage: the actual UI update (is_deleted/content wiped) comes
+  // back via the 'message:unsent' socket event, including for the sender's
+  // own view, not applied optimistically here.
+  const unsendMessage = useCallback((messageId: string) => {
+    socketService.unsendMessage(messageId);
+  }, []);
+
+  // "Remove for Me" - local-only, nothing to broadcast, so this is a plain
+  // REST call + an immediate local store update (mirrors deleteConversation).
+  const removeMessageForMe = useMutation({
+    mutationFn: (messageId: string) => chatApi.removeMessageForMe(messageId),
+    onSuccess: (_response, messageId) => {
+      removeMessage(messageId);
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.detail || 'Failed to remove message');
+    },
+  });
 
   // Mark conversation as read
   const markConversationRead = useCallback((conversationId: string) => {
@@ -141,6 +179,9 @@ export function useChat() {
     getMessages,
     sendMessage,
     createDirectConversation: createDirectConversation.mutateAsync,
+    deleteConversation: deleteConversation.mutateAsync,
+    unsendMessage,
+    removeMessageForMe: removeMessageForMe.mutateAsync,
     setCurrentConversation,
     updateConversation,
     handleTyping,

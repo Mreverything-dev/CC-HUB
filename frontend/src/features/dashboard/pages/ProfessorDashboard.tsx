@@ -1,6 +1,7 @@
 // frontend/src/features/dashboard/pages/ProfessorDashboard.tsx
 import { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
+import coverPhoto from '@/assets/images/backgrounds/cover-photo.jpg';
 import { CreatePost } from '@/features/posts/components/CreatePost';
 import { PostCard } from '@/features/posts/components/PostCard';
 import PostDetailModal from '@/features/posts/components/PostDetailModal';
@@ -26,6 +27,7 @@ import { MeethubWidget } from '@/features/dashboard/components/admin/MeethubWidg
 import { useLiveStreamsFeed } from '@/features/livestream/hooks/useLiveStreamsFeed';
 import FriendsPage from '@/features/friends/components/FriendsPage';
 import ChatPanel from '@/features/chat/components/ChatPanel';
+import { TeachingAssignment } from '@/types/section.types';
 
 export default function ProfessorDashboard() {
   const location = useLocation();
@@ -91,19 +93,25 @@ export default function ProfessorDashboard() {
     await createPost(data);
   };
 
-  const todayEntries = useMemo(
-    () =>
-      buildTodayClasses(myAssignments, (ta) => {
-        const section = sectionList.find((s) => s.id === ta.section_id);
-        const memberCount = section?.member_count ?? 0;
-        return {
-          primaryMeta: ta.section_name || section?.name || 'Section',
-          secondaryMeta: `${memberCount} ${memberCount === 1 ? 'Student' : 'Students'}`,
-        };
-      }),
-    [myAssignments, sectionList]
+  const classMetaFor = useMemo(
+    () => (ta: TeachingAssignment) => {
+      const section = sectionList.find((s) => s.id === ta.section_id);
+      const memberCount = section?.member_count ?? 0;
+      return {
+        primaryMeta: ta.section_name || section?.name || 'Section',
+        secondaryMeta: `${memberCount} ${memberCount === 1 ? 'Student' : 'Students'}`,
+      };
+    },
+    [sectionList]
   );
-  const nextUpcomingClass = useMemo(() => findNextUpcomingClass(myAssignments), [myAssignments]);
+  const todayEntries = useMemo(
+    () => buildTodayClasses(myAssignments, classMetaFor),
+    [myAssignments, classMetaFor]
+  );
+  const nextUpcomingClass = useMemo(
+    () => findNextUpcomingClass(myAssignments, classMetaFor),
+    [myAssignments, classMetaFor]
+  );
 
   // Classes page - same assignments powering the reminder above, expanded
   // into one entry per scheduled day across the week (see buildWeekOccurrences).
@@ -173,6 +181,7 @@ export default function ProfessorDashboard() {
                   scheduleLabel="Today's Teaching"
                   entries={todayEntries}
                   nextUpcoming={nextUpcomingClass}
+                  coverPhoto={coverPhoto}
                 />
 
                 <CreatePost onCreatePost={handleCreatePost} isLoading={isPosting} dark avatarUrl={avatarUrl} />

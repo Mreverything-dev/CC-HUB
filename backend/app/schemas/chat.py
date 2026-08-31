@@ -72,6 +72,7 @@ class MessageResponse(BaseModel):
     media_name: Optional[str] = None
     reactions: List[MessageReactionSummary] = Field(default_factory=list)
     is_read: bool
+    is_deleted: bool = False
     created_at: datetime
     updated_at: datetime
 

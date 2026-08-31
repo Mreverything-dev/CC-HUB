@@ -52,6 +52,13 @@ class AnnouncementService:
         )
 
         section_target_ids = [t.target_id for t in (announcement.targets or []) if t.target_type == "section"]
+        # The response schema has always declared this field, but nothing
+        # ever actually set it on the ORM object - Pydantic's from_attributes
+        # silently fell back to its None default every time, so every
+        # section-scoping feature built against it (e.g. AnnouncementFeedBody's
+        # ?section= filter) was a no-op. Populating it here is what makes
+        # per-section announcement views actually work.
+        announcement.target_sections = section_target_ids
         if section_target_ids:
             section_result = await self.db.execute(
                 select(Section.name).where(Section.id.in_(section_target_ids))
@@ -95,7 +102,10 @@ class AnnouncementService:
         if announcement.created_by_role == "admin":
             return True
 
-        # Professor-authored announcement.
+        # Professor- or mayor/officer-authored announcement (a mayor/officer
+        # is still a "student" account, so this can't key off created_by_role
+        # here - staff can see every non-admin announcement regardless of
+        # who created it).
         if user.role in ("professor", "admin"):
             return True
 
@@ -205,20 +215,30 @@ class AnnouncementService:
         admin_announcements = admin_result.scalars().all()
         logger.info(f"📢 Found {len(admin_announcements)} admin announcements")
 
-        # Get professor announcements
+        # Get professor AND mayor/officer announcements. A mayor/officer is
+        # still a "student" account (create_announcement stores
+        # created_by_role=user.role, and their user.role is "student" - being
+        # mayor/officer is a per-section status, not an account role) - this
+        # used to only match created_by_role == "professor" here, which
+        # silently excluded every mayor/officer-authored announcement from
+        # this list for EVERYONE, including the section it was posted to and
+        # the officer who created it. The section-targeting logic below is
+        # otherwise already role-agnostic, so widening the role match is the
+        # whole fix.
         professor_announcements = []
-        
+        non_admin_roles = ["professor", "student"]
+
         if user.role == "student":
             student_sections = await self.get_student_sections(user_id)
             logger.info(f"📢 Student sections: {student_sections}")
-            
+
             if student_sections:
                 prof_result = await self.db.execute(
                     select(Announcement)
                     .options(selectinload(Announcement.targets), selectinload(Announcement.user))
                     .outerjoin(AnnouncementTarget, AnnouncementTarget.announcement_id == Announcement.id)
                     .where(
-                        Announcement.created_by_role == "professor",
+                        Announcement.created_by_role.in_(non_admin_roles),
                         Announcement.is_published == True,
                         or_(
                             # Announcement targets a specific section
@@ -241,23 +261,23 @@ class AnnouncementService:
                     .order_by(Announcement.created_at.desc())
                 )
                 professor_announcements = prof_result.scalars().all()
-                logger.info(f"📢 Found {len(professor_announcements)} professor announcements for student")
+                logger.info(f"📢 Found {len(professor_announcements)} professor/officer announcements for student")
             else:
                 logger.info(f"📢 Student has no sections")
                 professor_announcements = []
         else:
-            # Professors and admins can see all professor announcements
+            # Professors and admins can see all professor/officer announcements
             prof_result = await self.db.execute(
                 select(Announcement)
                 .options(selectinload(Announcement.targets), selectinload(Announcement.user))
                 .where(
-                    Announcement.created_by_role == "professor",
+                    Announcement.created_by_role.in_(non_admin_roles),
                     Announcement.is_published == True
                 )
                 .order_by(Announcement.created_at.desc())
             )
             professor_announcements = prof_result.scalars().all()
-            logger.info(f"📢 Found {len(professor_announcements)} professor announcements")
+            logger.info(f"📢 Found {len(professor_announcements)} professor/officer announcements")
 
         # Combine and return unique announcements
         all_announcements = list(admin_announcements) + list(professor_announcements)
@@ -513,43 +533,63 @@ class AnnouncementService:
     ) -> Announcement:
         """Update an announcement"""
         announcement = await self.get_announcement(announcement_id, user_id)
-        
+        editor = await self.get_user(user_id)
+
         # Check if user is the creator or admin
-        if str(announcement.user_id) != user_id:
-            user = await self.get_user(user_id)
-            if user.role != "admin":
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="You don't have permission to update this announcement"
-                )
-        
+        if str(announcement.user_id) != user_id and editor.role != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to update this announcement"
+            )
+
         # Update fields
         for key, value in data.model_dump(exclude_unset=True).items():
             if key not in ["target_roles", "target_sections"]:
                 setattr(announcement, key, value)
-        
+
         announcement.updated_at = datetime.utcnow()
         await self.db.commit()
         await self.db.refresh(announcement)
-        
+
         # Update targets if provided
         if data.target_sections is not None:
+            target_section_ids = data.target_sections
+
+            # A mayor/officer editing their own announcement is restricted
+            # exactly like at creation time - only their own officiated
+            # section(s), never arbitrary/public. Without this, sending
+            # target_sections: [] here would silently strip every target,
+            # which _can_view treats as visible to every student (i.e. a
+            # public announcement) - the exact bypass this endpoint must
+            # not allow. Admins and professors are unrestricted here, same
+            # as before this fix.
+            if editor.role not in ("admin", "professor"):
+                officer_section_ids = await self.get_officer_sections(user_id)
+                if not officer_section_ids:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="You no longer have permission to manage this announcement's sections",
+                    )
+                target_section_ids = [
+                    sid for sid in target_section_ids if sid in officer_section_ids
+                ] or officer_section_ids
+
             # Remove existing targets
             await self.db.execute(
                 AnnouncementTarget.__table__.delete().where(
                     AnnouncementTarget.announcement_id == announcement_id
                 )
             )
-            
+
             # Add new targets
-            for section_id in data.target_sections:
+            for section_id in target_section_ids:
                 target = AnnouncementTarget(
                     announcement_id=announcement.id,
                     target_type="section",
                     target_id=section_id
                 )
                 self.db.add(target)
-            
+
             await self.db.commit()
             await self.db.refresh(announcement)
         

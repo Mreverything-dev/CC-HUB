@@ -112,7 +112,13 @@ class FriendService:
                 detail="Unable to send a friend request to this user"
             )
 
-        # Check if already friends
+        # Check if already friends. A friendship is stored as two Friend rows
+        # (one per direction - see respond_to_friend_request), so this OR
+        # query can legitimately match both at once: scalar_one_or_none()
+        # raises MultipleResultsFound in that case rather than returning a
+        # truthy value, which crashed this endpoint with a 500 for anyone
+        # already friends with the target. scalars().first() just needs "is
+        # there at least one row", so it's safe with 0, 1, or 2 matches.
         result = await self.db.execute(
             select(Friend).where(
                 or_(
@@ -121,26 +127,45 @@ class FriendService:
                 )
             )
         )
-        if result.scalar_one_or_none():
+        if result.scalars().first():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Already friends with this user"
             )
         
-        # Check if request already exists
+        # Check if a pending request already exists BETWEEN these two users in
+        # either direction - not just this exact sender->receiver direction.
+        # Without the reverse check, if A already sent B a request and B (not
+        # having responded yet) tries to add A back, a second, independent
+        # pending request gets created; if both are later accepted
+        # separately, two Friend row-pairs get created for the same pair of
+        # users (duplicate friendships).
         result = await self.db.execute(
             select(FriendRequest).where(
-                and_(
-                    FriendRequest.sender_id == sender_id,
-                    FriendRequest.receiver_id == data.receiver_id,
-                    FriendRequest.status == 'pending'
+                or_(
+                    and_(
+                        FriendRequest.sender_id == sender_id,
+                        FriendRequest.receiver_id == data.receiver_id,
+                        FriendRequest.status == 'pending'
+                    ),
+                    and_(
+                        FriendRequest.sender_id == data.receiver_id,
+                        FriendRequest.receiver_id == sender_id,
+                        FriendRequest.status == 'pending'
+                    ),
                 )
             )
         )
-        if result.scalar_one_or_none():
+        existing_request = result.scalar_one_or_none()
+        if existing_request:
+            if str(existing_request.sender_id) == sender_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Friend request already sent"
+                )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Friend request already sent"
+                detail="This user already sent you a friend request - accept it instead"
             )
         
         # Create friend request
@@ -197,26 +222,51 @@ class FriendService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Request already {friend_request.status}"
             )
-        
-        # Update status
-        friend_request.status = data.status
-        friend_request.updated_at = datetime.utcnow()
+
+        # Atomic conditional update: only succeeds if the request is still
+        # 'pending' at the moment this runs, closing the race where two
+        # concurrent responses to the same request (double-click, retried
+        # request) could both pass the status check above before either
+        # commits, and both go on to create a friendship below.
+        update_result = await self.db.execute(
+            update(FriendRequest)
+            .where(FriendRequest.id == request_id, FriendRequest.status == 'pending')
+            .values(status=data.status, updated_at=datetime.utcnow())
+        )
         await self.db.commit()
+        if update_result.rowcount == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This request was already responded to"
+            )
         await self.db.refresh(friend_request)
-        
-        # If accepted, create friendship
+
+        # If accepted, create friendship (idempotent - defensive against any
+        # pre-existing Friend rows between these two users, e.g. from an
+        # older duplicate/opposite-direction request accepted separately).
         if data.status == 'accepted':
-            # Add both directions
-            friend1 = Friend(
-                user_id=friend_request.sender_id,
-                friend_id=friend_request.receiver_id
+            existing_friend_result = await self.db.execute(
+                select(Friend).where(
+                    or_(
+                        and_(Friend.user_id == friend_request.sender_id, Friend.friend_id == friend_request.receiver_id),
+                        and_(Friend.user_id == friend_request.receiver_id, Friend.friend_id == friend_request.sender_id),
+                    )
+                )
             )
-            friend2 = Friend(
-                user_id=friend_request.receiver_id,
-                friend_id=friend_request.sender_id
-            )
-            self.db.add_all([friend1, friend2])
-            await self.db.commit()
+            # .first(), not scalar_one_or_none() - an existing friendship is
+            # two rows (both directions) and this OR can match both at once.
+            if not existing_friend_result.scalars().first():
+                # Add both directions
+                friend1 = Friend(
+                    user_id=friend_request.sender_id,
+                    friend_id=friend_request.receiver_id
+                )
+                friend2 = Friend(
+                    user_id=friend_request.receiver_id,
+                    friend_id=friend_request.sender_id
+                )
+                self.db.add_all([friend1, friend2])
+                await self.db.commit()
 
             # ✅ Send notification to sender
             responder_result = await self.db.execute(
@@ -226,7 +276,18 @@ class FriendService:
             responder_name = responder.username if responder else "Someone"
             responder_avatar = await self._get_avatar_url(user_id, responder.role) if responder else None
             await self.create_notification(
-                user_id=friend_request.sender_id,
+                # str(...) matters here: friend_request.sender_id is a raw
+                # ORM UUID object, but manager.send_to_user() matches it
+                # against active_connections' user_id (a plain string from
+                # the JWT payload) with `==` - a UUID never equals its own
+                # string form in Python, so without this the notification
+                # row was still created correctly but the real-time
+                # WebSocket push to the original sender silently never went
+                # out, leaving their friend list stale until a manual
+                # refresh (compare the other create_notification call above,
+                # which already passes data.receiver_id - a Pydantic-
+                # validated str - and works correctly).
+                user_id=str(friend_request.sender_id),
                 type="friend_accepted",
                 title="Friend Request Accepted",
                 content=f"{responder_name} accepted your friend request",

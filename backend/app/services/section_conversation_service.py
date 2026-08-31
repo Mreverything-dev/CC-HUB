@@ -52,13 +52,22 @@ class SectionConversationService:
         return conversation
 
     async def _ensure_member(self, conversation_id, user_id: str):
-        existing = await self.db.execute(
+        existing_result = await self.db.execute(
             select(ConversationMember).where(
                 ConversationMember.conversation_id == conversation_id,
                 ConversationMember.user_id == user_id,
             )
         )
-        if existing.scalar_one_or_none():
+        existing = existing_result.scalar_one_or_none()
+        if existing:
+            # Re-opening the section (this is called on every "get the
+            # section's group chat" request) also restores it if the caller
+            # had previously "deleted" it from their own chat list - a
+            # deliberate re-open is as good a restore signal as a new
+            # message arriving (see ChatService.send_message).
+            if existing.hidden_at is not None:
+                existing.hidden_at = None
+                await self.db.commit()
             return
         self.db.add(ConversationMember(conversation_id=conversation_id, user_id=self._as_uuid(user_id)))
         await self.db.commit()

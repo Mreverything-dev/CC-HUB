@@ -115,7 +115,16 @@ export default function ClassesPage({ occurrences, sectionsCount, totalHours, is
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6">
+    // max-h + overflow-y-auto keeps this page's own content scrolling
+    // internally instead of growing the dashboard's <main> taller than the
+    // viewport (which is what shows the browser's native right-edge
+    // scrollbar) - scrollbar-hide keeps that scrolling fully working via
+    // wheel/trackpad/touch, just without a visible bar. 8rem covers the
+    // Topbar height plus <main>'s own py-6 padding both above AND below
+    // this container (measured empirically: ~100px top offset + 24px
+    // bottom padding on the shared dashboard shell, rounded up for a small
+    // safety margin).
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 max-h-[calc(100vh-8rem)] overflow-y-auto scrollbar-hide">
       {/* Header */}
       <div className="relative mb-8">
         <div className="absolute -top-20 -right-20 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl" />
@@ -171,7 +180,7 @@ export default function ClassesPage({ occurrences, sectionsCount, totalHours, is
           transition={{ duration: 0.3 }}
           className="rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-800/40 to-slate-900/40 backdrop-blur-xl shadow-xl overflow-hidden"
         >
-          <div className="overflow-x-auto themed-scrollbar">
+          <div className="overflow-x-auto scrollbar-hide">
             <table className="w-full min-w-[760px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-slate-700/50 bg-white/[0.03]">

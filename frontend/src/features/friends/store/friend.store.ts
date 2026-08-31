@@ -77,11 +77,18 @@ export const useFriendStore = create<FriendState>((set) => ({
   
   setNotifications: (notifications) => set({ notifications }),
   
-  // ✅ Add a notification
-  addNotification: (notification) => set((state) => ({
-    notifications: [notification, ...state.notifications],
-    unreadNotifications: state.unreadNotifications + 1
-  })),
+  // ✅ Add a notification - de-duped by id, since useFriends() (and its
+  // socket listener) is legitimately mounted by several components at once
+  // (NotificationBell in every Topbar, plus FriendsPage/ProfilePage/
+  // ChatWindow/ChatList), so the same server-pushed notification can arrive
+  // through more than one of those listeners for the same event.
+  addNotification: (notification) => set((state) => {
+    if (state.notifications.some((n) => n.id === notification.id)) return state;
+    return {
+      notifications: [notification, ...state.notifications],
+      unreadNotifications: state.unreadNotifications + 1
+    };
+  }),
   
   // ✅ Mark a notification as read
   markNotificationRead: (id) => set((state) => ({

@@ -21,9 +21,17 @@ interface ChatState {
   setCurrentConversation: (conversation: Conversation | null) => void;
   addConversation: (conversation: Conversation) => void;
   updateConversation: (id: string, data: Partial<Conversation>) => void;
+  /** "Delete Chat" - drops it from the local list/current-selection only;
+   * the actual conversation on the server is untouched. */
+  removeConversation: (id: string) => void;
   setMessages: (messages: Message[]) => void;
   addMessage: (message: Message) => void;
   updateMessage: (id: string, data: Partial<Message>) => void;
+  /** "Remove for Me" - drops one message from the caller's own local view
+   * only; nothing changes on the server for anyone else (contrast with
+   * updateMessage(id, { is_deleted: true, ... }), which is what "Unsend"
+   * uses via the message:unsent broadcast, visible to everyone). */
+  removeMessage: (id: string) => void;
   setUnreadCount: (count: number) => void;
   incrementUnreadCount: () => void;
   resetUnreadCount: () => void;
@@ -73,6 +81,11 @@ export const useChatStore = create<ChatState>((set) => ({
       ? { ...state.currentConversation, ...data }
       : state.currentConversation
   })),
+
+  removeConversation: (id) => set((state) => ({
+    conversations: state.conversations.filter((c) => c.id !== id),
+    currentConversation: state.currentConversation?.id === id ? null : state.currentConversation
+  })),
   
   setMessages: (messages) => set({ messages }),
   
@@ -85,7 +98,12 @@ export const useChatStore = create<ChatState>((set) => ({
       m.id === id ? { ...m, ...data } : m
     )
   })),
-  
+
+  removeMessage: (id) => set((state) => ({
+    messages: state.messages.filter((m) => m.id !== id)
+  })),
+
+
   setUnreadCount: (unreadCount) => set({ unreadCount }),
   
   incrementUnreadCount: () => set((state) => ({

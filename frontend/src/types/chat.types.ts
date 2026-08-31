@@ -39,6 +39,7 @@ export interface Message {
   media_name?: string | null;
   reactions: MessageReactionEntry[];
   is_read: boolean;
+  is_deleted?: boolean;
   created_at: string;
   updated_at: string;
 }

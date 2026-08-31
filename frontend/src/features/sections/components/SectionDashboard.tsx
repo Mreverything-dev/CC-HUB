@@ -5,7 +5,6 @@ import toast from 'react-hot-toast';
 import {
   UserGroupIcon,
   AcademicCapIcon,
-  CalendarIcon,
   UsersIcon,
   ChevronDownIcon,
   MagnifyingGlassIcon,
@@ -20,14 +19,18 @@ import {
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { useSections } from '../hooks/useSections';
 import { useChat } from '@/features/chat/hooks/useChat';
+import { useAnnouncements } from '@/features/announcements/hooks/useAnnouncements';
 import { profileService } from '@/services/api/profile.service';
 import { Avatar } from '@/features/dashboard/components/Avatar';
 import { RoleBadge } from '@/features/dashboard/components/RoleBadge';
 import { Section, SectionMember, TeachingAssignment } from '@/types/section.types';
+import { Announcement } from '@/types/announcement.types';
+import { formatLastFirstName, formatRelativeTime, formatScheduleTime } from '@/lib/formatters';
 import AddStudentModal from './AddStudentModal';
 import CreateSectionModal from './CreateSectionModal';
 import SectionDetailModal from './SectionDetailModal';
 import { TeachingAssignmentOnboardingBanner } from './TeachingAssignmentOnboardingBanner';
+import { ProfessorDetailsModal } from './ProfessorDetailsModal';
 import { CreateAnnouncement } from '@/features/announcements/components/CreateAnnouncement';
 
 interface SectionDashboardProps {
@@ -42,16 +45,6 @@ const STUDENTS_PAGE_SIZE = 10;
 
 const inputClassName =
   'w-full px-3.5 py-2.5 rounded-xl border border-[#1E3447] bg-[#0A111A] text-sm text-[#F1F5F9] placeholder-[#64748B] focus:outline-none focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition';
-
-// "HH:MM:SS" (the backend's Time column) -> "2:30 PM" - a schedule-string
-// formatter, distinct from lib/formatters.ts's formatTime which formats a
-// full Date/timestamp, not a bare time-of-day string.
-function formatScheduleTime(t: string) {
-  const [h, m] = t.split(':').map(Number);
-  const period = h >= 12 ? 'PM' : 'AM';
-  const hour12 = h % 12 === 0 ? 12 : h % 12;
-  return `${hour12}:${String(m).padStart(2, '0')} ${period}`;
-}
 
 function CrownIcon({ className }: { className?: string }) {
   return (
@@ -74,6 +67,7 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
   const navigate = useNavigate();
   const { sections, isLoading, getSection, refetch, getSectionConversation } = useSections();
   const { createDirectConversation, openWidget, setCurrentConversation, refetchConversations } = useChat();
+  const { announcements } = useAnnouncements();
 
   const [selectedSectionId, setSelectedSectionId] = useState<string | null>(initialSectionId || null);
   const [showSectionSwitcher, setShowSectionSwitcher] = useState(false);
@@ -83,6 +77,7 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
   const [openingChat, setOpeningChat] = useState(false);
   const [selectedProfessorId, setSelectedProfessorId] = useState<string | null>(null);
   const [showProfessorSwitcher, setShowProfessorSwitcher] = useState(false);
+  const [showProfessorDetails, setShowProfessorDetails] = useState(false);
   const [search, setSearch] = useState('');
   const [showAllStudents, setShowAllStudents] = useState(false);
   const [messagingUserId, setMessagingUserId] = useState<string | null>(null);
@@ -167,7 +162,15 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
 
   const mayor = members.find((m) => m.is_mayor) || null;
   const officer = members.find((m) => m.is_officer && !m.is_mayor) || null;
-  const regularStudents = members.filter((m) => !m.is_mayor);
+  // Alphabetical by last name (falling back to first name/username for a
+  // member who hasn't set a real name yet) - the roster convention used
+  // throughout this page, not just insertion/join order.
+  const studentSortKey = (m: SectionMember) =>
+    (m.user_last_name || m.user_first_name || m.user_username || '').toLowerCase();
+  const regularStudents = members
+    .filter((m) => !m.is_mayor)
+    .slice()
+    .sort((a, b) => studentSortKey(a).localeCompare(studentSortKey(b)));
   // Total section membership (students + Mayor + Officer), not just the
   // students shown in the grid below - the Mayor has their own dedicated
   // card and is intentionally left out of that grid, but must still count.
@@ -219,6 +222,18 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
 
   const visibleStudents =
     showAllStudents || search.trim() ? filteredStudents : filteredStudents.slice(0, STUDENTS_PAGE_SIZE);
+
+  // Announcements actually targeted at this section (not CCS-wide/public
+  // ones) - reuses the existing announcement list/permissions wholesale,
+  // just narrowed client-side to this section's own feed. Newest first,
+  // capped to what the compact sidebar widget can show.
+  const sectionAnnouncements = useMemo(() => {
+    if (!section) return [];
+    return (announcements as Announcement[])
+      .filter((a) => a.target_sections?.includes(section.id))
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 4);
+  }, [announcements, section]);
 
   const handleMessage = async (userId: string) => {
     if (userId === user?.id) return;
@@ -475,20 +490,29 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
                   return (
                     <div>
                       <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                        <Avatar src={first.professor_avatar} name={fullName} size="lg" />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-base font-semibold text-[#F1F5F9] truncate">Prof. {fullName}</p>
-                            <RoleBadge role="professor" />
+                        <button
+                          type="button"
+                          onClick={() => setShowProfessorDetails(true)}
+                          title="View professor details"
+                          className="group flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-4 text-left rounded-xl -m-1.5 p-1.5 hover:bg-white/5 active:bg-white/10 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00C8FF]/60"
+                        >
+                          <Avatar src={first.professor_avatar} name={fullName} size="lg" />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-base font-semibold text-[#F1F5F9] truncate group-hover:text-[#00C8FF] transition-colors">
+                                Prof. {fullName}
+                              </p>
+                              <RoleBadge role="professor" />
+                            </div>
+                            <p className="text-sm text-[#94A3B8] mt-0.5 truncate">Subject: {subjectLine}</p>
+                            {first.schedule_days.length > 0 && first.schedule_start && first.schedule_end && (
+                              <p className="text-xs text-[#64748B] mt-0.5">
+                                Schedule: {first.schedule_days.join(', ')} {formatScheduleTime(first.schedule_start)}-
+                                {formatScheduleTime(first.schedule_end)}
+                              </p>
+                            )}
                           </div>
-                          <p className="text-sm text-[#94A3B8] mt-0.5 truncate">Subject: {subjectLine}</p>
-                          {first.schedule_days.length > 0 && first.schedule_start && first.schedule_end && (
-                            <p className="text-xs text-[#64748B] mt-0.5">
-                              Schedule: {first.schedule_days.join(', ')} {formatScheduleTime(first.schedule_start)}-
-                              {formatScheduleTime(first.schedule_end)}
-                            </p>
-                          )}
-                        </div>
+                        </button>
                         {first.professor_id !== user?.id && (
                           <button
                             onClick={() => handleMessage(first.professor_id)}
@@ -567,7 +591,9 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
                     <div className="flex items-center gap-3">
                       <Avatar src={mayor.user_avatar} name={mayor.user_username || undefined} size="md" />
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-[#F1F5F9] truncate">{mayor.user_username}</p>
+                        <p className="text-sm font-semibold text-[#F1F5F9] truncate">
+                          {formatLastFirstName(mayor.user_first_name, mayor.user_last_name, mayor.user_username)}
+                        </p>
                         <span className="inline-block mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#F5B82E] bg-[#F5B82E]/10 border border-[#F5B82E]/30 rounded-full px-2 py-0.5">
                           Mayor
                         </span>
@@ -605,7 +631,9 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
                     <div className="flex items-center gap-3">
                       <Avatar src={officer.user_avatar} name={officer.user_username || undefined} size="md" />
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-[#F1F5F9] truncate">{officer.user_username}</p>
+                        <p className="text-sm font-semibold text-[#F1F5F9] truncate">
+                          {formatLastFirstName(officer.user_first_name, officer.user_last_name, officer.user_username)}
+                        </p>
                         <span className="inline-block mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#3B9EFF] bg-[#3B9EFF]/10 border border-[#3B9EFF]/30 rounded-full px-2 py-0.5">
                           Officer
                         </span>
@@ -674,9 +702,17 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                     {visibleStudents.map((member: SectionMember) => {
+                      // Avatar initials/alt text use natural "First Last" order;
+                      // the visible label uses the roster's "Last, First"
+                      // convention (see formatLastFirstName).
                       const fullName = member.user_first_name
                         ? `${member.user_first_name} ${member.user_last_name || ''}`.trim()
                         : member.user_username || 'Student';
+                      const displayName = formatLastFirstName(
+                        member.user_first_name,
+                        member.user_last_name,
+                        member.user_username
+                      );
                       return (
                         <div
                           key={member.id}
@@ -694,7 +730,7 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
                           <div className="flex items-center gap-2.5">
                             <Avatar src={member.user_avatar} name={fullName} size="sm" />
                             <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium text-[#F1F5F9] truncate">{fullName}</p>
+                              <p className="text-sm font-medium text-[#F1F5F9] truncate">{displayName}</p>
                               <span className="text-[10px] font-medium text-[#94A3B8] bg-white/5 border border-[#1E3447] rounded-full px-1.5 py-0.5">
                                 {member.is_officer ? 'Officer' : 'Student'}
                               </span>
@@ -713,7 +749,6 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
                               </button>
                             )}
                           </div>
-                          <p className="text-xs text-[#64748B] truncate mt-1.5">{member.user_email}</p>
                         </div>
                       );
                     })}
@@ -734,139 +769,93 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
 
           {/* Right sidebar */}
           <div className="space-y-5 xl:sticky xl:top-24 xl:self-start">
-            {/* About */}
+            {/* Section Announcement - the existing Announcement system's data
+                and permissions, narrowed to just this section's own feed
+                (see sectionAnnouncements above). Each entry opens the real
+                announcement detail page; "View all" opens the dedicated
+                per-section announcement view. */}
             <div className="rounded-2xl border border-[#1E3447] bg-[#0D1722] p-4">
-              <h3 className="font-semibold text-[#F1F5F9] mb-3">About This Section</h3>
-              <dl className="space-y-2.5 text-sm">
-                {[
-                  { icon: UserGroupIcon, label: 'Section', value: section.name },
-                  { icon: AcademicCapIcon, label: 'Program', value: section.course || '—' },
-                  { icon: CalendarIcon, label: 'Year', value: section.year_level ? `Year ${section.year_level}` : '—' },
-                  { icon: CalendarIcon, label: 'School Year', value: section.academic_year || '—' },
-                  { icon: UsersIcon, label: 'Total Students', value: String(totalStudentCount) },
-                ].map(({ icon: Icon, label, value }) => (
-                  <div key={label} className="flex items-start gap-2.5">
-                    <Icon className="h-4 w-4 text-[#64748B] mt-0.5 flex-shrink-0" />
-                    <div>
-                      <dt className="text-[#64748B] text-xs">{label}</dt>
-                      <dd className="text-[#F1F5F9]">{value}</dd>
-                    </div>
-                  </div>
-                ))}
-              </dl>
-            </div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="flex items-center gap-2 font-semibold text-[#F1F5F9]">
+                  <MegaphoneIcon className="h-4 w-4 text-[#00C8FF]" />
+                  Section Announcement
+                </h3>
+                <button
+                  onClick={() => navigate(`/announcements?section=${section.id}`)}
+                  className="text-xs text-[#00C8FF] hover:text-[#00E0FF] hover:underline"
+                >
+                  View all
+                </button>
+              </div>
 
-            {/* Professor Details - kept in sync with the professor selected
-                in the main Professor card's dropdown above. */}
-            <div className="rounded-2xl border border-[#1E3447] bg-[#0D1722] p-4">
-              <h3 className="font-semibold text-[#F1F5F9]">Professor Details</h3>
-              {!selectedProfessorAssignments ? (
-                <p className="text-sm text-[#64748B] py-2 mt-1">No professor assigned yet.</p>
+              {sectionAnnouncements.length === 0 ? (
+                <div className="text-center py-6">
+                  <MegaphoneIcon className="h-6 w-6 text-[#1E3447] mx-auto mb-2" />
+                  <p className="text-xs text-[#64748B]">No announcements for this section yet.</p>
+                </div>
               ) : (
-                (() => {
-                  const first = selectedProfessorAssignments[0];
-                  const fullName = first.professor_first_name
-                    ? `${first.professor_first_name} ${first.professor_last_name || ''}`.trim()
-                    : first.professor_username || 'Professor';
-                  return (
-                    <div className="mt-3">
-                      <div className="flex items-center gap-2.5">
-                        <Avatar src={first.professor_avatar} name={fullName} size="md" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-[#F1F5F9] truncate">Prof. {fullName}</p>
-                          <RoleBadge role="professor" className="mt-0.5" />
-                        </div>
+                <div className="space-y-1">
+                  {sectionAnnouncements.map((a) => (
+                    <button
+                      key={a.id}
+                      onClick={() => navigate(`/announcements/${a.id}`)}
+                      className="w-full flex items-start gap-2.5 px-2 py-2 rounded-xl hover:bg-white/5 transition text-left"
+                    >
+                      <Avatar src={a.created_by_avatar} name={a.created_by_username || undefined} size="sm" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-[#F1F5F9] truncate">{a.title}</p>
+                        <p className="text-xs text-[#64748B] mt-0.5 truncate">
+                          {a.created_by_username || 'Unknown'} &middot; {formatRelativeTime(a.created_at)}
+                        </p>
                       </div>
-
-                      <p className="text-xs font-semibold uppercase tracking-wide text-[#64748B] mt-4 mb-2">
-                        Subjects
-                      </p>
-                      <div className="space-y-2">
-                        {selectedProfessorAssignments.map((ta) => (
-                          <div key={ta.id} className="rounded-xl border border-[#1E3447] bg-[#0A111A] p-2.5">
-                            <p className="text-sm font-medium text-[#F1F5F9]">
-                              {ta.subject}
-                              {ta.subject_code && (
-                                <span className="ml-1.5 text-xs font-normal text-[#64748B]">({ta.subject_code})</span>
-                              )}
-                            </p>
-                            {ta.schedule_days.length > 0 && ta.schedule_start && ta.schedule_end ? (
-                              <p className="text-xs text-[#94A3B8] mt-0.5">
-                                {ta.schedule_days.join(', ')} &middot; {formatScheduleTime(ta.schedule_start)}-
-                                {formatScheduleTime(ta.schedule_end)}
-                                {ta.room ? ` · ${ta.room}` : ''}
-                              </p>
-                            ) : (
-                              <p className="text-xs text-[#64748B] mt-0.5">Schedule not set</p>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-
-                      {first.professor_id !== user?.id && (
-                        <button
-                          onClick={() => handleMessage(first.professor_id)}
-                          disabled={messagingUserId === first.professor_id}
-                          className="w-full mt-3 flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-semibold border border-[#00C8FF]/30 bg-[#00C8FF]/10 text-[#00C8FF] rounded-xl hover:bg-[#00C8FF]/20 transition disabled:opacity-50"
-                        >
-                          <ChatBubbleLeftIcon className="h-4 w-4" />
-                          Message
-                        </button>
-                      )}
-                    </div>
-                  );
-                })()
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
 
-            {/* Quick Actions */}
+            {/* Quick Actions - compact icon buttons only, no descriptive
+                welcome copy. Same handlers/permissions as before, just a
+                denser presentation. */}
             <div className="rounded-2xl border border-[#1E3447] bg-[#0D1722] p-4">
               <h3 className="font-semibold text-[#F1F5F9] mb-3">Quick Actions</h3>
-              <div className="space-y-1">
+              <div className="grid grid-cols-2 gap-2.5">
                 {canPostAnnouncement && (
                   <button
                     onClick={() => setShowCreateAnnouncement(true)}
-                    className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-[#F1F5F9] hover:bg-white/5 rounded-xl transition"
+                    title="Create Announcement"
+                    className="flex flex-col items-center justify-center gap-1.5 px-2 py-3.5 rounded-xl border border-[#1E3447] bg-[#0A111A] hover:border-[#00C8FF]/40 hover:bg-white/5 transition text-center"
                   >
-                    <span className="flex items-center gap-2">
-                      <MegaphoneIcon className="h-4 w-4 text-[#00C8FF]" />
-                      Create Announcement
-                    </span>
-                    <ChevronDownIcon className="h-3.5 w-3.5 text-[#64748B] -rotate-90" />
+                    <PlusIcon className="h-5 w-5 text-[#00C8FF]" />
+                    <span className="text-xs font-medium text-[#F1F5F9] leading-tight">Create Announcement</span>
                   </button>
                 )}
                 <button
                   onClick={() => section && navigate(`/announcements?section=${section.id}`)}
                   disabled={!section}
-                  className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-[#F1F5F9] hover:bg-white/5 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                  title="View Announcements"
+                  className="flex flex-col items-center justify-center gap-1.5 px-2 py-3.5 rounded-xl border border-[#1E3447] bg-[#0A111A] hover:border-[#00C8FF]/40 hover:bg-white/5 transition text-center disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#0A111A]"
                 >
-                  <span className="flex items-center gap-2">
-                    <SpeakerWaveIcon className="h-4 w-4 text-[#00C8FF]" />
-                    View Announcements
-                  </span>
-                  <ChevronDownIcon className="h-3.5 w-3.5 text-[#64748B] -rotate-90" />
+                  <SpeakerWaveIcon className="h-5 w-5 text-[#00C8FF]" />
+                  <span className="text-xs font-medium text-[#F1F5F9] leading-tight">View Announcements</span>
                 </button>
                 <button
                   onClick={handleOpenSectionChat}
                   disabled={!section || openingChat}
-                  className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-[#F1F5F9] hover:bg-white/5 rounded-xl transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                  title="Section Chat"
+                  className="flex flex-col items-center justify-center gap-1.5 px-2 py-3.5 rounded-xl border border-[#1E3447] bg-[#0A111A] hover:border-[#00C8FF]/40 hover:bg-white/5 transition text-center disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#0A111A]"
                 >
-                  <span className="flex items-center gap-2">
-                    <ChatBubbleLeftIcon className="h-4 w-4 text-[#00C8FF]" />
-                    {openingChat ? 'Opening Section Chat...' : 'Section Chat'}
-                  </span>
-                  <ChevronDownIcon className="h-3.5 w-3.5 text-[#64748B] -rotate-90" />
+                  <ChatBubbleLeftIcon className="h-5 w-5 text-[#00C8FF]" />
+                  <span className="text-xs font-medium text-[#F1F5F9] leading-tight">Section Chat</span>
                 </button>
                 {canManage && (
                   <button
                     onClick={() => setShowManageSection(true)}
-                    className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-[#F1F5F9] hover:bg-white/5 rounded-xl transition"
+                    title="Manage Section"
+                    className="flex flex-col items-center justify-center gap-1.5 px-2 py-3.5 rounded-xl border border-[#1E3447] bg-[#0A111A] hover:border-[#00C8FF]/40 hover:bg-white/5 transition text-center"
                   >
-                    <span className="flex items-center gap-2">
-                      <Cog6ToothIcon className="h-4 w-4 text-[#00C8FF]" />
-                      Manage Section
-                    </span>
-                    <ChevronDownIcon className="h-3.5 w-3.5 text-[#64748B] -rotate-90" />
+                    <Cog6ToothIcon className="h-5 w-5 text-[#00C8FF]" />
+                    <span className="text-xs font-medium text-[#F1F5F9] leading-tight">Manage Section</span>
                   </button>
                 )}
               </div>
@@ -895,6 +884,16 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
 
       {showCreateAnnouncement && section && (
         <CreateAnnouncement defaultSectionId={section.id} onClose={() => setShowCreateAnnouncement(false)} />
+      )}
+
+      {showProfessorDetails && selectedProfessorAssignments && (
+        <ProfessorDetailsModal
+          assignments={selectedProfessorAssignments}
+          onClose={() => setShowProfessorDetails(false)}
+          onMessage={() => handleMessage(selectedProfessorAssignments[0].professor_id)}
+          isMessaging={messagingUserId === selectedProfessorAssignments[0].professor_id}
+          showMessageButton={selectedProfessorAssignments[0].professor_id !== user?.id}
+        />
       )}
     </div>
   );

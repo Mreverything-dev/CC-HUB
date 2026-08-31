@@ -13,6 +13,11 @@ export const chatApi = {
   createGroupConversation: (data: ConversationCreate) =>
     api.post<Conversation>('/chat/conversations/group', data),
 
+  // "Delete Chat" - removes the conversation from the caller's own list
+  // only (their membership, and everyone else's access, is untouched).
+  deleteConversation: (conversationId: string) =>
+    api.delete<{ message: string }>(`/chat/conversations/${conversationId}`),
+
   // Group chat members + logo
   getGroupMembers: (conversationId: string) =>
     api.get<GroupMember[]>(`/chat/conversations/${conversationId}/members`),
@@ -33,6 +38,12 @@ export const chatApi = {
   sendMessage: (data: MessageCreate) => 
     api.post<Message>('/chat/messages', data),
   
-  markMessageRead: (messageId: string) => 
+  markMessageRead: (messageId: string) =>
     api.post(`/chat/messages/${messageId}/read`),
+
+  // "Remove for Me" - hides one message from the caller's own view only.
+  // "Unsend" (visible to everyone) goes over the socket instead - see
+  // socketService.unsendMessage - since it needs to broadcast in real time.
+  removeMessageForMe: (messageId: string) =>
+    api.post<{ message_id: string }>(`/chat/messages/${messageId}/remove-for-me`),
 };

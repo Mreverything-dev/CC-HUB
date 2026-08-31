@@ -1,6 +1,6 @@
 # backend/app/schemas/friend.py
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from typing import Optional, List
+from typing import Literal, Optional, List
 from datetime import datetime
 import uuid
 
@@ -11,7 +11,7 @@ class FriendRequestCreate(FriendRequestBase):
     receiver_id: str
 
 class FriendRequestUpdate(BaseModel):
-    status: str  # 'accepted' or 'rejected'
+    status: Literal['accepted', 'rejected']
 
 class FriendRequestResponse(BaseModel):
     id: str

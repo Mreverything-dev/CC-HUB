@@ -58,6 +58,19 @@ export const formatTime = (date: Date | string) => {
   });
 };
 
+/**
+ * "HH:MM:SS" (the backend's Time column, e.g. a TeachingAssignment's
+ * schedule_start/schedule_end) -> "2:30 PM". Distinct from formatTime above,
+ * which formats a full Date/timestamp, not a bare time-of-day string - used
+ * anywhere a class schedule is shown (Section dashboard, professor details).
+ */
+export function formatScheduleTime(t: string): string {
+  const [h, m] = t.split(':').map(Number);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return `${hour12}:${String(m).padStart(2, '0')} ${period}`;
+}
+
 // Chat-style relative time: "Just now", "2 mins ago", "1hr ago", "3d ago", then a short date.
 export const formatChatTime = (date: Date | string) => {
   const target = parseServerDate(date).getTime();
@@ -92,6 +105,22 @@ export function localInputToUtcIso(localDateTimeValue: string): string {
  * on the time of day. */
 export function todayLocalIso(): string {
   return new Date().toLocaleDateString('en-CA');
+}
+
+/**
+ * "Perciba, Limwel" - Last Name, First Name, the roster display convention
+ * used throughout the Section dashboard. Falls back to just whichever of
+ * first/last name is set, then to a username, then a generic label - a
+ * freshly-added student has no StudentProfile name yet (see
+ * SectionDashboard's needsRealName flow) until they set one.
+ */
+export function formatLastFirstName(
+  firstName?: string | null,
+  lastName?: string | null,
+  fallback?: string | null
+): string {
+  if (firstName && lastName) return `${lastName}, ${firstName}`;
+  return lastName || firstName || fallback || 'Student';
 }
 
 /** "00:03:42" style elapsed-time clock, e.g. for a live stream's running

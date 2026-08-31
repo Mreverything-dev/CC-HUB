@@ -21,12 +21,14 @@ function matchesSidebarFilter(a: Announcement, search: string, filter: Announcem
 // The backend already only ever returns announcements a student's own
 // sections (plus public/CCS-wide ones) can see - this narrows that
 // already-correctly-scoped list further, to just one specific section, for
-// the Section page's "View Announcements" quick action. Reuses the existing
-// target_sections field already on each announcement; no new API call.
+// the Section page's "View Announcements" quick action / Section Announcement
+// widget. Strictly section-targeted only (excludes CCS-wide/public
+// announcements) so a section's dedicated view only ever shows what was
+// actually posted to that section. Reuses the existing target_sections field
+// already on each announcement; no new API call.
 function matchesSection(a: Announcement, sectionId: string | null): boolean {
   if (!sectionId) return true;
-  const isGlobal = !a.target_sections || a.target_sections.length === 0;
-  return isGlobal || (a.target_sections?.includes(sectionId) ?? false);
+  return a.target_sections?.includes(sectionId) ?? false;
 }
 
 /**

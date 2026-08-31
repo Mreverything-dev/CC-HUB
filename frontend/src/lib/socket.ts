@@ -126,6 +126,15 @@ class SocketService {
       useChatStore.getState().updateMessage(data.message_id, { reactions: data.reactions });
     });
 
+    this.socket.on('message:unsent', (data: { message_id: string; is_deleted: boolean; content: string; media_url: null; media_name: null }) => {
+      useChatStore.getState().updateMessage(data.message_id, {
+        is_deleted: data.is_deleted,
+        content: data.content,
+        media_url: data.media_url,
+        media_name: data.media_name,
+      });
+    });
+
     this.socket.on('user_typing', (data: { user_id: string; conversation_id: string; is_typing: boolean }) => {
       const { user_id, conversation_id, is_typing } = data;
       useChatStore.getState().setUserTyping(conversation_id, user_id, is_typing);
@@ -324,6 +333,10 @@ class SocketService {
 
   reactToMessage(messageId: string, reaction: string) {
     this.emit('message:react', { message_id: messageId, reaction });
+  }
+
+  unsendMessage(messageId: string) {
+    this.emit('message:unsend', { message_id: messageId });
   }
 
   // Posts - reuses the same generic join_room/leave_room the server already

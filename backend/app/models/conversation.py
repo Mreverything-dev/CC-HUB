@@ -23,12 +23,19 @@ class Conversation(Base):
 
 class ConversationMember(Base):
     __tablename__ = "conversation_members"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     conversation_id = Column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"))
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
     joined_at = Column(UTCDateTime, default=datetime.utcnow)
     last_read_at = Column(UTCDateTime, default=datetime.utcnow)
+    # "Delete chat" is per-user only - this member's own row (and their
+    # membership/message access) is untouched; it's just hidden from THEIR
+    # conversation list (ChatService.get_user_conversations) until either a
+    # new message arrives in it or they explicitly re-open it (both clear
+    # this back to NULL - see ChatService.send_message and
+    # SectionConversationService._ensure_member). Nothing is ever deleted.
+    hidden_at = Column(UTCDateTime, nullable=True)
     
     # Relationships
     conversation = relationship("Conversation", back_populates="members")
@@ -46,6 +53,11 @@ class Message(Base):
     media_name = Column(String(255))  # original filename, shown for file-type attachments
     is_read = Column(Boolean, default=False)
     read_at = Column(UTCDateTime, nullable=True)
+    # "Unsend" - soft delete, same pattern as StreamComment.is_deleted:
+    # content/media are wiped and the row stays (so message order/ids for
+    # reactions etc. are undisturbed) instead of being actually removed.
+    # Visible to every participant via the message:unsent broadcast.
+    is_deleted = Column(Boolean, default=False)
     created_at = Column(UTCDateTime, default=datetime.utcnow)
     updated_at = Column(UTCDateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -74,5 +86,31 @@ Index(
     "uq_message_reactions_message_user",
     MessageReaction.message_id,
     MessageReaction.user_id,
+    unique=True,
+)
+
+
+class MessageHiddenFor(Base):
+    """'Remove for Me' - mirrors MessageReaction's exact (message, user)
+    shape. Purely a per-viewer visibility flag: ChatService.
+    get_conversation_messages excludes a message for whichever users have a
+    row here, but the Message row itself, its content, and every other
+    participant's view are completely untouched - the opposite of Unsend
+    (Message.is_deleted), which removes it for everyone."""
+    __tablename__ = "message_hidden_for"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    message_id = Column(UUID(as_uuid=True), ForeignKey("messages.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(UTCDateTime, default=datetime.utcnow)
+
+    message = relationship("Message")
+    user = relationship("User")
+
+
+Index(
+    "uq_message_hidden_for_message_user",
+    MessageHiddenFor.message_id,
+    MessageHiddenFor.user_id,
     unique=True,
 )

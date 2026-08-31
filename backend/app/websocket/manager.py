@@ -326,6 +326,7 @@ async def send_message(sid, data):
                 'media_name': message.media_name,
                 'reactions': [],
                 'is_read': message.is_read,
+                'is_deleted': message.is_deleted,
                 'created_at': message.created_at.isoformat() if message.created_at else None,
                 'updated_at': message.updated_at.isoformat() if message.updated_at else None
             }
@@ -381,6 +382,45 @@ async def message_react(sid, data):
     except Exception as e:
         logger.error(f"❌ Error reacting to message: {e}")
         await sio.emit('error', {'message': 'Unable to react to that message.'}, room=sid)
+
+@sio.on('message:unsend')
+async def message_unsend(sid, data):
+    """'Unsend' a message the caller sent - soft-deletes it (content/media
+    wiped, row kept) and broadcasts the resulting state to the conversation
+    room so every participant's view updates in real time. ChatService.
+    unsend_message is what actually enforces sender-only (403 otherwise);
+    this handler only re-resolves the caller's identity from the
+    authenticated connection, same as every other handler here - never from
+    client-supplied data."""
+    if sid not in manager.active_connections:
+        await sio.emit('error', {'message': 'Not authenticated'}, room=sid)
+        return
+
+    user_id = manager.active_connections[sid]['user_id']
+    message_id = data.get('message_id')
+    if not message_id:
+        await sio.emit('error', {'message': 'Missing required fields'}, room=sid)
+        return
+
+    try:
+        async with AsyncSessionLocal() as db:
+            service = ChatService(db)
+            result = await service.unsend_message(message_id, user_id)
+
+        room = f"conversation_{result['conversation_id']}"
+        await manager.send_to_room(room, 'message:unsent', {
+            'message_id': result['message_id'],
+            'conversation_id': result['conversation_id'],
+            'is_deleted': True,
+            'content': '',
+            'media_url': None,
+            'media_name': None,
+        })
+    except HTTPException as e:
+        await sio.emit('error', {'message': e.detail}, room=sid)
+    except Exception as e:
+        logger.error(f"❌ Error unsending message: {e}")
+        await sio.emit('error', {'message': 'Unable to unsend that message.'}, room=sid)
 
 @sio.event
 async def typing(sid, data):

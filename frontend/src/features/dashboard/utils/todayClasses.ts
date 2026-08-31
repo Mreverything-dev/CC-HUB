@@ -101,6 +101,12 @@ export function buildTodayClasses<T extends TeachingAssignment>(
 export interface NextUpcomingClass {
   assignment: TeachingAssignment;
   dayLabel: string; // "Tomorrow" or a weekday name
+  /** Student view: "Prof. Juan Dela Cruz". Professor view: section name -
+   * same per-viewer mapping buildTodayClasses already uses, reused as-is
+   * rather than re-derived, so the "No Classes Today" reminder's next-class
+   * detail line matches what the rest of the card would show for this same
+   * assignment. */
+  primaryMeta: string;
 }
 
 /** Best-effort "next scheduled class" search across the rest of the week
@@ -109,8 +115,9 @@ export interface NextUpcomingClass {
  * client-side scan over data already fetched; no new API call. */
 export function findNextUpcomingClass<T extends TeachingAssignment>(
   assignments: T[],
+  metaFor: (assignment: T) => { primaryMeta: string; secondaryMeta?: string },
   now: Date = new Date()
-): { assignment: T; dayLabel: string } | null {
+): { assignment: T; dayLabel: string; primaryMeta: string } | null {
   const todayIdx = now.getDay();
   let best: { assignment: T; daysAhead: number } | null = null;
 
@@ -132,7 +139,8 @@ export function findNextUpcomingClass<T extends TeachingAssignment>(
     best.daysAhead === 1
       ? 'Tomorrow'
       : new Date(now.getTime() + best.daysAhead * DAY_MS).toLocaleDateString('en-US', { weekday: 'long' });
-  return { assignment: best.assignment, dayLabel };
+  const { primaryMeta } = metaFor(best.assignment);
+  return { assignment: best.assignment, dayLabel, primaryMeta };
 }
 
 /** Single-session duration in hours (e.g. 14:30-17:30 -> 3) - used for the

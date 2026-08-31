@@ -207,18 +207,38 @@ export function useFriends() {
     },
   });
 
-  // Setup WebSocket listeners for real-time notifications
+  // Setup WebSocket listeners for real-time notifications. useFriends() is
+  // called from several components that can be mounted at once
+  // (NotificationBell in every Topbar, plus FriendsPage/ProfilePage/
+  // ChatWindow/ChatList) - socketService.off(event) with no callback removes
+  // EVERY listener for that event, not just this one, so passing the same
+  // handler reference to both on() and off() (matching useFeed.ts's
+  // pattern) is required here; without it, one component unmounting would
+  // silently kill real-time notifications for every other mounted consumer.
   useEffect(() => {
-    socketService.on('new_notification', (data) => {
+    const handleNewNotification = (data: any) => {
       console.log('🔔 New notification:', data);
       addNotification(data);
       toast.success(data.title);
-    });
+
+      // Friend requests/acceptances arrive here as a generic notification -
+      // reuse that same event to also refresh the friend-request/friends
+      // queries, so the receiving side's UI (pending request appearing, or
+      // the new friend showing up) updates without a manual page refresh.
+      if (data.type === 'friend_request') {
+        queryClient.invalidateQueries({ queryKey: ['friendRequests'] });
+      } else if (data.type === 'friend_accepted') {
+        queryClient.invalidateQueries({ queryKey: ['friends'] });
+        queryClient.invalidateQueries({ queryKey: ['friendRequests'] });
+      }
+    };
+
+    socketService.on('new_notification', handleNewNotification);
 
     return () => {
-      socketService.off('new_notification');
+      socketService.off('new_notification', handleNewNotification);
     };
-  }, []);
+  }, [queryClient]);
 
   return {
     friends,
