@@ -19,8 +19,10 @@ import { Badge } from '@/components/ui/Badge/Badge';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { postService } from '@/services/api/post.service';
+import type { PostReportCategory } from '@/services/api/post.service';
 import toast from 'react-hot-toast';
 import PostDetailModal from './PostDetailModal';
+import { ReportPostDialog } from './ReportPostDialog';
 import { PostReactions } from './PostReactions';
 import { RoleBadge } from '@/features/dashboard/components/RoleBadge';
 import { Avatar } from '@/features/dashboard/components/Avatar';
@@ -98,6 +100,8 @@ export function PostCard({
   const [editContent, setEditContent] = useState(content);
   const [showDetail, setShowDetail] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showReportDialog, setShowReportDialog] = useState(false);
+  const [isReporting, setIsReporting] = useState(false);
   const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const { user } = useAuthStore();
@@ -148,6 +152,20 @@ export function PostCard({
       toast.error('Failed to share post');
     } finally {
       setIsSharing(false);
+    }
+  };
+
+  const handleReportSubmit = async (reason: PostReportCategory, details: string) => {
+    setIsReporting(true);
+    try {
+      await postService.reportPost(id, { reason, details: details.trim() || undefined });
+      toast.success("Report submitted. Our team will review it.");
+      setShowReportDialog(false);
+    } catch (error: any) {
+      const message = error?.response?.data?.detail || 'Failed to submit report';
+      toast.error(message);
+    } finally {
+      setIsReporting(false);
     }
   };
 
@@ -260,56 +278,68 @@ export function PostCard({
               </div>
             </div>
 
-            {(is_owned_by_current_user || user?.role === 'admin') && (
-              <div className="relative flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-                <button
-                  onClick={() => setShowMenu(!showMenu)}
-                  className={`p-1.5 rounded-xl transition ${dark ? 'text-[#64748B] hover:text-[#F1F5F9] hover:bg-white/5' : 'hover:bg-gray-100'}`}
-                >
-                  {dark ? (
-                    <EllipsisVerticalIcon className="h-5 w-5" />
-                  ) : (
-                    <span className="block w-5 text-center leading-none text-gray-400">⋮</span>
-                  )}
-                </button>
-                {showMenu && (
-                  <div
-                    className={`absolute right-0 mt-2 w-48 rounded-xl shadow-lg py-1 z-10 ${
-                      dark ? 'bg-[#111E2B] border border-[#1E3447]' : 'bg-white border border-gray-100'
-                    }`}
-                  >
-                    {is_owned_by_current_user && (
-                      <button
-                        onClick={() => {
-                          setIsEditing(true);
-                          setShowMenu(false);
-                        }}
-                        className={`flex items-center space-x-2 w-full px-4 py-2 text-sm transition ${
-                          dark ? 'text-[#94A3B8] hover:bg-white/5 hover:text-[#F1F5F9]' : 'text-gray-700 hover:bg-gray-50'
-                        }`}
-                      >
-                        <span className="w-4 text-center leading-none">✎</span>
-                        <span>Edit</span>
-                      </button>
-                    )}
-                    {(is_owned_by_current_user || user?.role === 'admin') && (
-                      <button
-                        onClick={() => {
-                          setShowMenu(false);
-                          setShowDeleteConfirm(true);
-                        }}
-                        className={`flex items-center space-x-2 w-full px-4 py-2 text-sm transition ${
-                          dark ? 'text-[#EF4444] hover:bg-[#EF4444]/10' : 'text-red-600 hover:bg-red-50'
-                        }`}
-                      >
-                        <span className="w-4 text-center leading-none">🗑</span>
-                        <span>Delete</span>
-                      </button>
-                    )}
-                  </div>
+            <div className="relative flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+              <button
+                onClick={() => setShowMenu(!showMenu)}
+                className={`p-1.5 rounded-xl transition ${dark ? 'text-[#64748B] hover:text-[#F1F5F9] hover:bg-white/5' : 'hover:bg-gray-100'}`}
+              >
+                {dark ? (
+                  <EllipsisVerticalIcon className="h-5 w-5" />
+                ) : (
+                  <span className="block w-5 text-center leading-none text-gray-400">⋮</span>
                 )}
-              </div>
-            )}
+              </button>
+              {showMenu && (
+                <div
+                  className={`absolute right-0 mt-2 w-48 rounded-xl shadow-lg py-1 z-10 ${
+                    dark ? 'bg-[#111E2B] border border-[#1E3447]' : 'bg-white border border-gray-100'
+                  }`}
+                >
+                  {is_owned_by_current_user && (
+                    <button
+                      onClick={() => {
+                        setIsEditing(true);
+                        setShowMenu(false);
+                      }}
+                      className={`flex items-center space-x-2 w-full px-4 py-2 text-sm transition ${
+                        dark ? 'text-[#94A3B8] hover:bg-white/5 hover:text-[#F1F5F9]' : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span className="w-4 text-center leading-none">✎</span>
+                      <span>Edit</span>
+                    </button>
+                  )}
+                  {(is_owned_by_current_user || user?.role === 'admin') && (
+                    <button
+                      onClick={() => {
+                        setShowMenu(false);
+                        setShowDeleteConfirm(true);
+                      }}
+                      className={`flex items-center space-x-2 w-full px-4 py-2 text-sm transition ${
+                        dark ? 'text-[#EF4444] hover:bg-[#EF4444]/10' : 'text-red-600 hover:bg-red-50'
+                      }`}
+                    >
+                      <span className="w-4 text-center leading-none">🗑</span>
+                      <span>Delete</span>
+                    </button>
+                  )}
+                  {!is_owned_by_current_user && (
+                    <button
+                      onClick={() => {
+                        setShowMenu(false);
+                        setShowReportDialog(true);
+                      }}
+                      className={`flex items-center space-x-2 w-full px-4 py-2 text-sm transition ${
+                        dark ? 'text-[#94A3B8] hover:bg-white/5 hover:text-[#F1F5F9]' : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span className="w-4 text-center leading-none">⚑</span>
+                      <span>Report Post</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Content */}
@@ -587,6 +617,14 @@ export function PostCard({
           confirmLabel="Delete"
           onConfirm={handleDelete}
           onCancel={() => setShowDeleteConfirm(false)}
+        />
+      )}
+
+      {showReportDialog && (
+        <ReportPostDialog
+          isLoading={isReporting}
+          onSubmit={handleReportSubmit}
+          onCancel={() => setShowReportDialog(false)}
         />
       )}
     </>

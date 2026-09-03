@@ -42,6 +42,20 @@ export interface PostCreate {
   visibility?: string;
 }
 
+export type PostReportCategory =
+  | 'bullying'
+  | 'harassment'
+  | 'abuse'
+  | 'violent_content'
+  | 'adult_content'
+  | 'false_information'
+  | 'suicide_self_harm';
+
+export interface PostReportCreate {
+  reason: PostReportCategory;
+  details?: string;
+}
+
 export interface FeedResponse {
   items: Post[];
   total: number;
@@ -93,4 +107,8 @@ export const postService = {
   // Posts a user has shared - for the profile "Shares" tab
   getUserShares: (userId: string, page: number = 1, limit: number = 20) =>
     api.get<FeedResponse>(`/posts/user/${userId}/shares?page=${page}&limit=${limit}`),
+
+  // Report a post - reporter identity is never echoed back or exposed anywhere.
+  reportPost: (postId: string, data: PostReportCreate) =>
+    api.post<{ message: string; report_id: string }>(`/posts/${postId}/report`, data),
 };

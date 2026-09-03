@@ -1,6 +1,5 @@
 // frontend/src/features/dashboard/pages/AdminDashboard.tsx
 import { useState, useEffect, useMemo } from 'react';
-import { useLocation } from 'react-router-dom';
 import {
   UsersIcon,
   AcademicCapIcon,
@@ -11,23 +10,28 @@ import {
   CalendarIcon,
   ArrowPathIcon,
 } from '@heroicons/react/24/outline';
-import AnnouncementFeedBody from '@/features/announcements/components/AnnouncementFeedBody';
 import { CreateAnnouncement } from '@/features/announcements/components/CreateAnnouncement';
 import { useAnnouncements } from '@/features/announcements/hooks/useAnnouncements';
 import { useSections } from '@/features/sections/hooks/useSections';
-import SectionDashboard from '@/features/sections/components/SectionDashboard';
 import CreateSectionModal from '@/features/sections/components/CreateSectionModal';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { profileService } from '@/services/api/profile.service';
 import { useFeed } from '@/features/posts/hooks/useFeed';
 import PostDetailModal from '@/features/posts/components/PostDetailModal';
 import { useLiveStreamsFeed } from '@/features/livestream/hooks/useLiveStreamsFeed';
-import { Sidebar, SidebarSection } from '@/features/dashboard/components/Sidebar';
 import { Topbar } from '@/features/dashboard/components/Topbar';
-import FriendsPage from '@/features/friends/components/FriendsPage';
-import ChatPanel from '@/features/chat/components/ChatPanel';
 import { useAdminStats } from '../hooks/useAdminStats';
+import { useAdminReports } from '../hooks/useAdminReports';
 import UserManagementPage from './admin/UserManagementPage';
+import AdminPostsPage from './admin/AdminPostsPage';
+import AdminAnnouncementsPage from './admin/AdminAnnouncementsPage';
+import AdminSectionsPage from './admin/AdminSectionsPage';
+import AdminLivestreamsPage from './admin/AdminLivestreamsPage';
+import AdminMeethubPage from './admin/AdminMeethubPage';
+import AdminReportsPage from './admin/AdminReportsPage';
+import AdminActivityPage from './admin/AdminActivityPage';
+import AdminSettingsPage from './admin/AdminSettingsPage';
+import { AdminSidebar, AdminSection } from '../components/admin/AdminSidebar';
 import { StatCard } from '../components/admin/StatCard';
 import { UserGrowthChart } from '../components/admin/UserGrowthChart';
 import { RecentActivityWidget } from '../components/admin/RecentActivityWidget';
@@ -50,40 +54,41 @@ function getCurrentWeekRangeLabel(): string {
 
 export default function AdminDashboard() {
   const { user } = useAuthStore();
-  const location = useLocation();
-  // Allows other pages (e.g. Profile) to deep-link back into a specific
-  // dashboard section via navigate(path, { state: { section } }).
-  const [activeSection, setActiveSection] = useState<SidebarSection>(
-    (location.state as { section?: SidebarSection } | null)?.section || 'feed'
-  );
+  // Admin's own nav model (AdminSection), deliberately separate from the
+  // Student/Professor SidebarSection type - this is a genuinely different
+  // set of surfaces, not the same tabs reused.
+  const [activeSection, setActiveSection] = useState<AdminSection>('overview');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [showCreateAnnouncement, setShowCreateAnnouncement] = useState(false);
   const [showCreateSection, setShowCreateSection] = useState(false);
-  // Global search deep-links - reuse the exact same PostDetailModal/
-  // SectionDashboard components the rest of the dashboard already uses.
+  // Global search deep-links - reuse the exact same PostDetailModal the
+  // rest of the app already uses.
   const [searchOpenPostId, setSearchOpenPostId] = useState<string | null>(null);
-  const [searchSectionId, setSearchSectionId] = useState<string | null>(null);
   const { liveStreams, upcomingStreams, isLoading: streamsLoading } = useLiveStreamsFeed(true);
 
   // Admin dashboard stats (real counts from the DB via /admin/dashboard-stats)
   const { stats, isLoading: statsLoading, isError: statsError, refetch: refetchStats, isFetching: statsRefetching } =
     useAdminStats();
 
-  // Recent posts, for the Recent Activity feed only - the admin dashboard no
-  // longer shows a post composer/feed (that stays on Student/Professor).
-  // deletePost/editPost are only used for a post opened via global search.
+  // Recent posts, for the Overview's Recent Activity widget and a post
+  // opened via global search - deletePost/editPost are only used for that
+  // search-opened post.
   const { posts = [], isLoading: postsLoading, deletePost, editPost } = useFeed();
 
-  // Announcements
+  // Announcements (Overview widget + global search)
   const {
     announcements = [],
     isLoading: announcementsLoading,
     refetch: refetchAnnouncements,
   } = useAnnouncements();
 
-  // Sections
+  // Sections (Overview widget, global search, and the admin-wide list
+  // AdminSectionsPage renders - see section_service.get_sections, which
+  // already returns every section for an admin caller)
   const { sections = [], isLoading: sectionsLoading } = useSections();
+
+  const { data: reportsData } = useAdminReports({ page: 1, limit: 1 });
 
   useEffect(() => {
     refetchAnnouncements();
@@ -102,20 +107,22 @@ export default function AdminDashboard() {
   const weekRangeLabel = useMemo(getCurrentWeekRangeLabel, []);
 
   return (
-    <div className="min-h-screen bg-[#07111A] text-[#F1F5F9] flex">
-      {/* Subtle grid background */}
+    <div className="min-h-screen bg-[#07050F] text-[#F1F5F9] flex">
+      {/* Subtle grid background - violet-tinted, distinct from the cyan
+          grid every Student/Professor page uses. */}
       <div
-        className="pointer-events-none fixed inset-0 opacity-[0.15]"
+        className="pointer-events-none fixed inset-0 opacity-[0.12]"
         style={{
           backgroundImage:
-            'linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)',
+            'linear-gradient(rgba(139,92,246,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(139,92,246,0.06) 1px, transparent 1px)',
           backgroundSize: '44px 44px',
         }}
       />
 
-      <Sidebar
+      <AdminSidebar
         activeSection={activeSection}
         onNavigate={setActiveSection}
+        reportsCount={reportsData?.total}
         isMobileOpen={isMobileNavOpen}
         onCloseMobile={() => setIsMobileNavOpen(false)}
       />
@@ -123,37 +130,33 @@ export default function AdminDashboard() {
       <div className="flex-1 min-w-0 flex flex-col">
         <Topbar
           avatarUrl={avatarUrl}
-          onNavigateHome={() => setActiveSection('feed')}
-          onOpenFriends={() => setActiveSection('friends')}
+          onNavigateHome={() => setActiveSection('overview')}
           onOpenMenu={() => setIsMobileNavOpen(true)}
           searchPosts={postList}
           searchAnnouncements={announcementList}
           searchSections={sectionList}
           onOpenPost={setSearchOpenPostId}
-          onOpenSection={(sectionId) => {
-            setSearchSectionId(sectionId);
-            setActiveSection('sections');
-          }}
+          onOpenSection={() => setActiveSection('sections')}
         />
 
         <main className="relative flex-1 max-w-7xl w-full mx-auto px-4 py-6 lg:px-8">
-          {activeSection === 'feed' && (
+          {activeSection === 'overview' && (
             <div className="space-y-6">
               {/* Header */}
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h1 className="text-xl sm:text-2xl font-semibold text-[#F1F5F9]">
-                    Welcome back, <span className="text-[#00C8FF]">{user?.username || 'Admin'}</span> 👋
+                    System Overview
                   </h1>
                   <p className="text-sm text-[#94A3B8] mt-1">
-                    Here's what's happening in the College of Computer Studies.
+                    Monitoring CCS HUB as <span className="text-[#8B5CF6] font-medium">{user?.username || 'Admin'}</span>.
                   </p>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <button
                     title="Custom date range filtering is coming soon"
                     onClick={() => {}}
-                    className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-[#1E3447] bg-[rgba(10,20,30,0.75)] text-sm text-[#94A3B8] hover:text-[#F1F5F9] hover:border-[#00C8FF]/30 transition"
+                    className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-[#1E3447] bg-[rgba(10,20,30,0.75)] text-sm text-[#94A3B8] hover:text-[#F1F5F9] hover:border-[#8B5CF6]/30 transition"
                   >
                     <CalendarIcon className="h-4 w-4" />
                     {weekRangeLabel}
@@ -162,7 +165,7 @@ export default function AdminDashboard() {
                     onClick={() => refetchStats()}
                     disabled={statsRefetching}
                     title="Refresh dashboard"
-                    className="p-2 rounded-xl border border-[#1E3447] bg-[rgba(10,20,30,0.75)] text-[#94A3B8] hover:text-[#00C8FF] hover:border-[#00C8FF]/30 transition disabled:opacity-50"
+                    className="p-2 rounded-xl border border-[#1E3447] bg-[rgba(10,20,30,0.75)] text-[#94A3B8] hover:text-[#8B5CF6] hover:border-[#8B5CF6]/30 transition disabled:opacity-50"
                   >
                     <ArrowPathIcon className={`h-4 w-4 ${statsRefetching ? 'animate-spin' : ''}`} />
                   </button>
@@ -211,10 +214,10 @@ export default function AdminDashboard() {
                   <StatCard
                     icon={SignalIcon}
                     label="Active Now"
-                    value={null}
-                    unavailableReason="Presence tracking not available"
+                    value={stats?.live_streams_now}
                     isLoading={statsLoading}
                     accent="#22C55E"
+                    onClick={() => setActiveSection('livestreams')}
                   />
                   <StatCard
                     icon={DocumentTextIcon}
@@ -223,7 +226,7 @@ export default function AdminDashboard() {
                     trendPercent={stats?.posts.trend_percent}
                     isLoading={statsLoading}
                     accent="#F59E0B"
-                    onClick={() => setActiveSection('feed')}
+                    onClick={() => setActiveSection('posts')}
                   />
                   <StatCard
                     icon={FlagIcon}
@@ -232,6 +235,7 @@ export default function AdminDashboard() {
                     trendPercent={stats?.reports.trend_percent}
                     isLoading={statsLoading}
                     accent="#EF4444"
+                    onClick={() => setActiveSection('reports')}
                   />
                 </div>
               )}
@@ -270,19 +274,14 @@ export default function AdminDashboard() {
           )}
 
           {activeSection === 'users' && <UserManagementPage />}
-
-          {activeSection === 'announcements' && <AnnouncementFeedBody />}
-
-          {activeSection === 'sections' && (
-            <SectionDashboard
-              key={searchSectionId || 'default'}
-              initialSectionId={searchSectionId || undefined}
-            />
-          )}
-
-          {activeSection === 'friends' && <FriendsPage />}
-
-          {activeSection === 'chat' && <ChatPanel fullHeight={false} />}
+          {activeSection === 'sections' && <AdminSectionsPage />}
+          {activeSection === 'posts' && <AdminPostsPage />}
+          {activeSection === 'announcements' && <AdminAnnouncementsPage />}
+          {activeSection === 'livestreams' && <AdminLivestreamsPage />}
+          {activeSection === 'meethub' && <AdminMeethubPage />}
+          {activeSection === 'reports' && <AdminReportsPage />}
+          {activeSection === 'activity' && <AdminActivityPage onNavigate={setActiveSection} />}
+          {activeSection === 'settings' && <AdminSettingsPage onNavigate={setActiveSection} />}
         </main>
       </div>
 

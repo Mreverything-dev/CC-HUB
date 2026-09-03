@@ -15,6 +15,29 @@ sio = socketio.AsyncServer(
     logger=True
 )
 
+
+async def _reject_if_restricted(sid: str, user_id: str, event: str = 'error') -> bool:
+    """Shared restriction gate for every WebSocket handler that creates a
+    social/interaction row (chat messages, livestream comments/reactions) -
+    mirrors get_current_unrestricted_user's REST-side check, since these
+    handlers never go through a FastAPI Depends() chain. Returns True (and
+    emits `event` the caller should treat as "stop, don't proceed") when
+    the user currently has an active restriction; False otherwise. `event`
+    lets callers match their own existing error-event convention (chat uses
+    plain 'error', the livestream handlers use 'stream:error')."""
+    from app.services.moderation_service import ModerationService
+    async with AsyncSessionLocal() as db:
+        service = ModerationService(db)
+        restriction = await service.get_active_restriction(user_id)
+    if restriction:
+        until = restriction.restricted_until.strftime("%b %d, %Y %I:%M %p UTC")
+        payload = {'message': f"Your account is temporarily restricted from this action until {until}."}
+        if event == 'stream:error':
+            payload = {'code': 'RESTRICTED', **payload}
+        await sio.emit(event, payload, room=sid)
+        return True
+    return False
+
 class SocketManager:
     def __init__(self):
         self.active_connections: Dict[str, Dict[str, Any]] = {}
@@ -279,6 +302,9 @@ async def send_message(sid, data):
         return
     
     user_id = manager.active_connections[sid]['user_id']
+    if await _reject_if_restricted(sid, user_id):
+        return
+
     conversation_id = data.get('conversation_id')
     content = data.get('content')
     message_type = data.get('type', 'text')
@@ -941,6 +967,8 @@ async def stream_chat_message(sid, data):
     if sid not in manager.active_connections:
         return
     user_id = manager.active_connections[sid]['user_id']
+    if await _reject_if_restricted(sid, user_id, event='stream:error'):
+        return
     stream_id = data.get('stream_id')
     message = data.get('message')
     parent_comment_id = data.get('parent_comment_id')
@@ -975,6 +1003,8 @@ async def stream_comment_react(sid, data):
     if sid not in manager.active_connections:
         return
     user_id = manager.active_connections[sid]['user_id']
+    if await _reject_if_restricted(sid, user_id, event='stream:error'):
+        return
     stream_id = data.get('stream_id')
     comment_id = data.get('comment_id')
     reaction = data.get('reaction')

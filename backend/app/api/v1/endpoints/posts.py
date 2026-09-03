@@ -5,13 +5,15 @@ from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 from typing import Optional
 from app.core.database import get_db
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, get_current_unrestricted_user
 from app.models.user import User
 from app.models.post import Post
 from app.models.like import Like
 from app.models.share import Share
 from app.services.post_service import PostService
+from app.services.moderation_service import ModerationService
 from app.schemas.post import PostCreate, PostUpdate, PostResponse, FeedResponse, ReactionRequest
+from app.schemas.report import PostReportCreate
 
 router = APIRouter()
 
@@ -22,7 +24,7 @@ router = APIRouter()
 @router.post("/", response_model=PostResponse, status_code=status.HTTP_201_CREATED)
 async def create_post(
     data: PostCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_unrestricted_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new post"""
@@ -237,7 +239,7 @@ async def share_post(
 @router.post("/{post_id}/like")
 async def toggle_like(
     post_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_unrestricted_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Like or unlike a post - kept exactly as-is for backward compatibility.
@@ -253,13 +255,34 @@ async def toggle_like(
 async def react_to_post(
     post_id: str,
     data: ReactionRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_unrestricted_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Add/change/remove the caller's emoji reaction on a post. Broadcasts
     the resulting reaction state to everyone currently viewing this post."""
     service = PostService(db)
     return await service.react_to_post(post_id, str(current_user.id), data.reaction)
+
+# ============================================
+# REPORT POST
+# ============================================
+
+@router.post("/{post_id}/report", status_code=status.HTTP_201_CREATED)
+async def report_post(
+    post_id: str,
+    data: PostReportCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Report a post for review. Deliberately NOT gated behind
+    get_current_unrestricted_user - a restricted user can still flag abuse,
+    only their own posting/commenting/reacting is limited. Reporter
+    identity is stored (for duplicate-prevention/abuse-prevention/audit
+    only) but this response never echoes it back, and no admin-facing API
+    ever serializes it either - see ModerationService/admin.py."""
+    service = ModerationService(db)
+    report = await service.create_post_report(str(current_user.id), post_id, data.reason, data.details)
+    return {"message": "Report submitted. Our team will review it.", "report_id": str(report.id)}
 
 # ============================================
 # A USER'S SHARED POSTS (Profile "Shares" tab)

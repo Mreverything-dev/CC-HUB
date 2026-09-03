@@ -14,12 +14,17 @@ import { RoleBadge } from '@/features/dashboard/components/RoleBadge';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { formatDate } from '@/lib/formatters';
 import { AdminUserListItem, AdminUserOnlineFilter, AdminUserRole } from '@/services/api/admin.service';
+import { useSections } from '@/features/sections/hooks/useSections';
 import { useAdminUsers, useDebouncedValue } from '../../hooks/useAdminUsers';
 import { UserActionsMenu } from '../../components/admin/users/UserActionsMenu';
 import { Pagination } from '../../components/admin/users/Pagination';
 import AddUserModal from '../../components/admin/users/AddUserModal';
 import GenerateProfessorCodeModal from '../../components/admin/users/GenerateProfessorCodeModal';
 import { ProfessorCodesPanel } from '../../components/admin/users/ProfessorCodesPanel';
+import { UserDetailsModal } from '../../components/admin/users/UserDetailsModal';
+import { ChangeRoleModal } from '../../components/admin/users/ChangeRoleModal';
+import EditUserModal from '../../components/admin/users/EditUserModal';
+import SetPasswordModal from '../../components/admin/users/SetPasswordModal';
 
 type TabId = 'all' | 'students' | 'professors' | 'admins' | 'suspended';
 
@@ -66,7 +71,14 @@ export default function UserManagementPage() {
   const [page, setPage] = useState(1);
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [onlineFilter, setOnlineFilter] = useState<AdminUserOnlineFilter | undefined>(undefined);
+  const [sectionFilter, setSectionFilter] = useState<string | undefined>(undefined);
+  const { sections } = useSections();
   const [confirmTarget, setConfirmTarget] = useState<AdminUserListItem | null>(null);
+  const [detailsTarget, setDetailsTarget] = useState<AdminUserListItem | null>(null);
+  const [roleTarget, setRoleTarget] = useState<AdminUserListItem | null>(null);
+  const [editTarget, setEditTarget] = useState<AdminUserListItem | null>(null);
+  const [passwordTarget, setPasswordTarget] = useState<AdminUserListItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AdminUserListItem | null>(null);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [showGenerateCodeModal, setShowGenerateCodeModal] = useState(false);
 
@@ -74,23 +86,43 @@ export default function UserManagementPage() {
     activeTab === 'students' ? 'student' : activeTab === 'professors' ? 'professor' : activeTab === 'admins' ? 'admin' : undefined;
   const status = activeTab === 'suspended' ? 'suspended' : undefined;
 
-  const { data, isLoading, isError, refetch, isFetching, updateStatus, isUpdatingStatus } = useAdminUsers({
+  const {
+    data, isLoading, isError, refetch, isFetching,
+    updateStatus, isUpdatingStatus,
+    updateRole, isUpdatingRole,
+    updateUser, isUpdatingUser,
+    setPassword, isSettingPassword,
+    deleteUser, isDeletingUser,
+  } = useAdminUsers({
     page,
     limit: LIMIT,
     search: search.trim() || undefined,
     role,
     status,
     online: onlineFilter,
+    section: sectionFilter,
   });
 
   useEffect(() => {
     setPage(1);
-  }, [activeTab, search, onlineFilter]);
+  }, [activeTab, search, onlineFilter, sectionFilter]);
 
   const handleConfirmToggle = async () => {
     if (!confirmTarget) return;
     await updateStatus({ userId: confirmTarget.id, isActive: !confirmTarget.is_active });
     setConfirmTarget(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    await deleteUser(deleteTarget.id);
+    setDeleteTarget(null);
+  };
+
+  const handleConfirmRoleChange = async (newRole: AdminUserRole) => {
+    if (!roleTarget) return;
+    await updateRole({ userId: roleTarget.id, role: newRole });
+    setRoleTarget(null);
   };
 
   const counts = data?.counts;
@@ -155,7 +187,7 @@ export default function UserManagementPage() {
             <button
               onClick={() => setShowFilterMenu((v) => !v)}
               className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl border text-sm font-medium transition ${
-                onlineFilter
+                onlineFilter || sectionFilter
                   ? 'border-[#00C8FF]/40 bg-[#00C8FF]/10 text-[#00C8FF]'
                   : 'border-[#1E3447] bg-[rgba(10,20,30,0.75)] text-[#94A3B8] hover:text-[#F1F5F9]'
               }`}
@@ -166,7 +198,7 @@ export default function UserManagementPage() {
             {showFilterMenu && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setShowFilterMenu(false)} />
-                <div className="absolute right-0 top-full mt-1.5 w-52 rounded-xl border border-[#1E3447] bg-[#111E2B] shadow-xl z-20 p-2">
+                <div className="absolute right-0 top-full mt-1.5 w-56 rounded-xl border border-[#1E3447] bg-[#111E2B] shadow-xl z-20 p-2 max-h-80 overflow-y-auto themed-scrollbar">
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-[#64748B] px-2 py-1">
                     Presence
                   </p>
@@ -187,6 +219,38 @@ export default function UserManagementPage() {
                       {onlineFilter === value && <CheckIcon className="h-4 w-4 text-[#00C8FF]" />}
                     </button>
                   ))}
+
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-[#64748B] px-2 py-1 mt-2 border-t border-[#1E3447] pt-2">
+                    Section
+                  </p>
+                  <button
+                    onClick={() => {
+                      setSectionFilter(undefined);
+                      setShowFilterMenu(false);
+                    }}
+                    className="flex items-center justify-between w-full px-2 py-1.5 rounded-lg text-sm text-[#F1F5F9] hover:bg-white/5 transition"
+                  >
+                    All sections
+                    {!sectionFilter && <CheckIcon className="h-4 w-4 text-[#00C8FF]" />}
+                  </button>
+                  {sections.length === 0 ? (
+                    <p className="text-xs text-[#64748B] px-2 py-1.5">No sections yet.</p>
+                  ) : (
+                    sections.map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => {
+                          setSectionFilter(s.id);
+                          setShowFilterMenu(false);
+                        }}
+                        className="flex items-center justify-between w-full px-2 py-1.5 rounded-lg text-sm text-[#F1F5F9] hover:bg-white/5 transition"
+                      >
+                        <span className="truncate">{s.name}</span>
+                        {sectionFilter === s.id && <CheckIcon className="h-4 w-4 text-[#00C8FF] flex-shrink-0" />}
+                      </button>
+                    ))
+                  )}
+
                   <p className="text-[10px] text-[#64748B] px-2 pt-2 pb-1 border-t border-[#1E3447] mt-1">
                     Use the tabs above to filter by role or suspension status.
                   </p>
@@ -273,7 +337,15 @@ export default function UserManagementPage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-[#94A3B8]">{formatDate(user.created_at)}</td>
                     <td className="px-4 py-3 text-right">
-                      <UserActionsMenu user={user} onToggleStatus={setConfirmTarget} />
+                      <UserActionsMenu
+                        user={user}
+                        onToggleStatus={setConfirmTarget}
+                        onViewDetails={setDetailsTarget}
+                        onChangeRole={setRoleTarget}
+                        onEditUser={setEditTarget}
+                        onSetPassword={setPasswordTarget}
+                        onDeleteUser={setDeleteTarget}
+                      />
                     </td>
                   </tr>
                 ))}
@@ -290,7 +362,15 @@ export default function UserManagementPage() {
               >
                 <div className="flex items-start justify-between gap-2">
                   <UserIdentity user={user} />
-                  <UserActionsMenu user={user} onToggleStatus={setConfirmTarget} />
+                  <UserActionsMenu
+                    user={user}
+                    onToggleStatus={setConfirmTarget}
+                    onViewDetails={setDetailsTarget}
+                    onChangeRole={setRoleTarget}
+                    onEditUser={setEditTarget}
+                    onSetPassword={setPasswordTarget}
+                    onDeleteUser={setDeleteTarget}
+                  />
                 </div>
                 <div className="flex flex-wrap items-center gap-2 mt-3">
                   <RoleBadge role={user.role} />
@@ -324,6 +404,49 @@ export default function UserManagementPage() {
 
       {showAddUserModal && <AddUserModal onClose={() => setShowAddUserModal(false)} />}
       {showGenerateCodeModal && <GenerateProfessorCodeModal onClose={() => setShowGenerateCodeModal(false)} />}
+
+      {detailsTarget && <UserDetailsModal userId={detailsTarget.id} onClose={() => setDetailsTarget(null)} />}
+
+      {roleTarget && (
+        <ChangeRoleModal
+          user={roleTarget}
+          isLoading={isUpdatingRole}
+          onConfirm={handleConfirmRoleChange}
+          onClose={() => setRoleTarget(null)}
+        />
+      )}
+
+      {editTarget && (
+        <EditUserModal
+          user={editTarget}
+          isLoading={isUpdatingUser}
+          onConfirm={(data) => updateUser({ userId: editTarget.id, data })}
+          onClose={() => setEditTarget(null)}
+        />
+      )}
+
+      {passwordTarget && (
+        <SetPasswordModal
+          user={passwordTarget}
+          isLoading={isSettingPassword}
+          onConfirm={(new_password, confirm_password) =>
+            setPassword({ userId: passwordTarget.id, data: { new_password, confirm_password } })
+          }
+          onClose={() => setPasswordTarget(null)}
+        />
+      )}
+
+      {deleteTarget && (
+        <ConfirmDialog
+          title="Delete this user?"
+          message={`${deleteTarget.full_name || deleteTarget.username} and everything tied to their account (posts, comments, messages, memberships) will be permanently deleted. This cannot be undone.`}
+          confirmLabel="Delete Permanently"
+          danger
+          isLoading={isDeletingUser}
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      )}
     </div>
   );
 }

@@ -168,27 +168,32 @@ class LivestreamService:
 
         return visible_streams
 
-    async def get_stream(self, stream_id: str, user_id: str) -> Livestream:
-        """Get a single stream with permission check"""
+    async def get_stream(self, stream_id: str, user_id: str, is_admin: bool = False) -> Livestream:
+        """Get a single stream with permission check. `is_admin` is an
+        opt-in override (default False - every existing caller is
+        unaffected) for the admin Livestream/Meethub management endpoints,
+        which have already verified the caller's role server-side via
+        get_current_admin_user before ever passing True here - never derived
+        from client input."""
         result = await self.db.execute(
             select(Livestream)
             .options(selectinload(Livestream.host))
             .where(Livestream.id == stream_id)
         )
         stream = result.scalar_one_or_none()
-        
+
         if not stream:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Stream not found"
             )
-        
-        if not await self.can_view_stream(user_id, stream_id):
+
+        if not is_admin and not await self.can_view_stream(user_id, stream_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to view this stream"
             )
-        
+
         return stream
 
     async def update_stream(self, stream_id: str, user_id: str, data: LivestreamUpdate) -> Livestream:
@@ -227,11 +232,13 @@ class LivestreamService:
         
         return stream
 
-    async def end_stream(self, stream_id: str, user_id: str) -> Livestream:
-        """End a livestream"""
-        stream = await self.get_stream(stream_id, user_id)
-        
-        if str(stream.host_id) != user_id:
+    async def end_stream(self, stream_id: str, user_id: str, is_admin: bool = False) -> Livestream:
+        """End a livestream. `is_admin` lets the admin Livestream/Meethub
+        management pages force-end a stream/meeting they don't host -
+        same opt-in-override contract as get_stream above."""
+        stream = await self.get_stream(stream_id, user_id, is_admin=is_admin)
+
+        if str(stream.host_id) != user_id and not is_admin:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only the host can end this stream"

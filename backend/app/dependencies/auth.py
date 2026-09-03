@@ -84,3 +84,19 @@ async def get_current_professor_user(
             detail="Professor or admin privileges required"
         )
     return current_user
+
+async def get_current_unrestricted_user(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """Same chained-dependency shape as get_current_admin_user, but for the
+    moderation restriction system - raises 403 if this user currently has
+    an active UserRestriction (see ModerationService.get_active_restriction,
+    which does the actual expiry-aware lookup). Use this in place of plain
+    get_current_user on every endpoint that creates a post/comment/
+    like/reaction - viewing endpoints must NOT use this, a restricted user
+    can still see everything, just not post/comment/react/chat."""
+    from app.services.moderation_service import ModerationService
+    service = ModerationService(db)
+    await service.require_not_restricted(str(current_user.id))
+    return current_user

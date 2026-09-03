@@ -7,6 +7,9 @@ interface PaginationProps {
   total: number;
   limit: number;
   onChange: (page: number) => void;
+  /** Plural noun for the summary line, e.g. "posts", "announcements" -
+   * defaults to "users" so every existing caller is unaffected. */
+  itemLabel?: string;
 }
 
 function getPageNumbers(page: number, totalPages: number): (number | '...')[] {
@@ -21,7 +24,7 @@ function getPageNumbers(page: number, totalPages: number): (number | '...')[] {
   return result;
 }
 
-export function Pagination({ page, totalPages, total, limit, onChange }: PaginationProps) {
+export function Pagination({ page, totalPages, total, limit, onChange, itemLabel = 'users' }: PaginationProps) {
   if (totalPages <= 1) return null;
   const start = (page - 1) * limit + 1;
   const end = Math.min(page * limit, total);
@@ -29,7 +32,7 @@ export function Pagination({ page, totalPages, total, limit, onChange }: Paginat
   return (
     <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
       <p className="text-xs text-[#64748B]">
-        Showing {start} to {end} of {total} users
+        Showing {start} to {end} of {total} {itemLabel}
       </p>
       <div className="flex items-center gap-1">
         <button
