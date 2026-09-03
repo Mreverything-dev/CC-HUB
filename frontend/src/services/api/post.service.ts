@@ -56,6 +56,32 @@ export interface PostReportCreate {
   details?: string;
 }
 
+export interface ViolationReportedPost {
+  content: string | null;
+  media_urls: string[];
+  exists: boolean;
+  created_at: string | null;
+  removed_by_moderation: boolean;
+}
+
+export interface ViolationRestriction {
+  duration_label: string;
+  starts_at: string;
+  expires_at: string;
+}
+
+export interface ViolationDetail {
+  report_id: string;
+  category: PostReportCategory | string;
+  category_label: string;
+  status: string;
+  reported_post: ViolationReportedPost;
+  admin_message: string;
+  moderation_actions: string[];
+  restriction: ViolationRestriction | null;
+  reviewed_at: string | null;
+}
+
 export interface FeedResponse {
   items: Post[];
   total: number;
@@ -111,4 +137,9 @@ export const postService = {
   // Report a post - reporter identity is never echoed back or exposed anywhere.
   reportPost: (postId: string, data: PostReportCreate) =>
     api.post<{ message: string; report_id: string }>(`/posts/${postId}/report`, data),
+
+  // Violation details for a report the current user was the reported party
+  // on - opened from their "Post Violation" notification.
+  getViolationDetail: (reportId: string) =>
+    api.get<ViolationDetail>(`/posts/reports/${reportId}/violation`),
 };

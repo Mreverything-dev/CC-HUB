@@ -1,5 +1,5 @@
 # backend/app/models/friend.py
-from sqlalchemy import Column, String, Text, ForeignKey, DateTime, Boolean, Index
+from sqlalchemy import Column, String, Text, ForeignKey, DateTime, Boolean, Index, JSON
 from app.core.db_types import UTCDateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -90,6 +90,20 @@ class UserReport(Base):
     warning_issued = Column(Boolean, nullable=False, default=False)
     post_removed = Column(Boolean, nullable=False, default=False)
     restriction_id = Column(UUID(as_uuid=True), ForeignKey("user_restrictions.id", ondelete="SET NULL"), nullable=True)
+
+    # The admin's own explanation of the violation, shown to the reported
+    # user (never the reporter's info) when a "Post Violation" notice is
+    # sent - see ModerationService.confirm_violation.
+    admin_message = Column(Text, nullable=True)
+
+    # Snapshot of the post's content/media captured the moment
+    # remove_reported_post deletes it - posts.id has no soft-delete, and
+    # post_id above is ON DELETE SET NULL, so without this the reported
+    # user's Violation Details view would have nothing left to show them
+    # once a post is actually removed. NULL for reports whose post was
+    # never removed via moderation (still live, or gone some other way).
+    removed_post_content = Column(Text, nullable=True)
+    removed_post_media_urls = Column(JSON, nullable=True)
 
     reporter = relationship("User", foreign_keys=[reporter_id])
     reported = relationship("User", foreign_keys=[reported_id])

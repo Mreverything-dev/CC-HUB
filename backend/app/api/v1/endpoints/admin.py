@@ -27,6 +27,8 @@ from app.websocket.manager import manager
 from app.services.auth_service import AuthService
 from app.services.livestream_service import LivestreamService
 from app.services.moderation_service import ModerationService, CATEGORY_LABELS, HIGH_PRIORITY_CATEGORIES
+from app.services.post_service import PostService
+from app.schemas.report import ConfirmViolationRequest
 from app.schemas.admin import (
     AdminDashboardStats, EngagementTotals, StatMetric,
     AdminUserListItem, AdminUserListResponse, AdminUserCounts, UpdateUserStatusRequest,
@@ -34,6 +36,7 @@ from app.schemas.admin import (
     AdminCreateUserRequest, AdminCreateUserResponse,
     GenerateProfessorCodeRequest, ProfessorCodeResponse,
     AdminPostListItem, AdminPostListResponse,
+    BulkDeletePostsRequest, BulkDeletePostsResponse,
     AdminAnnouncementListItem, AdminAnnouncementListResponse,
     AdminLivestreamListItem, AdminLivestreamListResponse, AdminStreamViewerItem,
     AdminSectionListItem, AdminSectionListResponse,
@@ -157,6 +160,11 @@ async def get_dashboard_stats(
     )
     live_streams_now = live_result.scalar() or 0
 
+    # Every user (student/professor/admin alike) with at least one active
+    # WebSocket connection right now - same manager.get_online_user_ids()
+    # already used for each user row's is_online flag, just counted here.
+    online_users_now = len(manager.get_online_user_ids())
+
     engagement_result = await db.execute(
         select(
             func.coalesce(func.sum(Post.comments_count), 0),
@@ -173,6 +181,7 @@ async def get_dashboard_stats(
         posts=posts,
         reports=reports,
         live_streams_now=live_streams_now,
+        online_users_now=online_users_now,
         engagement=EngagementTotals(comments=comments_sum, reactions=likes_sum, shares=shares_sum),
     )
 
@@ -791,6 +800,25 @@ async def list_all_posts(
     return AdminPostListResponse(items=items, total=total, page=page, limit=limit, total_pages=total_pages)
 
 
+@router.post("/posts/bulk-delete", response_model=BulkDeletePostsResponse)
+async def bulk_delete_posts(
+    data: BulkDeletePostsRequest,
+    current_user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete exactly the given post IDs - admin-only (get_current_admin_user
+    already 403s a non-admin before this body ever runs). Reuses
+    PostService.delete_post/bulk_delete_posts, the same single-post deletion
+    logic and DB cleanup the existing "Remove Post" action already uses, so
+    there's no second deletion path to drift out of sync. A reported post's
+    UserReport row is NOT deleted with it (post_id is ON DELETE SET NULL) -
+    the report/moderation history is preserved for admin review exactly as
+    it already is for a single delete."""
+    service = PostService(db)
+    result = await service.bulk_delete_posts(data.post_ids, str(current_user.id))
+    return BulkDeletePostsResponse(**result)
+
+
 # ============================================
 # ADMIN: ANNOUNCEMENTS
 # ============================================
@@ -1139,6 +1167,19 @@ async def list_reports(
                 exists=post is not None,
                 created_at=post.created_at if post else None,
             )
+        elif r.removed_post_content is not None or r.removed_post_media_urls:
+            # post_id was nulled by the posts table's ON DELETE SET NULL the
+            # moment the row was actually deleted - the snapshot captured at
+            # removal time (see ModerationService.remove_reported_post) is
+            # all that's left to show, so use it instead of an empty card.
+            reported_post = AdminReportedPost(
+                id=None,
+                content=r.removed_post_content,
+                media_urls=r.removed_post_media_urls or [],
+                exists=False,
+                created_at=None,
+                removed_by_moderation=True,
+            )
 
         restriction = None
         res = restrictions_by_id.get(r.restriction_id) if r.restriction_id else None
@@ -1169,6 +1210,7 @@ async def list_reports(
             warning_issued=r.warning_issued,
             post_removed=r.post_removed,
             restriction=restriction,
+            admin_message=r.admin_message,
         ))
 
     return AdminReportListResponse(items=items, total=total, page=page, limit=limit, total_pages=total_pages)
@@ -1221,6 +1263,25 @@ async def warn_report_action(
     return ModerationActionResponse(
         id=str(report.id), status=report.status, warning_issued=report.warning_issued,
         post_removed=report.post_removed, message="Warning sent to the reported user.",
+    )
+
+
+@router.post("/reports/{report_id}/confirm-violation", response_model=ModerationActionResponse)
+async def confirm_violation_action(
+    report_id: str,
+    data: ConfirmViolationRequest,
+    current_user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Send the reported user a "Post Violation" notice with the admin's own
+    explanation - separate from Send Warning/Restrict User, this is purely
+    about communicating WHY their post was found to violate guidelines and
+    WHICH post, without exposing the reporter."""
+    service = ModerationService(db)
+    report = await service.confirm_violation(report_id, str(current_user.id), data.message)
+    return ModerationActionResponse(
+        id=str(report.id), status=report.status, warning_issued=report.warning_issued,
+        post_removed=report.post_removed, message="Violation notice sent to the reported user.",
     )
 
 

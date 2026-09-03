@@ -28,6 +28,7 @@ class AdminDashboardStats(BaseModel):
     posts: StatMetric
     reports: StatMetric
     live_streams_now: int
+    online_users_now: int
     engagement: EngagementTotals
 
 
@@ -165,6 +166,16 @@ class AdminPostListResponse(BaseModel):
     total_pages: int
 
 
+class BulkDeletePostsRequest(BaseModel):
+    post_ids: List[str] = Field(..., min_length=1, max_length=200)
+
+
+class BulkDeletePostsResponse(BaseModel):
+    deleted_count: int
+    deleted_ids: List[str]
+    not_found_ids: List[str]
+
+
 # ============================================
 # ADMIN: ANNOUNCEMENTS
 # ============================================
@@ -274,13 +285,17 @@ class AdminReportedUser(BaseModel):
 
 class AdminReportedPost(BaseModel):
     """`exists=False` means the post was already deleted (by its author or
-    a prior moderation action) - the admin still sees the report's history,
-    just without content to preview."""
-    id: str
+    a prior moderation action). When it was removed via this report's own
+    "Remove Post" moderation action, `removed_by_moderation` is True and
+    content/media_urls still carry the snapshot captured at removal time -
+    otherwise there's nothing left to preview. `id` is None once the post
+    row itself is gone (its id was never worth keeping past that point)."""
+    id: Optional[str] = None
     content: Optional[str] = None
     media_urls: List[str] = []
     exists: bool
     created_at: Optional[datetime] = None
+    removed_by_moderation: bool = False
 
 
 class AdminReportRestriction(BaseModel):
@@ -303,6 +318,7 @@ class AdminReportListItem(BaseModel):
     warning_issued: bool = False
     post_removed: bool = False
     restriction: Optional[AdminReportRestriction] = None
+    admin_message: Optional[str] = None
 
 
 class AdminReportListResponse(BaseModel):

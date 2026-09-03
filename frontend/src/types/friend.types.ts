@@ -50,7 +50,7 @@ export interface BlockedUser {
 export interface Notification {
   id: string;
   user_id: string;
-  type: 'friend_request' | 'friend_accepted' | 'message' | 'announcement';
+  type: 'friend_request' | 'friend_accepted' | 'message' | 'announcement' | 'moderation_warning' | 'moderation_restriction' | 'post_violation';
   title: string;
   content: string;
   is_read: boolean;

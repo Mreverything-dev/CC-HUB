@@ -1,5 +1,5 @@
 // frontend/src/features/dashboard/pages/admin/AdminPostsPage.tsx
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   MagnifyingGlassIcon,
   ArrowPathIcon,
@@ -23,6 +23,38 @@ import PostDetailModal from '@/features/posts/components/PostDetailModal';
 import { Pagination } from '../../components/admin/users/Pagination';
 
 const LIMIT = 15;
+
+/** Plain checkbox that also supports a visual "indeterminate" (some but not
+ * all selected) state - React has no declarative prop for that, it has to
+ * be set imperatively on the DOM node via a ref. */
+function SelectionCheckbox({
+  checked,
+  indeterminate = false,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  indeterminate?: boolean;
+  onChange: () => void;
+  label: string;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate;
+  }, [indeterminate]);
+
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      checked={checked}
+      onChange={onChange}
+      onClick={(e) => e.stopPropagation()}
+      aria-label={label}
+      className="h-4 w-4 rounded border-[#1E3447] bg-[#0A111A] text-[#00C8FF] accent-[#00C8FF] cursor-pointer"
+    />
+  );
+}
 
 function PostActionsMenu({
   onView,
@@ -97,8 +129,10 @@ export default function AdminPostsPage() {
   const [page, setPage] = useState(1);
   const [confirmTarget, setConfirmTarget] = useState<AdminPostListItem | null>(null);
   const [viewPostId, setViewPostId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkConfirm, setShowBulkConfirm] = useState(false);
 
-  const { data, isLoading, isError, refetch, isFetching, deletePost, isDeleting } = useAdminPosts({
+  const { data, isLoading, isError, refetch, isFetching, deletePost, isDeleting, bulkDeletePosts, isBulkDeleting } = useAdminPosts({
     page,
     limit: LIMIT,
     search: search.trim() || undefined,
@@ -114,6 +148,13 @@ export default function AdminPostsPage() {
     setPage(1);
   }, [search]);
 
+  // Selection is scoped to what's currently loaded - switching page or
+  // search changes the underlying set of posts, so a stale selection from
+  // a different page/filter would be confusing to act on.
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [page, search]);
+
   const handleConfirmDelete = async () => {
     if (!confirmTarget) return;
     await deletePost(confirmTarget.id);
@@ -121,6 +162,39 @@ export default function AdminPostsPage() {
   };
 
   const items = data?.items || [];
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const allSelected = items.length > 0 && items.every((p) => selectedIds.has(p.id));
+  const someSelected = items.some((p) => selectedIds.has(p.id));
+
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => {
+      if (allSelected) {
+        const next = new Set(prev);
+        items.forEach((p) => next.delete(p.id));
+        return next;
+      }
+      const next = new Set(prev);
+      items.forEach((p) => next.add(p.id));
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const handleBulkDelete = async () => {
+    await bulkDeletePosts(Array.from(selectedIds));
+    setShowBulkConfirm(false);
+    clearSelection();
+  };
 
   return (
     <div className="max-w-6xl mx-auto space-y-5">
@@ -149,6 +223,29 @@ export default function AdminPostsPage() {
           className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-[#1E3447] bg-[rgba(10,20,30,0.75)] text-sm text-[#F1F5F9] placeholder-[#64748B] focus:outline-none focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition"
         />
       </div>
+
+      {selectedIds.size > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-xl border border-[#00C8FF]/30 bg-[#00C8FF]/5 px-4 py-2.5">
+          <p className="text-sm text-[#F1F5F9]">
+            <span className="font-semibold">{selectedIds.size}</span> post{selectedIds.size === 1 ? '' : 's'} selected
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={clearSelection}
+              className="text-sm font-medium text-[#94A3B8] hover:text-[#F1F5F9] px-3 py-1.5 rounded-xl hover:bg-white/5 transition"
+            >
+              Clear Selection
+            </button>
+            <button
+              onClick={() => setShowBulkConfirm(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#EF4444] text-white text-sm font-semibold hover:bg-[#dc3737] transition"
+            >
+              <TrashIcon className="h-4 w-4" />
+              Delete Selected
+            </button>
+          </div>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="rounded-2xl border border-[rgba(0,200,245,0.15)] bg-[rgba(10,20,30,0.75)] overflow-hidden">
@@ -182,6 +279,14 @@ export default function AdminPostsPage() {
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-[#1E3447]">
+                  <th className="w-10 px-4 py-3">
+                    <SelectionCheckbox
+                      checked={allSelected}
+                      indeterminate={someSelected && !allSelected}
+                      onChange={toggleSelectAll}
+                      label="Select all posts on this page"
+                    />
+                  </th>
                   <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-[#64748B]">Author</th>
                   <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-[#64748B]">Content</th>
                   <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-[#64748B]">Engagement</th>
@@ -191,7 +296,19 @@ export default function AdminPostsPage() {
               </thead>
               <tbody>
                 {items.map((post) => (
-                  <tr key={post.id} className="border-b border-[#1E3447] last:border-0 hover:bg-white/[0.03] transition">
+                  <tr
+                    key={post.id}
+                    className={`border-b border-[#1E3447] last:border-0 hover:bg-white/[0.03] transition ${
+                      selectedIds.has(post.id) ? 'bg-[#00C8FF]/[0.04]' : ''
+                    }`}
+                  >
+                    <td className="px-4 py-3">
+                      <SelectionCheckbox
+                        checked={selectedIds.has(post.id)}
+                        onChange={() => toggleSelected(post.id)}
+                        label={`Select post by ${post.author_full_name || post.author_username}`}
+                      />
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <Avatar src={post.author_avatar_url} name={post.author_full_name || post.author_username} size="sm" />
@@ -222,10 +339,31 @@ export default function AdminPostsPage() {
 
           {/* Mobile cards */}
           <div className="sm:hidden space-y-3">
+            <div className="flex items-center gap-2 px-1">
+              <SelectionCheckbox
+                checked={allSelected}
+                indeterminate={someSelected && !allSelected}
+                onChange={toggleSelectAll}
+                label="Select all posts on this page"
+              />
+              <span className="text-xs font-medium text-[#94A3B8]">Select All</span>
+            </div>
             {items.map((post) => (
-              <div key={post.id} className="rounded-2xl border border-[rgba(0,200,245,0.15)] bg-[rgba(10,20,30,0.75)] p-4">
+              <div
+                key={post.id}
+                className={`rounded-2xl border p-4 transition ${
+                  selectedIds.has(post.id)
+                    ? 'border-[#00C8FF]/40 bg-[#00C8FF]/[0.05]'
+                    : 'border-[rgba(0,200,245,0.15)] bg-[rgba(10,20,30,0.75)]'
+                }`}
+              >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2.5 min-w-0">
+                    <SelectionCheckbox
+                      checked={selectedIds.has(post.id)}
+                      onChange={() => toggleSelected(post.id)}
+                      label={`Select post by ${post.author_full_name || post.author_username}`}
+                    />
                     <Avatar src={post.author_avatar_url} name={post.author_full_name || post.author_username} size="sm" />
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-[#F1F5F9] truncate">{post.author_full_name || post.author_username}</p>
@@ -258,6 +396,18 @@ export default function AdminPostsPage() {
           isLoading={isDeleting}
           onConfirm={handleConfirmDelete}
           onCancel={() => setConfirmTarget(null)}
+        />
+      )}
+
+      {showBulkConfirm && (
+        <ConfirmDialog
+          title="Delete selected posts?"
+          message={`Delete ${selectedIds.size} selected post${selectedIds.size === 1 ? '' : 's'}? This action cannot be undone.`}
+          confirmLabel="Delete Selected"
+          danger
+          isLoading={isBulkDeleting}
+          onConfirm={handleBulkDelete}
+          onCancel={() => setShowBulkConfirm(false)}
         />
       )}
 

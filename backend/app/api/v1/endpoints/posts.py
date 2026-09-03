@@ -11,9 +11,11 @@ from app.models.post import Post
 from app.models.like import Like
 from app.models.share import Share
 from app.services.post_service import PostService
-from app.services.moderation_service import ModerationService
+from app.services.moderation_service import ModerationService, CATEGORY_LABELS
 from app.schemas.post import PostCreate, PostUpdate, PostResponse, FeedResponse, ReactionRequest
-from app.schemas.report import PostReportCreate
+from app.schemas.report import (
+    PostReportCreate, ViolationDetailResponse, ViolationReportedPost, ViolationRestriction,
+)
 
 router = APIRouter()
 
@@ -283,6 +285,59 @@ async def report_post(
     service = ModerationService(db)
     report = await service.create_post_report(str(current_user.id), post_id, data.reason, data.details)
     return {"message": "Report submitted. Our team will review it.", "report_id": str(report.id)}
+
+# ============================================
+# VIOLATION DETAILS (for the reported user, opened from their
+# "Post Violation" notification)
+# ============================================
+
+@router.get("/reports/{report_id}/violation", response_model=ViolationDetailResponse)
+async def get_violation_detail(
+    report_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """What the reported user sees when they click their "Post Violation"
+    notification - the actual reported post, the admin's own explanation,
+    and what moderation action was taken. Never includes reporter_id or
+    anything else that could identify who filed the report."""
+    service = ModerationService(db)
+    report = await service.get_violation_for_user(report_id, str(current_user.id))
+
+    post_view = await service.resolve_reported_post_view(report)
+
+    moderation_actions = []
+    if report.warning_issued:
+        moderation_actions.append("Warning")
+    if report.restriction_id:
+        moderation_actions.append("Restriction")
+    if report.post_removed:
+        moderation_actions.append("Post Removal")
+
+    restriction = None
+    if report.restriction_id:
+        from app.models.moderation import UserRestriction
+        r_result = await db.execute(select(UserRestriction).where(UserRestriction.id == report.restriction_id))
+        r = r_result.scalar_one_or_none()
+        if r:
+            days = max(1, round((r.restricted_until - r.restricted_at).total_seconds() / 86400))
+            restriction = ViolationRestriction(
+                duration_label=f"{days} Day{'s' if days != 1 else ''}",
+                starts_at=r.restricted_at,
+                expires_at=r.restricted_until,
+            )
+
+    return ViolationDetailResponse(
+        report_id=str(report.id),
+        category=report.reason,
+        category_label=CATEGORY_LABELS.get(report.reason, report.reason),
+        status=report.status,
+        reported_post=ViolationReportedPost(**post_view),
+        admin_message=report.admin_message,
+        moderation_actions=moderation_actions,
+        restriction=restriction,
+        reviewed_at=report.moderated_at,
+    )
 
 # ============================================
 # A USER'S SHARED POSTS (Profile "Shares" tab)

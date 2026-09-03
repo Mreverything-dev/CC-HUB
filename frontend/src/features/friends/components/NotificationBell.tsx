@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatRelativeTime } from '@/lib/formatters';
 import { useFriends } from '../hooks/useFriends';
-import { BellIcon } from '@heroicons/react/24/outline';
+import { BellIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import { ViolationDetailsModal } from '@/features/posts/components/ViolationDetailsModal';
 
 interface NotificationBellProps {
   /** When provided (e.g. inside a Sidebar-based dashboard), friend-related
@@ -21,6 +22,7 @@ export default function NotificationBell({ onNavigateFriends }: NotificationBell
     markAllNotificationsRead,
   } = useFriends();
   const [isOpen, setIsOpen] = useState(false);
+  const [violationReportId, setViolationReportId] = useState<string | null>(null);
 
   const handleNotificationClick = (id: string, isRead: boolean, type: string, data: any) => {
     if (!isRead) {
@@ -35,6 +37,8 @@ export default function NotificationBell({ onNavigateFriends }: NotificationBell
       }
     } else if (type === 'announcement' && data?.announcement_id) {
       navigate(`/announcements/${data.announcement_id}`);
+    } else if (type === 'post_violation' && data?.report_id) {
+      setViolationReportId(data.report_id);
     }
   };
 
@@ -93,8 +97,16 @@ export default function NotificationBell({ onNavigateFriends }: NotificationBell
                     >
                       <div className="flex items-start gap-2.5">
                         <div className="relative flex-shrink-0">
-                          <div className="w-8 h-8 rounded-full bg-[#1E3447] flex items-center justify-center overflow-hidden">
-                            {actorAvatar ? (
+                          <div
+                            className={`w-8 h-8 rounded-full flex items-center justify-center overflow-hidden ${
+                              n.type === 'post_violation' || n.type === 'moderation_warning' || n.type === 'moderation_restriction'
+                                ? 'bg-[#EF4444]/15'
+                                : 'bg-[#1E3447]'
+                            }`}
+                          >
+                            {n.type === 'post_violation' || n.type === 'moderation_warning' || n.type === 'moderation_restriction' ? (
+                              <ExclamationTriangleIcon className="h-4 w-4 text-[#EF4444]" />
+                            ) : actorAvatar ? (
                               <img src={actorAvatar} alt={actorName || ''} className="w-full h-full object-cover" />
                             ) : (
                               <span className="text-[#94A3B8] text-xs font-semibold">
@@ -123,6 +135,10 @@ export default function NotificationBell({ onNavigateFriends }: NotificationBell
             </div>
           </div>
         </>
+      )}
+
+      {violationReportId && (
+        <ViolationDetailsModal reportId={violationReportId} onClose={() => setViolationReportId(null)} />
       )}
     </div>
   );

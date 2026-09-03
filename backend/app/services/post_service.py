@@ -502,9 +502,33 @@ class PostService:
         
         await self.db.delete(post)
         await self.db.commit()
-        
+
         logger.info(f"✅ Post {post_id} deleted by user {user_id}")
         return {"message": "Post deleted successfully"}
+
+    async def bulk_delete_posts(self, post_ids: List[str], admin_id: str) -> dict:
+        """Admin-only bulk removal - deletes ONLY the given post IDs, each
+        one going through the exact same delete_post() above (same
+        ownership/role check, same DB-level cleanup a single delete already
+        gets - e.g. UserReport.post_id is ON DELETE SET NULL, so a reported
+        post's report/moderation history survives deletion here exactly as
+        it does for a single delete). Tolerates an id that's already gone
+        (e.g. deleted moments ago by its author) rather than failing the
+        whole batch over one missing post; any other error still aborts."""
+        deleted_ids: List[str] = []
+        not_found_ids: List[str] = []
+        for post_id in post_ids:
+            try:
+                await self.delete_post(post_id, admin_id)
+                deleted_ids.append(post_id)
+            except HTTPException as e:
+                if e.status_code == status.HTTP_404_NOT_FOUND:
+                    not_found_ids.append(post_id)
+                else:
+                    raise
+
+        logger.info(f"✅ Bulk deleted {len(deleted_ids)} post(s) by admin {admin_id}")
+        return {"deleted_count": len(deleted_ids), "deleted_ids": deleted_ids, "not_found_ids": not_found_ids}
 
     # ============================================
     # SHARE POST

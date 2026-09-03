@@ -224,11 +224,22 @@ class ModerationService:
     async def remove_reported_post(self, report_id: str, admin_id: str) -> UserReport:
         """Delete the reported post - reuses PostService.delete_post (which
         already lets an admin delete any post) rather than a second
-        deletion path, then records that this report ended in a removal."""
+        deletion path, then records that this report ended in a removal.
+        Snapshots the post's content/media onto the report FIRST, since
+        post_id is ON DELETE SET NULL and posts.py has no soft-delete - once
+        the row is gone, this snapshot is the only way the reported user's
+        Violation Details view (or the admin's own report history) can still
+        show them which post was removed."""
         from app.services.post_service import PostService
 
         report = await self._get_report(report_id)
         if report.post_id:
+            post_result = await self.db.execute(select(Post).where(Post.id == report.post_id))
+            post = post_result.scalar_one_or_none()
+            if post:
+                report.removed_post_content = post.content
+                report.removed_post_media_urls = post.media_urls or []
+
             post_service = PostService(self.db)
             try:
                 await post_service.delete_post(str(report.post_id), admin_id)
@@ -244,6 +255,75 @@ class ModerationService:
         report.moderated_at = datetime.utcnow()
         await self.db.commit()
         await self.db.refresh(report)
+        return report
+
+    async def confirm_violation(self, report_id: str, admin_id: str, message: str) -> UserReport:
+        """The admin's official write-up of why a reported post violates
+        CCS HUB guidelines. Marks the report valid (same reasoning as
+        issue_warning/restrict_user) and sends the reported user a
+        clickable "Post Violation" notification - the reporter is never
+        named, referenced, or otherwise identifiable in the message,
+        notification, or the Violation Details the user opens from it."""
+        report = await self._get_report(report_id)
+        if report.status == "dismissed":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This report was already dismissed")
+        if not report.post_id and report.removed_post_content is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This report has no associated post to send a violation notice for")
+
+        report.status = "valid"
+        report.admin_message = message
+        report.moderated_by = admin_id
+        report.moderated_at = datetime.utcnow()
+        await self.db.commit()
+        await self.db.refresh(report)
+
+        await self._notify(
+            user_id=str(report.reported_id),
+            notif_type="post_violation",
+            title="Post Violation",
+            content="Your post was reviewed and found to violate CCS HUB Community Guidelines.",
+            data={"report_id": str(report.id)},
+        )
+        return report
+
+    async def resolve_reported_post_view(self, report: UserReport) -> dict:
+        """The reported post as it should be shown back - live content if
+        the post still exists, the snapshot captured at removal time if it
+        was taken down via remove_reported_post, or an empty placeholder
+        otherwise. Shared by the admin report listing and the reported
+        user's Violation Details view so neither re-implements this."""
+        if report.post_id:
+            post_result = await self.db.execute(select(Post).where(Post.id == report.post_id))
+            post = post_result.scalar_one_or_none()
+            if post:
+                return {
+                    "content": post.content,
+                    "media_urls": post.media_urls or [],
+                    "exists": True,
+                    "created_at": post.created_at,
+                    "removed_by_moderation": False,
+                }
+        if report.removed_post_content is not None or report.removed_post_media_urls:
+            return {
+                "content": report.removed_post_content,
+                "media_urls": report.removed_post_media_urls or [],
+                "exists": False,
+                "created_at": None,
+                "removed_by_moderation": True,
+            }
+        return {"content": None, "media_urls": [], "exists": False, "created_at": None, "removed_by_moderation": False}
+
+    async def get_violation_for_user(self, report_id: str, user_id: str) -> UserReport:
+        """The reported user opening their own "Post Violation" notification
+        - 403 if this report isn't theirs (never confirms whether the report
+        ID even exists to a non-owner), 404 if no violation notice has
+        actually been sent yet (e.g. a report that's still pending, or only
+        ever got a plain warning). Never touches reporter_id."""
+        report = await self._get_report(report_id)
+        if str(report.reported_id) != str(user_id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This report does not belong to you")
+        if report.admin_message is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No violation notice found for this report")
         return report
 
     async def _notify(self, user_id: str, notif_type: str, title: str, content: str, data: dict) -> None:

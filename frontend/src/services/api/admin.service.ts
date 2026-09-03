@@ -19,6 +19,7 @@ export interface AdminDashboardStats {
   posts: StatMetric;
   reports: StatMetric;
   live_streams_now: number;
+  online_users_now: number;
   engagement: EngagementTotals;
 }
 
@@ -145,6 +146,12 @@ export interface AdminPostListResponse {
   total_pages: number;
 }
 
+export interface BulkDeletePostsResponse {
+  deleted_count: number;
+  deleted_ids: string[];
+  not_found_ids: string[];
+}
+
 export interface AdminAnnouncementListItem {
   id: string;
   title: string;
@@ -232,11 +239,12 @@ export interface AdminReportedUser {
 }
 
 export interface AdminReportedPost {
-  id: string;
+  id: string | null;
   content: string | null;
   media_urls: string[];
   exists: boolean;
   created_at: string | null;
+  removed_by_moderation: boolean;
 }
 
 export interface AdminReportRestriction {
@@ -259,6 +267,7 @@ export interface AdminReportListItem {
   warning_issued: boolean;
   post_removed: boolean;
   restriction: AdminReportRestriction | null;
+  admin_message: string | null;
 }
 
 export interface AdminReportListResponse {
@@ -303,6 +312,8 @@ export const adminService = {
 
   getPosts: (params: { page?: number; limit?: number; search?: string } = {}) =>
     api.get<AdminPostListResponse>('/admin/posts', { params }),
+  bulkDeletePosts: (postIds: string[]) =>
+    api.post<BulkDeletePostsResponse>('/admin/posts/bulk-delete', { post_ids: postIds }),
 
   getAnnouncements: (params: { page?: number; limit?: number; search?: string } = {}) =>
     api.get<AdminAnnouncementListResponse>('/admin/announcements', { params }),
@@ -322,6 +333,8 @@ export const adminService = {
     api.post<ModerationActionResponse>(`/admin/reports/${reportId}/validate`),
   warnReportedUser: (reportId: string) =>
     api.post<ModerationActionResponse>(`/admin/reports/${reportId}/warn`),
+  confirmViolation: (reportId: string, message: string) =>
+    api.post<ModerationActionResponse>(`/admin/reports/${reportId}/confirm-violation`, { message }),
   restrictReportedUser: (reportId: string, duration: AdminRestrictionDuration) =>
     api.post<ModerationActionResponse>(`/admin/reports/${reportId}/restrict`, { duration }),
   removeReportedPost: (reportId: string) =>

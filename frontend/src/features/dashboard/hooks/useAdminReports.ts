@@ -36,6 +36,11 @@ export function useAdminReportActions() {
     mutationFn: (reportId: string) => adminService.removeReportedPost(reportId),
     onSuccess: invalidate,
   });
+  const confirmViolation = useMutation({
+    mutationFn: ({ reportId, message }: { reportId: string; message: string }) =>
+      adminService.confirmViolation(reportId, message),
+    onSuccess: invalidate,
+  });
 
-  return { dismiss, validate, warn, restrict, removePost };
+  return { dismiss, validate, warn, restrict, removePost, confirmViolation };
 }

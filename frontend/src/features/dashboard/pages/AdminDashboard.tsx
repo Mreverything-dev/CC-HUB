@@ -213,11 +213,11 @@ export default function AdminDashboard() {
                   />
                   <StatCard
                     icon={SignalIcon}
-                    label="Active Now"
-                    value={stats?.live_streams_now}
+                    label="Online"
+                    value={stats?.online_users_now}
                     isLoading={statsLoading}
                     accent="#22C55E"
-                    onClick={() => setActiveSection('livestreams')}
+                    onClick={() => setActiveSection('users')}
                   />
                   <StatCard
                     icon={DocumentTextIcon}

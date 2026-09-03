@@ -1,7 +1,7 @@
 // frontend/src/features/dashboard/components/admin/reports/ReportDetailModal.tsx
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { XMarkIcon, CheckCircleIcon, NoSymbolIcon, ShieldExclamationIcon, ClockIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, CheckCircleIcon, NoSymbolIcon, ShieldExclamationIcon, ClockIcon, TrashIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 import { Avatar } from '@/features/dashboard/components/Avatar';
 import { RoleBadge } from '@/features/dashboard/components/RoleBadge';
@@ -16,17 +16,25 @@ interface ReportDetailModalProps {
   onClose: () => void;
 }
 
-type PendingAction = { type: 'dismiss' } | { type: 'validate' } | { type: 'warn' } | { type: 'restrict'; duration: AdminRestrictionDuration; label: string; days: number } | { type: 'remove-post' } | null;
+type PendingAction =
+  | { type: 'dismiss' }
+  | { type: 'validate' }
+  | { type: 'warn' }
+  | { type: 'restrict'; duration: AdminRestrictionDuration; label: string; days: number }
+  | { type: 'remove-post' }
+  | { type: 'confirm-violation' }
+  | null;
 
 export function ReportDetailModal({ report, onClose }: ReportDetailModalProps) {
   const navigate = useNavigate();
-  const { dismiss, validate, warn, restrict, removePost } = useAdminReportActions();
+  const { dismiss, validate, warn, restrict, removePost, confirmViolation } = useAdminReportActions();
   const [pending, setPending] = useState<PendingAction>(null);
+  const [violationMessage, setViolationMessage] = useState('');
 
   const category = getReportCategoryMeta(report.category, report.category_label);
   const status = getReportStatusMeta(report.status);
   const isDismissed = report.status === 'dismissed';
-  const isBusy = dismiss.isPending || validate.isPending || warn.isPending || restrict.isPending || removePost.isPending;
+  const isBusy = dismiss.isPending || validate.isPending || warn.isPending || restrict.isPending || removePost.isPending || confirmViolation.isPending;
 
   const runAction = async () => {
     if (!pending) return;
@@ -46,6 +54,14 @@ export function ReportDetailModal({ report, onClose }: ReportDetailModalProps) {
       } else if (pending.type === 'remove-post') {
         await removePost.mutateAsync(report.id);
         toast.success('Post removed.');
+      } else if (pending.type === 'confirm-violation') {
+        if (!violationMessage.trim()) {
+          toast.error('Write a message explaining the violation before sending.');
+          return;
+        }
+        await confirmViolation.mutateAsync({ reportId: report.id, message: violationMessage.trim() });
+        toast.success('Violation notice sent to the reported user.');
+        setViolationMessage('');
       }
       setPending(null);
     } catch (error: any) {
@@ -56,7 +72,7 @@ export function ReportDetailModal({ report, onClose }: ReportDetailModalProps) {
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={onClose}>
       <div
-        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-[#1E3447] bg-[#111E2B] shadow-2xl"
+        className="w-full max-w-lg max-h-[90vh] overflow-y-auto scrollbar-hide rounded-2xl border border-[#1E3447] bg-[#111E2B] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#1E3447]">
@@ -104,6 +120,20 @@ export function ReportDetailModal({ report, onClose }: ReportDetailModalProps) {
                     <p className="text-xs text-[#64748B] mt-2">Posted {formatAbsoluteTime(report.reported_post.created_at)}</p>
                   )}
                 </div>
+              ) : report.reported_post.removed_by_moderation && (report.reported_post.content || report.reported_post.media_urls.length > 0) ? (
+                <div className="rounded-xl border border-[#1E3447] bg-[#0A111A] p-3.5">
+                  <p className="text-[11px] text-[#64748B] italic mb-2">Removed by a moderator - preserved snapshot for review</p>
+                  {report.reported_post.content && (
+                    <p className="text-sm text-[#F1F5F9] [overflow-wrap:anywhere]">{report.reported_post.content}</p>
+                  )}
+                  {report.reported_post.media_urls.length > 0 && (
+                    <div className="grid grid-cols-3 gap-1.5 mt-2">
+                      {report.reported_post.media_urls.slice(0, 6).map((url, i) => (
+                        <img key={i} src={url} alt="" className="w-full h-16 object-cover rounded-lg" />
+                      ))}
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div className="rounded-xl border border-[#1E3447] bg-[#0A111A] p-3.5 text-sm text-[#64748B]">
                   This post no longer exists.
@@ -145,7 +175,7 @@ export function ReportDetailModal({ report, onClose }: ReportDetailModalProps) {
           </div>
 
           {/* Moderation history */}
-          {(report.moderated_at || report.warning_issued || report.post_removed || report.restriction) && (
+          {(report.moderated_at || report.warning_issued || report.post_removed || report.restriction || report.admin_message) && (
             <div>
               <p className="text-[10px] uppercase tracking-wide text-[#64748B] mb-1.5">Moderation History</p>
               <ul className="space-y-1 text-sm text-[#94A3B8]">
@@ -157,7 +187,14 @@ export function ReportDetailModal({ report, onClose }: ReportDetailModalProps) {
                     ⛔ Restricted until {formatAbsoluteTime(report.restriction.restricted_until)} ({report.restriction.reason})
                   </li>
                 )}
+                {report.admin_message && <li>📨 Violation notice sent to the reported user</li>}
               </ul>
+              {report.admin_message && (
+                <div className="mt-2 rounded-xl border border-[#1E3447] bg-[#0A111A] p-3">
+                  <p className="text-[10px] uppercase tracking-wide text-[#64748B] mb-1">Admin Message</p>
+                  <p className="text-sm text-[#F1F5F9] [overflow-wrap:anywhere]">"{report.admin_message}"</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -197,6 +234,19 @@ export function ReportDetailModal({ report, onClose }: ReportDetailModalProps) {
                 >
                   <TrashIcon className="h-4 w-4" />
                   Remove Post
+                </button>
+              )}
+              {report.reported_post && (
+                <button
+                  disabled={isDismissed}
+                  onClick={() => {
+                    setViolationMessage(report.admin_message || '');
+                    setPending({ type: 'confirm-violation' });
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#8B5CF6]/30 bg-[#8B5CF6]/10 text-[#8B5CF6] text-sm font-medium hover:bg-[#8B5CF6]/20 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <ExclamationTriangleIcon className="h-4 w-4" />
+                  {report.admin_message ? 'Resend Violation Notice' : 'Send Violation Notice'}
                 </button>
               )}
             </div>
@@ -255,6 +305,34 @@ export function ReportDetailModal({ report, onClose }: ReportDetailModalProps) {
           title="Remove Post"
           message="Permanently remove this post? This action cannot be undone."
           confirmLabel="Remove Post"
+          isLoading={isBusy}
+          onConfirm={runAction}
+          onCancel={() => setPending(null)}
+        />
+      )}
+      {pending?.type === 'confirm-violation' && (
+        <ConfirmDialog
+          title="Send Violation Notice"
+          message={
+            <div className="text-left">
+              <p className="mb-2.5">
+                Notify the reported user that this post was found to violate CCS HUB guidelines. Your message is
+                shown to them along with the reported post - the reporter's identity is never revealed.
+              </p>
+              <textarea
+                autoFocus
+                value={violationMessage}
+                onChange={(e) => setViolationMessage(e.target.value)}
+                placeholder="Explain the violation (shown to the reported user)..."
+                rows={3}
+                maxLength={2000}
+                className="w-full rounded-xl border border-[#1E3447] bg-[#0A111A] px-3 py-2 text-sm text-[#F1F5F9] placeholder-[#64748B] focus:outline-none focus:ring-1 focus:ring-[#8B5CF6] resize-none"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          }
+          confirmLabel="Send Notice"
+          danger={false}
           isLoading={isBusy}
           onConfirm={runAction}
           onCancel={() => setPending(null)}

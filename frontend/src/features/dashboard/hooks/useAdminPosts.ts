@@ -26,6 +26,25 @@ export function useAdminPosts(params: { page?: number; limit?: number; search?: 
     },
   });
 
+  // Admin-only bulk removal - reuses the same single-post deletion logic
+  // per id server-side (see PostService.bulk_delete_posts), just batched
+  // behind one request instead of N.
+  const bulkDeletePosts = useMutation({
+    mutationFn: (postIds: string[]) => adminService.bulkDeletePosts(postIds),
+    onSuccess: (res) => {
+      const { deleted_count, not_found_ids } = res.data;
+      if (not_found_ids.length > 0) {
+        toast.success(`${deleted_count} post${deleted_count === 1 ? '' : 's'} removed (${not_found_ids.length} already gone)`);
+      } else {
+        toast.success(`${deleted_count} post${deleted_count === 1 ? '' : 's'} removed`);
+      }
+      queryClient.invalidateQueries({ queryKey: ['adminPosts'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.detail || 'Failed to remove selected posts');
+    },
+  });
+
   return {
     data,
     isLoading,
@@ -34,5 +53,7 @@ export function useAdminPosts(params: { page?: number; limit?: number; search?: 
     refetch,
     deletePost: deletePost.mutateAsync,
     isDeleting: deletePost.isPending,
+    bulkDeletePosts: bulkDeletePosts.mutateAsync,
+    isBulkDeleting: bulkDeletePosts.isPending,
   };
 }

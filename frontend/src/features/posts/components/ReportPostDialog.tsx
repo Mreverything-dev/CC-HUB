@@ -29,7 +29,7 @@ export function ReportPostDialog({ isLoading, onSubmit, onCancel }: ReportPostDi
       onClick={() => !isLoading && onCancel()}
     >
       <div
-        className="w-full max-w-sm max-h-[90vh] overflow-y-auto rounded-2xl border border-[#1E3447] bg-[#111E2B] shadow-[0_0_40px_rgba(0,200,255,0.06)] p-6"
+        className="w-full max-w-sm max-h-[90vh] overflow-y-auto scrollbar-hide rounded-2xl border border-[#1E3447] bg-[#111E2B] shadow-[0_0_40px_rgba(0,200,255,0.06)] p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-center h-12 w-12 rounded-full mx-auto mb-4 border bg-[#EF4444]/10 border-[#EF4444]/30">
