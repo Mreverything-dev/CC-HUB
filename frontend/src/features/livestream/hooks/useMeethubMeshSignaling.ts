@@ -831,9 +831,21 @@ export function useMeethubMeshSignaling({ streamId, enabled, onRemoved }: UseMee
       // A screen share already takes priority on the wire - the camera
       // becomes the outgoing video the moment screen sharing stops.
       if (!localScreenTrackRef.current) await setOutgoingVideoTrack(track);
-    } catch (err) {
+    } catch (err: any) {
       console.error('[Meethub] Camera access denied:', err);
-      toast.error('Unable to access your camera. Check your browser permissions.');
+      // Same per-error-type messages GoLiveModal already uses for the exact
+      // same getUserMedia() call in its pre-meeting setup - a denied
+      // permission (most common on mobile, where the browser's own prompt
+      // is easy to dismiss without noticing) reads very differently from no
+      // camera existing at all, so this doesn't collapse both into one
+      // generic message the way the previous text did.
+      const message =
+        err?.name === 'NotAllowedError'
+          ? 'Camera access was denied. Allow access in your browser settings and try again.'
+          : err?.name === 'NotFoundError'
+          ? 'No camera was found on this device.'
+          : 'Unable to access your camera. Please check your permissions.';
+      toast.error(message);
     }
   }, [refreshLocalStreamObj, setOutgoingVideoTrack]);
 
@@ -851,9 +863,17 @@ export function useMeethubMeshSignaling({ streamId, enabled, onRemoved }: UseMee
       refreshLocalStreamObj();
       setIsMicOn(true);
       await updateOutgoingAudioTrack();
-    } catch (err) {
+    } catch (err: any) {
       console.error('[Meethub] Microphone access denied:', err);
-      toast.error('Unable to access your microphone. Check your browser permissions.');
+      // Same per-error-type messages GoLiveModal already uses - see
+      // toggleCamera's own comment above for why this isn't one generic string.
+      const message =
+        err?.name === 'NotAllowedError'
+          ? 'Microphone access was denied. Allow access in your browser settings and try again.'
+          : err?.name === 'NotFoundError'
+          ? 'No microphone was found on this device.'
+          : 'Unable to access your microphone. Please check your permissions.';
+      toast.error(message);
     }
   }, [refreshLocalStreamObj, updateOutgoingAudioTrack]);
 

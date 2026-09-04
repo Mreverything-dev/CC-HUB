@@ -53,8 +53,14 @@ interface GoLiveModalProps {
   variant?: 'livestream' | 'meethub';
 }
 
+// text-base (16px) below sm: - iOS Safari auto-zooms the page on focus for
+// any input/select/textarea with a computed font-size under 16px, which
+// made every field in this modal (title, description, category, device
+// pickers, date/time, entry deadline) jump-zoom the whole page open on a
+// phone. sm:text-sm restores the original 14px look unchanged at tablet/
+// desktop widths, where that zoom behavior doesn't happen.
 const inputClassName =
-  'w-full px-3.5 py-2.5 bg-[#0D1722] border border-[#1E3447] rounded-xl text-sm text-[#F1F5F9] placeholder-[#64748B] focus:outline-none focus:ring-2 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition';
+  'w-full px-3.5 py-2.5 bg-[#0D1722] border border-[#1E3447] rounded-xl text-base sm:text-sm text-[#F1F5F9] placeholder-[#64748B] focus:outline-none focus:ring-2 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition';
 
 type ScreenSourceKind = 'screen' | 'window' | 'game';
 type PipPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';

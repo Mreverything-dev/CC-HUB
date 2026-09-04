@@ -175,7 +175,22 @@ export default function MeethubRoom() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [viewers, setViewers] = useState<StreamViewer[]>([]);
-  const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  // Desktop renders this as an always-visible w-80 sidebar column (defaulting
+  // to open there is correct and unchanged), but below lg: the exact same
+  // "open" state instead renders a fixed inset-0 overlay drawer with
+  // pointer-events-auto covering the WHOLE screen - including the camera/mic
+  // control bar underneath it. Defaulting to true unconditionally meant that
+  // overlay's backdrop silently intercepted every tap on mobile from the
+  // moment the room loaded, before the user ever touched the People/Chat
+  // button - camera/mic looked completely broken on mobile when the buttons
+  // were actually just unreachable. Every other mobile drawer in this app
+  // (see AdminDashboard's isMobileNavOpen) starts closed for exactly this
+  // reason; this now does too, only on screens narrower than the lg:
+  // breakpoint the drawer/sidebar split itself already uses everywhere else
+  // in this file.
+  const [rightPanelOpen, setRightPanelOpen] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth >= 1024
+  );
   const [rightTab, setRightTab] = useState<'participants' | 'attendance' | 'chat'>('participants');
   const [showSpeakRequests, setShowSpeakRequests] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
