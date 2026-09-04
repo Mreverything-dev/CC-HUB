@@ -52,6 +52,17 @@ export function VerifyEmail() {
       setCooldown(RESEND_COOLDOWN_SECONDS);
     } catch (error: any) {
       setResendMessage(error.response?.data?.detail || 'Could not resend verification email.');
+      // The backend's own rate limit (see /auth/resend-verification) may be
+      // stricter than this page's default local cooldown - when it rejects
+      // with 429, it sends a standard Retry-After header (seconds) we can
+      // use to drive this exact same cooldown display instead of letting
+      // the button re-enable before the server would actually accept another try.
+      if (error.response?.status === 429) {
+        const retryAfter = Number(error.response?.headers?.['retry-after']);
+        if (Number.isFinite(retryAfter) && retryAfter > 0) {
+          setCooldown(retryAfter);
+        }
+      }
     } finally {
       setIsResending(false);
     }

@@ -6,8 +6,8 @@ import { useAuth } from '../hooks/useAuth';
 import { Link } from 'react-router-dom';
 import { FcGoogle } from 'react-icons/fc';
 import { FaFacebook, FaGithub } from 'react-icons/fa';
-import { Mail, AlertCircle, Lock, Eye, EyeOff } from 'lucide-react';
-import { useState } from 'react';
+import { Mail, AlertCircle, Lock, Eye, EyeOff, Clock } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import heroImage from '@/assets/images/backgrounds/img-bg.png';
 import { LogoIcon } from '@/components/ui/Logo/Logo';
 
@@ -22,6 +22,13 @@ type LoginFormData = z.infer<typeof loginSchema>;
 export function Login() {
   const { login, isLoading } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
+  // Backend/Redis is the actual source of truth for the cooldown (see
+  // AuthService.login's progressive lockout) - this is purely a display
+  // countdown seeded from the 429 response's Retry-After header. A page
+  // refresh clears it locally, but the next login attempt re-syncs it from
+  // a fresh 429 if the server-side cooldown is still active, so refreshing
+  // never actually lets anyone bypass the real limit.
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const { register, handleSubmit, formState: { errors } } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
@@ -29,8 +36,29 @@ export function Login() {
     },
   });
 
+  useEffect(() => {
+    if (cooldownSeconds <= 0) return;
+    const timer = setInterval(() => setCooldownSeconds((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [cooldownSeconds]);
+
   const onSubmit = async (data: LoginFormData) => {
-    await login(data);
+    if (cooldownSeconds > 0) return;
+    try {
+      await login(data);
+    } catch (error: any) {
+      // useAuth's own login() already shows a toast for every failure
+      // (including this one) - this additionally seeds the persistent,
+      // live-updating cooldown alert/button state below for a 429
+      // specifically, so the user always sees exactly how long is left
+      // without that message vanishing the way a toast does.
+      if (error?.response?.status === 429) {
+        const retryAfter = Number(error.response?.headers?.['retry-after']);
+        if (Number.isFinite(retryAfter) && retryAfter > 0) {
+          setCooldownSeconds(retryAfter);
+        }
+      }
+    }
   };
 
   // Mock social login handler
@@ -117,6 +145,22 @@ export function Login() {
                 </div>
               )}
 
+              {/* Rate-limit cooldown - live countdown seeded from the
+                  backend's Retry-After header (see onSubmit above); the
+                  server, not this timer, is what actually enforces it. */}
+              {cooldownSeconds > 0 && (
+                <div className="flex items-start gap-2 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+                  <Clock className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>
+                    Too many login attempts. Please try again in{' '}
+                    <span className="font-semibold">
+                      {cooldownSeconds} second{cooldownSeconds === 1 ? '' : 's'}
+                    </span>
+                    .
+                  </span>
+                </div>
+              )}
+
               {/* Email Input with Mail Icon */}
               <div className="relative">
                 <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#00C8FF] z-10">
@@ -182,7 +226,7 @@ export function Login() {
               {/* Login Button */}
               <button
                 type="submit"
-                disabled={isLoading}
+                disabled={isLoading || cooldownSeconds > 0}
                 className="relative w-full overflow-hidden rounded-xl bg-gradient-to-br from-[#00C8FF] to-[#3B82F6] px-4 py-3.5 font-semibold text-[#060B12] transition-all duration-200 hover:opacity-90 hover:shadow-[0_0_24px_rgba(0,200,245,0.3)] focus:outline-none focus:ring-2 focus:ring-[#00C8FF]/60 focus:ring-offset-2 focus:ring-offset-[#0D1722] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isLoading ? (
@@ -193,6 +237,8 @@ export function Login() {
                     </svg>
                     Logging in...
                   </span>
+                ) : cooldownSeconds > 0 ? (
+                  `Log In — ${cooldownSeconds}s`
                 ) : (
                   "Log In"
                 )}

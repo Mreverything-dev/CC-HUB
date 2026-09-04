@@ -1,9 +1,10 @@
 ﻿# backend/app/api/v1/endpoints/auth.py
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
+from app.core.rate_limit import get_client_ip
 from app.services.auth_service import AuthService
 from app.schemas.auth import (
     LoginRequest, RegisterRequest, TokenResponse, RegisterResponse,
@@ -37,11 +38,12 @@ async def register(
 @router.post("/login", response_model=TokenResponse)
 async def login(
     request: LoginRequest,
+    http_request: Request,
     db: AsyncSession = Depends(get_db)
 ) -> Any:
     """Login user and return JWT tokens"""
     service = AuthService(db)
-    return await service.login(request)
+    return await service.login(request, get_client_ip(http_request))
 
 @router.post("/refresh")
 async def refresh_token(
@@ -169,10 +171,11 @@ async def check_verification_status(
 @router.post("/forgot-password", response_model=PasswordResetResponse)
 async def forgot_password(
     request: ForgotPasswordRequest,
+    http_request: Request,
     db: AsyncSession = Depends(get_db)
 ) -> Any:
     service = AuthService(db)
-    return await service.forgot_password(request.email)
+    return await service.forgot_password(request.email, get_client_ip(http_request))
 
 @router.post("/reset-password", response_model=PasswordResetResponse)
 async def reset_password(

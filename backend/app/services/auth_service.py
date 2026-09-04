@@ -8,8 +8,15 @@ from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, Regis
 from app.core.security import verify_password, get_password_hash, create_access_token, create_refresh_token, decode_token
 from app.services.email_service import email_service
 from app.services.redis_service import redis_service
+from app.core.config import settings
+from app.core.rate_limit import (
+    enforce_rate_limit, register_attempt,
+    get_active_login_cooldown, register_login_failure, reset_login_cooldown, format_wait,
+)
+from app.core.session import invalidate_sessions, is_token_still_valid
 from fastapi import HTTPException, status
 from datetime import datetime, timedelta, timezone
+import hashlib
 import logging
 import secrets
 import string
@@ -46,14 +53,27 @@ class AuthService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    @staticmethod
+    def _hash_token(token: str) -> str:
+        """One-way hash used as the actual Redis/DB storage key for every
+        emailed token below - the plaintext token itself is only ever
+        emailed to the user and submitted back by them, never written to
+        any datastore. If Redis (or, for verification_token, the users
+        table) were ever dumped or leaked, the attacker would get these
+        hashes, not usable tokens - SHA-256 is preimage-resistant and these
+        tokens already carry 256 bits of entropy from secrets.token_urlsafe,
+        so this is a lookup key, not a place extra password-hashing cost
+        (bcrypt/Argon2) would add any real protection."""
+        return hashlib.sha256(token.encode('utf-8')).hexdigest()
+
     def _verification_key(self, token: str) -> str:
-        return f"verification:{token}"
+        return f"verification:{self._hash_token(token)}"
 
     def _password_reset_key(self, token: str) -> str:
-        return f"password_reset:{token}"
+        return f"password_reset:{self._hash_token(token)}"
 
     def _password_change_key(self, token: str) -> str:
-        return f"password_change:{token}"
+        return f"password_change:{self._hash_token(token)}"
 
     async def register(self, request: RegisterRequest) -> RegisterResponse:
         """Register a new user with invitation code validation for professor/admin"""
@@ -137,7 +157,7 @@ class AuthService:
                 logger.error(f"❌ Password hashing failed: {e}")
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Password hashing error: {str(e)}"
+                    detail="Registration failed. Please try again."
                 )
 
             # --- CREATE USER with verification fields ---
@@ -154,7 +174,10 @@ class AuthService:
                 role=request.role,
                 is_active=True,
                 is_verified=False,  # ✅ User starts as unverified
-                verification_token=verification_token,  # ✅ Store token
+                # Hashed, not the raw token - see _hash_token's own comment.
+                # The plaintext token is only ever in the emailed link/Redis
+                # value below, both looked up by this same hash.
+                verification_token=self._hash_token(verification_token),
                 verification_token_expires=verification_expires  # ✅ Store expiration
             )
             
@@ -237,7 +260,7 @@ class AuthService:
             await self.db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Registration failed: {str(e)}"
+                detail="Registration failed. Please try again."
             )
 
     # ============================================
@@ -245,12 +268,13 @@ class AuthService:
     # ============================================
     async def verify_email(self, token: str) -> dict:
         """Verify user email with token"""
-        logger.info(f"🔐 Verifying email with token: {token[:20]}...")
-        
+        logger.info("🔐 Verifying email with token")
+        token_hash = self._hash_token(token)
+
         try:
             # ✅ Check Redis first for fast lookup
             redis_data = await redis_service.get_token(self._verification_key(token))
-            
+
             if redis_data:
                 user_id = redis_data.get("user_id")
                 # Find user by ID
@@ -262,21 +286,22 @@ class AuthService:
                 )
                 user = result.scalar_one_or_none()
             else:
-                # Fallback to database lookup
+                # Fallback to database lookup - verification_token is stored
+                # hashed (see _hash_token), so compare against the same hash.
                 result = await self.db.execute(
                     select(User).where(
-                        User.verification_token == token,
+                        User.verification_token == token_hash,
                         User.verification_token_expires > datetime.utcnow(),
                         User.is_verified == False
                     )
                 )
                 user = result.scalar_one_or_none()
-            
+
             if not user:
                 # Check if already verified
                 result = await self.db.execute(
                     select(User).where(
-                        User.verification_token == token,
+                        User.verification_token == token_hash,
                         User.is_verified == True
                     )
                 )
@@ -327,7 +352,7 @@ class AuthService:
             logger.error(f"❌ Email verification error: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Email verification failed: {str(e)}"
+                detail="Email verification failed. Please try again."
             )
 
     # ============================================
@@ -336,7 +361,20 @@ class AuthService:
     async def resend_verification(self, email: str) -> dict:
         """Resend verification email"""
         logger.info(f"📧 Resending verification email to: {email}")
-        
+
+        # Counts every call, regardless of outcome (user not found / already
+        # verified / actually sent) - otherwise this endpoint could be used
+        # to spam a victim's inbox for free just by re-checking "not found"
+        # first, or to probe whether an email is registered.
+        rate_key = f"ratelimit:resend_verification:email:{email}"
+        await enforce_rate_limit(
+            rate_key,
+            settings.RATE_LIMIT_RESEND_VERIFICATION_EMAIL_MAX,
+            settings.RATE_LIMIT_RESEND_VERIFICATION_EMAIL_WINDOW_SECONDS,
+            "Too many verification emails requested for this address.",
+        )
+        await register_attempt(rate_key, settings.RATE_LIMIT_RESEND_VERIFICATION_EMAIL_WINDOW_SECONDS)
+
         try:
             result = await self.db.execute(
                 select(User).where(
@@ -368,8 +406,8 @@ class AuthService:
             # ✅ Generate new token
             verification_token = secrets.token_urlsafe(32)
             verification_expires = datetime.utcnow() + timedelta(minutes=60)
-            
-            user.verification_token = verification_token
+
+            user.verification_token = self._hash_token(verification_token)
             user.verification_token_expires = verification_expires
             await self.db.commit()
             
@@ -403,7 +441,7 @@ class AuthService:
             logger.error(f"❌ Resend verification error: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to resend verification: {str(e)}"
+                detail="Failed to resend verification email. Please try again."
             )
 
     # ============================================
@@ -435,11 +473,33 @@ class AuthService:
             logger.error(f"❌ Check verification status error: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to check verification status: {str(e)}"
+                detail="Failed to check verification status."
             )
 
-    async def forgot_password(self, email: str) -> dict:
+    async def forgot_password(self, email: str, client_ip: str = "unknown") -> dict:
         logger.info(f"📧 Password reset requested for: {email}")
+
+        # Counts every call (found or not) - the response is identical
+        # either way (never reveals whether the account exists), so the
+        # limit has to apply before that branch, not just to the "user
+        # found" path, or an attacker could hammer this endpoint for free
+        # against unregistered addresses.
+        email_key = f"ratelimit:password_reset:email:{email}"
+        ip_key = f"ratelimit:password_reset:ip:{client_ip}"
+        await enforce_rate_limit(
+            email_key,
+            settings.RATE_LIMIT_PASSWORD_RESET_EMAIL_MAX,
+            settings.RATE_LIMIT_PASSWORD_RESET_EMAIL_WINDOW_SECONDS,
+            "Too many password reset requests for this account.",
+        )
+        await enforce_rate_limit(
+            ip_key,
+            settings.RATE_LIMIT_PASSWORD_RESET_IP_MAX,
+            settings.RATE_LIMIT_PASSWORD_RESET_IP_WINDOW_SECONDS,
+            "Too many password reset requests from this network.",
+        )
+        await register_attempt(email_key, settings.RATE_LIMIT_PASSWORD_RESET_EMAIL_WINDOW_SECONDS)
+        await register_attempt(ip_key, settings.RATE_LIMIT_PASSWORD_RESET_IP_WINDOW_SECONDS)
 
         result = await self.db.execute(
             select(User).where(User.email == email, User.is_active == True)
@@ -498,6 +558,14 @@ class AuthService:
         user.password_hash = get_password_hash(new_password)
         await self.db.commit()
         await redis_service.delete_token(self._password_reset_key(token))
+
+        # Any access/refresh token issued before right now becomes invalid
+        # the next time it's checked (get_current_user / this file's own
+        # refresh_token) - otherwise a token stolen before the reset would
+        # keep working indefinitely afterward, defeating the point of
+        # resetting the password.
+        await invalidate_sessions(str(user.id), settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400)
+
         return {"message": "Password reset successfully", "success": True}
 
     # ============================================
@@ -602,23 +670,65 @@ class AuthService:
     # ============================================
     # LOGIN
     # ============================================
-    async def login(self, request: LoginRequest) -> TokenResponse:
+    async def login(self, request: LoginRequest, client_ip: str = "unknown") -> TokenResponse:
         """Login user"""
         logger.info(f"🔐 Login attempt: {request.email}")
-        
+
+        # IP scope is checked BEFORE any DB/bcrypt work, and can only ever
+        # slow down requests actually coming from that IP - safe to gate
+        # here. The email scope is deliberately NOT checked yet (see
+        # _fail's own comment below) - a correct password must always be
+        # allowed through, no matter how much someone else has been
+        # guessing against this exact email.
+        ip_cooldown = await get_active_login_cooldown("ip", client_ip)
+        if ip_cooldown:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Too many login attempts from this network. Please try again in {format_wait(ip_cooldown)}.",
+                headers={"Retry-After": str(ip_cooldown)},
+            )
+
+        async def _fail() -> None:
+            """Registers a WRONG attempt against both scopes and raises the
+            appropriate error. Both register calls happen regardless, but
+            whichever one just triggered/re-triggered a cooldown - possibly
+            BOTH, on the exact request that happens to cross a threshold -
+            determines the response: 429 with that cooldown, otherwise the
+            same generic 401 either way (reveals nothing about whether the
+            email exists or which part of the credential was wrong). This
+            must check both return values, not just email's - otherwise the
+            one request that actually crosses the IP threshold would itself
+            still get a plain 401 (the block only visible on the NEXT
+            request, via the check at the top of this method), silently
+            letting one extra guess through right when it matters most."""
+            ip_cooldown = await register_login_failure(
+                "ip", client_ip,
+                settings.RATE_LIMIT_LOGIN_IP_MAX, settings.RATE_LIMIT_LOGIN_IP_WINDOW_SECONDS,
+            )
+            email_cooldown = await register_login_failure(
+                "email", request.email,
+                settings.RATE_LIMIT_LOGIN_EMAIL_MAX, settings.RATE_LIMIT_LOGIN_EMAIL_WINDOW_SECONDS,
+            )
+            cooldown = email_cooldown or ip_cooldown
+            if cooldown:
+                message = "Too many login attempts." if email_cooldown else "Too many login attempts from this network."
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail=f"{message} Please try again in {format_wait(cooldown)}.",
+                    headers={"Retry-After": str(cooldown)},
+                )
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+
         try:
             result = await self.db.execute(
                 select(User).where(User.email == request.email)
             )
             user = result.scalar_one_or_none()
-            
+
             if not user:
                 logger.warning(f"❌ User not found: {request.email}")
                 verify_password(request.password, _DUMMY_PASSWORD_HASH)
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid credentials"
-                )
+                await _fail()
 
             try:
                 password_valid = verify_password(request.password, user.password_hash)
@@ -628,14 +738,11 @@ class AuthService:
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="Password verification failed"
                 )
-            
+
             if not password_valid:
                 logger.warning(f"❌ Invalid password for: {request.email}")
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid credentials"
-                )
-            
+                await _fail()
+
             if not user.is_active:
                 logger.warning(f"❌ Inactive account: {request.email}")
                 raise HTTPException(
@@ -656,6 +763,14 @@ class AuthService:
             await self.db.commit()
             logger.info(f"✅ Login successful: {request.email}")
 
+            # A genuinely successful login clears this account's escalation
+            # state - a user who mistyped their password a few times
+            # shouldn't stay "partway up the ladder" after they actually
+            # get in. The IP scope is left alone on purpose: it's shared
+            # across every account on that network, so one person logging
+            # in successfully shouldn't reset it for everyone else.
+            await reset_login_cooldown("email", request.email)
+
             access_token = create_access_token(
                 data={"sub": str(user.id), "role": user.role}
             )
@@ -670,14 +785,14 @@ class AuthService:
                 refresh_token=refresh_token,
                 user=user_response
             )
-            
+
         except HTTPException:
             raise
         except Exception as e:
             logger.error(f"❌ Login error: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Login failed: {str(e)}"
+                detail="Login failed. Please try again."
             )
 
     # ============================================
@@ -708,12 +823,21 @@ class AuthService:
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid token payload"
                 )
-            
+
+            # A refresh token issued before the account's password was last
+            # reset must not be able to mint a fresh access token - same
+            # check get_current_user does for access tokens themselves.
+            if not await is_token_still_valid(user_id, payload.get("iat")):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Session expired. Please log in again."
+                )
+
             result = await self.db.execute(
                 select(User).where(User.id == user_id, User.is_active == True)
             )
             user = result.scalar_one_or_none()
-            
+
             if not user:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
@@ -723,17 +847,17 @@ class AuthService:
             access_token = create_access_token(
                 data={"sub": str(user.id), "role": user.role}
             )
-            
+
             logger.info(f"✅ Token refreshed for user: {user.email}")
             return {"access_token": access_token, "token_type": "bearer"}
-            
+
         except HTTPException:
             raise
         except Exception as e:
             logger.error(f"❌ Token refresh error: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Token refresh failed: {str(e)}"
+                detail="Token refresh failed."
             )
 
     # ============================================
@@ -840,6 +964,10 @@ class AuthService:
         if not redis_data.get("consumed"):
             user.password_hash = redis_data.get("new_password_hash")
             await self.db.commit()
+
+            # Same reasoning as reset_password: a token/session issued
+            # before this change must not keep working afterward.
+            await invalidate_sessions(str(user.id), settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400)
 
             # Mark consumed rather than delete outright, so a near-simultaneous
             # repeat confirmation of this exact token is idempotent (same

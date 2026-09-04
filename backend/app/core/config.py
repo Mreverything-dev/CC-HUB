@@ -38,6 +38,43 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
+    # Rate limiting (Redis-backed, see app/core/rate_limit.py). Per-email
+    # limits are intentionally tighter than per-IP ones - a campus network
+    # (NAT/shared Wi-Fi) can put many legitimate students behind one IP, so
+    # an aggressive per-IP limit would risk locking out an entire building
+    # over a few unrelated failed logins, while a single account being
+    # brute-forced still needs to be stopped quickly regardless of IP.
+    #
+    # Login uses a PROGRESSIVE cooldown, not a flat cap: _MAX/_WINDOW below
+    # are the free "grace" attempts before the FIRST cooldown tier triggers
+    # (an account that hasn't misbehaved recently gets this many honest
+    # mistakes with no penalty at all, decaying back to zero after
+    # _WINDOW_SECONDS of no further failures). Once tier 1 has triggered,
+    # ANY further wrong attempt immediately escalates to the next tier in
+    # LOGIN_COOLDOWN_TIERS_SECONDS - see AuthService.login and
+    # app/core/rate_limit.py's register_login_failure for the full
+    # algorithm, including why a CORRECT password always bypasses this
+    # entirely (so it can never be weaponized into locking out the real
+    # account owner).
+    RATE_LIMIT_LOGIN_EMAIL_MAX: int = 5
+    RATE_LIMIT_LOGIN_EMAIL_WINDOW_SECONDS: int = 900       # 15 minutes
+    RATE_LIMIT_LOGIN_IP_MAX: int = 30
+    RATE_LIMIT_LOGIN_IP_WINDOW_SECONDS: int = 900          # 15 minutes
+    # How long a tier "remembers" a recent violation - a fresh failure
+    # within this long of the last one keeps escalating; going quiet for
+    # longer than this fully resets back to the grace phase above.
+    RATE_LIMIT_LOGIN_TIER_DECAY_SECONDS: int = 1800        # 30 minutes
+    # The escalation ladder itself, in seconds - comma-separated so it's a
+    # single easy env-var override; the last value is the effective
+    # maximum cooldown, however many violations keep happening.
+    RATE_LIMIT_LOGIN_COOLDOWN_TIERS_SECONDS: str = "30,60,120,300,600,900"
+    RATE_LIMIT_PASSWORD_RESET_EMAIL_MAX: int = 3
+    RATE_LIMIT_PASSWORD_RESET_EMAIL_WINDOW_SECONDS: int = 900   # 15 minutes
+    RATE_LIMIT_PASSWORD_RESET_IP_MAX: int = 10
+    RATE_LIMIT_PASSWORD_RESET_IP_WINDOW_SECONDS: int = 900      # 15 minutes
+    RATE_LIMIT_RESEND_VERIFICATION_EMAIL_MAX: int = 3
+    RATE_LIMIT_RESEND_VERIFICATION_EMAIL_WINDOW_SECONDS: int = 900  # 15 minutes
     
     # CORS
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
@@ -79,5 +116,9 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> List[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+
+    @property
+    def login_cooldown_tiers(self) -> List[int]:
+        return [int(v.strip()) for v in self.RATE_LIMIT_LOGIN_COOLDOWN_TIERS_SECONDS.split(",") if v.strip()]
 
 settings = Settings()

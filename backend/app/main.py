@@ -37,7 +37,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS
+# CORS - already scoped to a real origin allowlist (+ a private-LAN regex
+# for phone/LAN dev testing), never allow_origins=["*"]; unchanged here.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -45,7 +46,35 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Retry-After isn't in the browser's default CORS-safelisted response
+    # headers, so without this the frontend's rate-limit countdown
+    # (VerifyEmail.tsx reading error.response.headers['retry-after']) would
+    # silently see nothing on a cross-origin request (the normal case: the
+    # frontend and API run on different ports/origins in dev already).
+    expose_headers=["Retry-After"],
 )
+
+
+# Security headers on every HTTP response - added as a plain FastAPI
+# middleware (registered on `app` before it gets wrapped in
+# socketio.ASGIApp below), so it only ever touches real HTTP requests and
+# never the WebSocket upgrade path Socket.IO handles itself. Deliberately
+# does NOT set Content-Security-Policy or Permissions-Policy: a
+# React SPA + Socket.IO + WebRTC (camera/mic/screen-share for Livestream
+# and Meethub) needs each carefully allowlisted or either header would
+# silently break those exact features - safer to leave both out than ship
+# a guessed policy that breaks camera/mic access.
+@app.middleware("http")
+async def security_headers_middleware(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    if settings.APP_ENV == "production":
+        # Meaningless (and ignored by browsers) over plain HTTP, so only
+        # sent in production, where this is expected to sit behind HTTPS.
+        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+    return response
 
 # Include routers
 app.include_router(api_router, prefix="/api/v1")

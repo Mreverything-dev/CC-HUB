@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.database import get_db
 from app.core.security import decode_token
+from app.core.session import is_token_still_valid
 from app.models.user import User
 from typing import Optional, Dict, Any
 
@@ -36,6 +37,16 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token type",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Rejects a token issued before this user's password was last reset/
+    # changed (see app/core/session.py) - without this, a token stolen
+    # before that event would keep working for its full remaining lifetime.
+    if not await is_token_still_valid(user_id, payload.get("iat")):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired. Please log in again.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 

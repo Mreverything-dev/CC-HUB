@@ -6,10 +6,23 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_serializer, validator
 
+def _normalize_email(v: str) -> str:
+    """Lowercase + strip so "User@Example.com" and "user@example.com" are
+    always treated as the same address - for lookups (a Postgres text
+    comparison is case-sensitive by default, so this affects real login
+    reliability, not just security) and for rate-limit keys, which would
+    otherwise let an attacker dodge the per-email limit just by varying case."""
+    return v.strip().lower()
+
+
 class UserBase(BaseModel):
     email: EmailStr
     username: str
     role: Literal["student", "professor", "admin"] = "student"
+
+    @validator('email')
+    def normalize_email(cls, v):
+        return _normalize_email(v)
 
 class UserCreate(UserBase):
     password: str = Field(..., min_length=6)
@@ -64,6 +77,10 @@ class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
+    @validator('email')
+    def normalize_email(cls, v):
+        return _normalize_email(v)
+
 class RegisterRequest(UserCreate):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
@@ -98,12 +115,20 @@ class RefreshTokenRequest(BaseModel):
 class ResendVerificationRequest(BaseModel):
     email: EmailStr
 
+    @validator('email')
+    def normalize_email(cls, v):
+        return _normalize_email(v)
+
 class VerifyEmailResponse(BaseModel):
     message: str
     verified: bool
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
+
+    @validator('email')
+    def normalize_email(cls, v):
+        return _normalize_email(v)
 
 class ResetPasswordRequest(BaseModel):
     token: str
