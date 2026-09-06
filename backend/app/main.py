@@ -32,13 +32,14 @@ app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     description="CCS HUB - College of Computer Studies API",
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
+    docs_url="/docs",          # Correct: Prepend /api via root_path -> https://ccshub.fun/api/docs
+    redoc_url="/redoc",        # Correct: Prepend /api via root_path -> https://ccshub.fun/api/redoc
+    openapi_url="/openapi.json", # Correct: Prepend /api via root_path -> https://ccshub.fun/api/openapi.json
     lifespan=lifespan,
-    root_path="/api",
+    root_path="/api"
 )
-# CORS - already scoped to a real origin allowlist (+ a private-LAN regex
-# for phone/LAN dev testing), never allow_origins=["*"]; unchanged here.
+
+# CORS Middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -46,11 +47,6 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    # Retry-After isn't in the browser's default CORS-safelisted response
-    # headers, so without this the frontend's rate-limit countdown
-    # (VerifyEmail.tsx reading error.response.headers['retry-after']) would
-    # silently see nothing on a cross-origin request (the normal case: the
-    # frontend and API run on different ports/origins in dev already).
     expose_headers=["Retry-After"],
 )
 
