@@ -35,9 +35,8 @@ app = FastAPI(
     docs_url="/api/docs",
     redoc_url="/api/redoc",
     lifespan=lifespan,
-    root_path="/api"
+    root_path="/api",
 )
-
 # CORS - already scoped to a real origin allowlist (+ a private-LAN regex
 # for phone/LAN dev testing), never allow_origins=["*"]; unchanged here.
 app.add_middleware(
