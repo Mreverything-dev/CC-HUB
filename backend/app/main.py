@@ -35,6 +35,7 @@ app = FastAPI(
     docs_url="/api/docs",
     redoc_url="/api/redoc",
     lifespan=lifespan,
+    root_path="/api"
 )
 
 # CORS - already scoped to a real origin allowlist (+ a private-LAN regex
