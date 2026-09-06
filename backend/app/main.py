@@ -32,9 +32,9 @@ app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     description="CCS HUB - College of Computer Studies API",
-    docs_url="/docs",          # Correct: Prepend /api via root_path -> https://ccshub.fun/api/docs
-    redoc_url="/redoc",        # Correct: Prepend /api via root_path -> https://ccshub.fun/api/redoc
-    openapi_url="/openapi.json", # Correct: Prepend /api via root_path -> https://ccshub.fun/api/openapi.json
+    docs_url="/api/docs",           # Matches Nginx forwarding directly
+    redoc_url="/api/redoc",         # Matches Nginx forwarding directly
+    openapi_url="/api/openapi.json",# Matches Nginx forwarding directly
     lifespan=lifespan,
     
 )
