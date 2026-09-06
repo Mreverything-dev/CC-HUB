@@ -183,3 +183,9 @@ class ChangePasswordResponse(BaseModel):
 class ConfirmChangePasswordResponse(BaseModel):
     message: str
     success: bool
+
+class GoogleLoginRequest(BaseModel):
+    code: str
+
+class GoogleAuthResponse(TokenResponse):
+    is_new_user: bool = False

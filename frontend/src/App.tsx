@@ -27,9 +27,12 @@ import MeethubPage from '@/features/livestream/components/pages/MeethubPage';
 import MeethubRoom from '@/features/livestream/components/pages/MeethubRoom';
 import LivePage from '@/features/livestream/components/pages/LivePage';
 import { LiveStreamStage } from '@/features/livestream/components/LiveStreamStage';
+import { GoogleProvider } from './app/providers/GoogleProvider';
+
 
 function App() {
   return (
+  <GoogleProvider>
     <QueryProvider>
       <SocketProvider>
         <BrowserRouter>
@@ -191,6 +194,7 @@ function App() {
         </BrowserRouter>
       </SocketProvider>
     </QueryProvider>
+  </GoogleProvider>
   );
 }
 

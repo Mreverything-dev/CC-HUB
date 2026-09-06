@@ -17,6 +17,9 @@ from app.dependencies.auth import get_current_user
 from app.models.user import User
 from typing import Any
 from app.schemas.auth import UpdateUsernameRequest
+from app.schemas.auth import GoogleLoginRequest, GoogleAuthResponse
+from app.services.auth_service import AuthService
+from app.schemas.auth import GoogleLoginRequest, GoogleAuthResponse
 
 router = APIRouter()
 
@@ -184,3 +187,20 @@ async def reset_password(
 ) -> Any:
     service = AuthService(db)
     return await service.reset_password(request.token, request.new_password)
+
+@router.get("/google/url")
+async def google_auth_url(
+    db: AsyncSession = Depends(get_db)
+):
+    """Get Google OAuth authorization URL"""
+    service = AuthService(db)
+    return await service.google_auth_url()
+
+@router.post("/google/login", response_model=GoogleAuthResponse)
+async def google_login(
+    request: GoogleLoginRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Login or register with Google OAuth"""
+    service = AuthService(db)
+    return await service.google_login(request.code)

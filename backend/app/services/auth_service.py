@@ -9,6 +9,7 @@ from app.core.security import verify_password, get_password_hash, create_access_
 from app.services.email_service import email_service
 from app.services.redis_service import redis_service
 from app.core.config import settings
+from app.services.google_auth_service import google_auth_service
 from app.core.rate_limit import (
     enforce_rate_limit, register_attempt,
     get_active_login_cooldown, register_login_failure, reset_login_cooldown, format_wait,
@@ -261,6 +262,99 @@ class AuthService:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Registration failed. Please try again."
+            )
+    async def google_login(self, code: str) -> dict:
+        """Login or register user with Google"""
+        logger.info(f"🔐 Google OAuth login attempt")
+        
+        try:
+            # Get user info from Google
+            user_info = await google_auth_service.get_user_info(code)
+            
+            if not user_info.get("email"):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Failed to get user email from Google"
+                )
+            
+            email = user_info["email"]
+            username = user_info.get("email", "").split("@")[0]
+            
+            # Check if user exists
+            result = await self.db.execute(
+                select(User).where(User.email == email)
+            )
+            user = result.scalar_one_or_none()
+            
+            is_new_user = False
+            
+            if not user:
+                # ✅ Auto-register new user
+                is_new_user = True
+                password_hash = get_password_hash(secrets.token_urlsafe(32))
+                
+                user = User(
+                    email=email,
+                    username=username,
+                    password_hash=password_hash,
+                    role="student",  # Default role for Google users
+                    is_active=True,
+                    is_verified=True,  # Google verified email
+                )
+                self.db.add(user)
+                await self.db.commit()
+                await self.db.refresh(user)
+                logger.info(f"✅ New user created via Google: {email}")
+                
+                # Create profile
+                profile = StudentProfile(
+                    user_id=user.id,
+                    first_name=user_info.get("given_name"),
+                    last_name=user_info.get("family_name"),
+                    avatar_url=user_info.get("picture")
+                )
+                self.db.add(profile)
+                await self.db.commit()
+                logger.info(f"✅ Profile created for Google user: {email}")
+            
+            # Create tokens
+            access_token = create_access_token(
+                data={"sub": str(user.id), "role": user.role}
+            )
+            refresh_token = create_refresh_token(
+                data={"sub": str(user.id)}
+            )
+            
+            user_response = UserResponse.model_validate(user)
+            
+            return {
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "token_type": "bearer",
+                "user": user_response,
+                "is_new_user": is_new_user
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"❌ Google login error: {e}")
+            await self.db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Google login failed. Please try again."
+            )
+
+    async def google_auth_url(self) -> dict:
+        """Get Google OAuth authorization URL"""
+        try:
+            url = google_auth_service.get_authorization_url()
+            return {"auth_url": url}
+        except Exception as e:
+            logger.error(f"❌ Google auth URL error: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to generate Google auth URL: {str(e)}"
             )
 
     # ============================================

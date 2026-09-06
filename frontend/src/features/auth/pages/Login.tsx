@@ -3,13 +3,16 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '../hooks/useAuth';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { FcGoogle } from 'react-icons/fc';
 import { FaFacebook, FaGithub } from 'react-icons/fa';
 import { Mail, AlertCircle, Lock, Eye, EyeOff, Clock } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import heroImage from '@/assets/images/backgrounds/img-bg.png';
 import { LogoIcon } from '@/components/ui/Logo/Logo';
+import { useGoogleLogin } from '@react-oauth/google';
+import { useAuthStore } from '../store/auth.store';
+import toast from 'react-hot-toast';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -21,14 +24,11 @@ type LoginFormData = z.infer<typeof loginSchema>;
 
 export function Login() {
   const { login, isLoading } = useAuth();
+  const navigate = useNavigate();
+  const { login: setAuth } = useAuthStore();
   const [showPassword, setShowPassword] = useState(false);
-  // Backend/Redis is the actual source of truth for the cooldown (see
-  // AuthService.login's progressive lockout) - this is purely a display
-  // countdown seeded from the 429 response's Retry-After header. A page
-  // refresh clears it locally, but the next login attempt re-syncs it from
-  // a fresh 429 if the server-side cooldown is still active, so refreshing
-  // never actually lets anyone bypass the real limit.
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const { register, handleSubmit, formState: { errors } } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
@@ -47,11 +47,6 @@ export function Login() {
     try {
       await login(data);
     } catch (error: any) {
-      // useAuth's own login() already shows a toast for every failure
-      // (including this one) - this additionally seeds the persistent,
-      // live-updating cooldown alert/button state below for a 429
-      // specifically, so the user always sees exactly how long is left
-      // without that message vanishing the way a toast does.
       if (error?.response?.status === 429) {
         const retryAfter = Number(error.response?.headers?.['retry-after']);
         if (Number.isFinite(retryAfter) && retryAfter > 0) {
@@ -61,9 +56,65 @@ export function Login() {
     }
   };
 
+  // ✅ Google OAuth Login
+  const loginWithGoogle = useGoogleLogin({
+    flow: 'auth-code',
+    onSuccess: async (codeResponse) => {
+      setIsGoogleLoading(true);
+      try {
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL}/auth/google/login`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ code: codeResponse.code }),
+          }
+        );
+
+        const data = await response.json();
+
+        if (response.ok) {
+          setAuth(data.user, data.access_token, data.refresh_token);
+          
+          if (data.is_new_user) {
+            toast.success('🎉 Welcome! Your account has been created with Google.');
+          } else {
+            toast.success(`👋 Welcome back, ${data.user.username}!`);
+          }
+          
+          // ✅ Redirect based on role
+          const role = data.user.role;
+          if (role === 'admin') {
+            navigate('/admin/dashboard');
+          } else if (role === 'professor') {
+            navigate('/professor/dashboard');
+          } else {
+            navigate('/student/dashboard');
+          }
+        } else {
+          toast.error(data.detail || 'Google login failed');
+        }
+      } catch (error) {
+        console.error('Google login error:', error);
+        toast.error('Failed to connect to Google. Please try again.');
+      } finally {
+        setIsGoogleLoading(false);
+      }
+    },
+    onError: () => {
+      toast.error('Google login cancelled or failed');
+    },
+  });
+
   // Mock social login handler
   const handleSocialLogin = (provider: string) => {
-    console.log(`TODO: connect ${provider} OAuth`);
+    if (provider === 'google') {
+      loginWithGoogle();
+    } else {
+      console.log(`TODO: connect ${provider} OAuth`);
+    }
   };
 
   // Toggle password visibility
@@ -101,7 +152,7 @@ export function Login() {
           </div>
 
           <p className="mt-10 max-w-md text-3xl font-semibold leading-tight text-[#F1F5F9] [text-shadow:0_2px_16px_rgba(0,0,0,0.6)]">
-            Connect. Collaborate.{" "}
+            Connect. Collaborate.{' '}
             <span className="text-[#00C8FF]">Code the future.</span>
           </p>
           <p className="mt-4 max-w-sm text-sm text-[#94A3B8] [text-shadow:0_1px_8px_rgba(0,0,0,0.6)]">
@@ -145,9 +196,7 @@ export function Login() {
                 </div>
               )}
 
-              {/* Rate-limit cooldown - live countdown seeded from the
-                  backend's Retry-After header (see onSubmit above); the
-                  server, not this timer, is what actually enforces it. */}
+              {/* Rate-limit cooldown */}
               {cooldownSeconds > 0 && (
                 <div className="flex items-start gap-2 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
                   <Clock className="mt-0.5 h-4 w-4 shrink-0" />
@@ -171,7 +220,7 @@ export function Login() {
                   placeholder="Email or Username"
                   {...register('email')}
                   autoComplete="username"
-                  disabled={isLoading}
+                  disabled={isLoading || isGoogleLoading}
                   className="w-full rounded-xl border border-[#1E3447] bg-[#0A111A]/90 px-4 py-3.5 pl-12 text-[#F1F5F9] placeholder-[#64748B] backdrop-blur-sm transition-all duration-200 focus:border-[#00C8FF] focus:outline-none focus:ring-1 focus:ring-[#00C8FF] focus:shadow-[0_0_16px_rgba(0,200,245,0.2)] disabled:cursor-not-allowed disabled:opacity-50"
                 />
               </div>
@@ -186,13 +235,13 @@ export function Login() {
                   placeholder="Password"
                   {...register('password')}
                   autoComplete="current-password"
-                  disabled={isLoading}
+                  disabled={isLoading || isGoogleLoading}
                   className="w-full rounded-xl border border-[#1E3447] bg-[#0A111A]/90 px-4 py-3.5 pl-12 pr-12 text-[#F1F5F9] placeholder-[#64748B] backdrop-blur-sm transition-all duration-200 focus:border-[#00C8FF] focus:outline-none focus:ring-1 focus:ring-[#00C8FF] focus:shadow-[0_0_16px_rgba(0,200,245,0.2)] disabled:cursor-not-allowed disabled:opacity-50"
                 />
                 <button
                   type="button"
                   onClick={togglePasswordVisibility}
-                  disabled={isLoading}
+                  disabled={isLoading || isGoogleLoading}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] transition-colors hover:text-[#00C8FF] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 z-10"
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
@@ -210,7 +259,7 @@ export function Login() {
                   <input
                     type="checkbox"
                     {...register('rememberMe')}
-                    disabled={isLoading}
+                    disabled={isLoading || isGoogleLoading}
                     className="h-4 w-4 rounded border-[#1E3447] bg-[#0A111A] text-[#00C8FF] focus:ring-[#00C8FF] focus:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50"
                   />
                   Remember me
@@ -226,7 +275,7 @@ export function Login() {
               {/* Login Button */}
               <button
                 type="submit"
-                disabled={isLoading || cooldownSeconds > 0}
+                disabled={isLoading || isGoogleLoading || cooldownSeconds > 0}
                 className="relative w-full overflow-hidden rounded-xl bg-gradient-to-br from-[#00C8FF] to-[#3B82F6] px-4 py-3.5 font-semibold text-[#060B12] transition-all duration-200 hover:opacity-90 hover:shadow-[0_0_24px_rgba(0,200,245,0.3)] focus:outline-none focus:ring-2 focus:ring-[#00C8FF]/60 focus:ring-offset-2 focus:ring-offset-[#0D1722] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isLoading ? (
@@ -251,20 +300,27 @@ export function Login() {
                 <div className="h-px flex-1 bg-[#1E3447]" />
               </div>
 
-              {/* Social Login Buttons */}
+              {/* ✅ Social Login Buttons - Google now works */}
               <div className="flex gap-3">
                 <button
                   type="button"
                   onClick={() => handleSocialLogin('google')}
-                  disabled={isLoading}
+                  disabled={isLoading || isGoogleLoading}
                   className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[#1E3447] bg-[#0A111A]/90 px-4 py-3 backdrop-blur-sm transition-all duration-200 hover:border-[#00C8FF]/50 hover:bg-[#111E2B] disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <FcGoogle className="h-5 w-5" />
+                  {isGoogleLoading ? (
+                    <svg className="h-5 w-5 animate-spin text-[#00C8FF]" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                  ) : (
+                    <FcGoogle className="h-5 w-5" />
+                  )}
                 </button>
                 <button
                   type="button"
                   onClick={() => handleSocialLogin('facebook')}
-                  disabled={isLoading}
+                  disabled={isLoading || isGoogleLoading}
                   className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[#1E3447] bg-[#0A111A]/90 px-4 py-3 backdrop-blur-sm transition-all duration-200 hover:border-[#00C8FF]/50 hover:bg-[#111E2B] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <FaFacebook className="h-5 w-5 text-[#1877F2]" />
@@ -272,7 +328,7 @@ export function Login() {
                 <button
                   type="button"
                   onClick={() => handleSocialLogin('github')}
-                  disabled={isLoading}
+                  disabled={isLoading || isGoogleLoading}
                   className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[#1E3447] bg-[#0A111A]/90 px-4 py-3 backdrop-blur-sm transition-all duration-200 hover:border-[#00C8FF]/50 hover:bg-[#111E2B] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <FaGithub className="h-5 w-5 text-[#F1F5F9]" />
@@ -281,7 +337,7 @@ export function Login() {
 
               {/* Sign Up Link */}
               <p className="mt-2 text-center text-sm text-[#94A3B8]">
-                Don't have an account?{" "}
+                Don't have an account?{' '}
                 <Link
                   to="/Register"
                   className="font-medium text-[#00C8FF] transition-colors hover:text-[#00E0FF]"
