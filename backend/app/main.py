@@ -36,7 +36,7 @@ app = FastAPI(
     redoc_url="/redoc",        # Correct: Prepend /api via root_path -> https://ccshub.fun/api/redoc
     openapi_url="/openapi.json", # Correct: Prepend /api via root_path -> https://ccshub.fun/api/openapi.json
     lifespan=lifespan,
-    root_path="/api"
+    
 )
 
 # CORS Middleware
