@@ -27,6 +27,7 @@ import { PostReactions } from './PostReactions';
 import { RoleBadge } from '@/features/dashboard/components/RoleBadge';
 import { Avatar } from '@/features/dashboard/components/Avatar';
 import { ArrowUpTrayIcon } from '@heroicons/react/24/outline';
+import { ImageGrid, isVideoUrl } from './ImageGrid';
 
 interface PostCardProps {
   id: string;
@@ -102,7 +103,6 @@ export function PostCard({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showReportDialog, setShowReportDialog] = useState(false);
   const [isReporting, setIsReporting] = useState(false);
-  const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const { user } = useAuthStore();
   const navigate = useNavigate();
@@ -187,32 +187,6 @@ export function PostCard({
     if (!isEditing) {
       setShowDetail(true);
     }
-  };
-
-  const handleImageError = (url: string) => {
-    setImageErrors(prev => new Set(prev).add(url));
-  };
-
-  // ✅ Check if media is video
-  const isVideo = (url: string) => {
-    return url.match(/\.(mp4|webm|mov|avi|mkv)$/i) || url.includes('video');
-  };
-
-  // ✅ Get grid classes based on number of media items
-  const getGridClasses = (count: number) => {
-    if (count === 0) return '';
-    if (count === 1) return 'grid-cols-1';
-    if (count === 2) return 'grid-cols-2';
-    if (count === 3) return 'grid-cols-2';
-    return 'grid-cols-2';
-  };
-
-  // ✅ Get item span for layout
-  const getItemSpan = (index: number, total: number) => {
-    if (total === 1) return 'col-span-1';
-    if (total === 2) return 'col-span-1';
-    if (total === 3 && index === 0) return 'col-span-2';
-    return 'col-span-1';
   };
 
   const cardClassName = dark
@@ -392,58 +366,8 @@ export function PostCard({
 
           {/* ✅ Media Display */}
           {!isEditing && media_urls && media_urls.length > 0 && (
-            <div className={`mt-3 grid gap-2 ${getGridClasses(media_urls.length)}`}>
-              {media_urls.map((url, index) => {
-                const isVideoFile = isVideo(url);
-                const hasError = imageErrors.has(url);
-
-                if (hasError) {
-                  return (
-                    <div
-                      key={index}
-                      className={`${getItemSpan(index, media_urls.length)} rounded-xl flex items-center justify-center p-8 text-sm ${
-                        dark ? 'bg-[#0A111A] text-[#64748B]' : 'bg-gray-100 text-gray-400'
-                      }`}
-                    >
-                      🖼️ Media unavailable
-                    </div>
-                  );
-                }
-
-                return (
-                  <div
-                    key={index}
-                    className={`${getItemSpan(index, media_urls.length)} relative overflow-hidden rounded-xl ${dark ? 'bg-[#0A111A]' : 'bg-gray-100'}`}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {isVideoFile ? (
-                      <video
-                        src={url}
-                        className="w-full max-h-[400px] object-cover"
-                        controls
-                        preload="metadata"
-                      />
-                    ) : (
-                      <img
-                        src={url}
-                        alt={`Post media ${index + 1}`}
-                        className="w-full max-h-[400px] object-cover cursor-zoom-in"
-                        loading="lazy"
-                        onError={() => handleImageError(url)}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setLightboxIndex(index);
-                        }}
-                      />
-                    )}
-                    {media_urls.length > 1 && (
-                      <span className="absolute top-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded-full">
-                        {index + 1}/{media_urls.length}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
+            <div onClick={(e) => e.stopPropagation()}>
+              <ImageGrid images={media_urls} dark={dark} onImageClick={setLightboxIndex} />
             </div>
           )}
 
@@ -586,12 +510,23 @@ export function PostCard({
             </>
           )}
 
-          <img
-            src={media_urls[lightboxIndex]}
-            alt={`Post media ${lightboxIndex + 1}`}
-            className="max-w-full max-h-[90vh] object-contain rounded-lg"
-            onClick={(e) => e.stopPropagation()}
-          />
+          {isVideoUrl(media_urls[lightboxIndex]) ? (
+            <video
+              src={media_urls[lightboxIndex]}
+              className="max-w-full max-h-[90vh] object-contain rounded-lg"
+              controls
+              autoPlay
+              playsInline
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <img
+              src={media_urls[lightboxIndex]}
+              alt={`Post media ${lightboxIndex + 1}`}
+              className="max-w-full max-h-[90vh] object-contain rounded-lg"
+              onClick={(e) => e.stopPropagation()}
+            />
+          )}
 
           {media_urls.length > 1 && (
             <span className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 text-white text-xs px-3 py-1 rounded-full">

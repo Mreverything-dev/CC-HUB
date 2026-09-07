@@ -16,6 +16,7 @@ import { RoleBadge } from '@/features/dashboard/components/RoleBadge';
 import { Sidebar, SidebarSection } from '@/features/dashboard/components/Sidebar';
 import { Topbar } from '@/features/dashboard/components/Topbar';
 import { ChangePasswordSection } from '@/features/profile/components/ChangePasswordSection';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { formatDate } from '@/lib/formatters';
 import toast from 'react-hot-toast';
 import {
@@ -99,6 +100,8 @@ export default function ProfilePage() {
   const { createDirectConversation, openWidget } = useChat();
   const [isSendingRequest, setIsSendingRequest] = useState(false);
   const [isStartingChat, setIsStartingChat] = useState(false);
+  const [showRemoveFriendConfirm, setShowRemoveFriendConfirm] = useState(false);
+  const [isRemovingFriend, setIsRemovingFriend] = useState(false);
   const [profile, setProfile] = useState<UserProfileResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -106,7 +109,8 @@ export default function ProfilePage() {
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isUploadingCover, setIsUploadingCover] = useState(false);
   const [formData, setFormData] = useState<any>({});
-  const [activeTab, setActiveTab] = useState<'posts' | 'shares' | 'saved' | 'info' | 'security'>('posts');
+  const [activeTab, setActiveTab] = useState<'posts' | 'shares' | 'info' | 'security'>('posts');
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [postsLoading, setPostsLoading] = useState(false);
   const [shares, setShares] = useState<Post[]>([]);
@@ -182,6 +186,15 @@ export default function ProfilePage() {
       document.removeEventListener('keydown', handleEscape);
     };
   }, []);
+
+  useEffect(() => {
+    if (!lightboxSrc) return;
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightboxSrc(null);
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [lightboxSrc]);
 
   const fetchPosts = async () => {
     if (!profile) return;
@@ -515,8 +528,19 @@ export default function ProfilePage() {
   };
 
   const handleRemoveFriend = () => {
-    if (!profile || !confirm('Remove this friend?')) return;
-    removeFriend(profile.user_id);
+    if (!profile) return;
+    setShowRemoveFriendConfirm(true);
+  };
+
+  const confirmRemoveFriend = async () => {
+    if (!profile) return;
+    setIsRemovingFriend(true);
+    try {
+      await removeFriend(profile.user_id);
+      setShowRemoveFriendConfirm(false);
+    } finally {
+      setIsRemovingFriend(false);
+    }
   };
 
   const handleMessage = async () => {
@@ -708,8 +732,15 @@ export default function ProfilePage() {
             it), so there's no gap between the photo and the profile content. */}
         <div className="relative rounded-2xl border border-[#1E3447] shadow-[0_0_40px_rgba(0,200,255,0.05)]">
           <div className="relative h-[260px] sm:h-[300px] lg:h-[320px] rounded-2xl overflow-hidden">
-            {/* Cover image */}
-            <div className="absolute inset-0 z-0">
+            {/* Cover image - clickable to preview when present. The gradient
+                layer above it is pointer-events-none so a click here isn't
+                swallowed by that purely decorative overlay; clicks on the
+                avatar/identity block and the top-right controls still land
+                on those (higher z-index, separate elements), never on this. */}
+            <div
+              className={`absolute inset-0 z-0 ${coverUrl ? 'cursor-zoom-in' : ''}`}
+              onClick={() => coverUrl && setLightboxSrc(coverUrl)}
+            >
               {coverUrl ? (
                 <img src={coverUrl} alt="Cover" className="w-full h-full object-cover object-center" />
               ) : (
@@ -721,14 +752,19 @@ export default function ProfilePage() {
 
             {/* Dark readability gradient - transparent at top, dark charcoal/navy
                 at bottom, never fully opaque so the cover stays visible. */}
-            <div className="absolute inset-0 z-10 bg-gradient-to-t from-[#071019]/95 via-[#071019]/65 to-transparent" />
+            <div className="pointer-events-none absolute inset-0 z-10 bg-gradient-to-t from-[#071019]/95 via-[#071019]/65 to-transparent" />
 
             {/* Profile information - layered on top of the cover */}
             <div className="absolute inset-x-0 bottom-0 z-20 px-4 sm:px-6 lg:px-8 pb-3 sm:pb-4">
               <div className="flex items-end gap-3 sm:gap-4 min-w-0">
                 {/* Avatar */}
                 <div className="relative flex-shrink-0">
-                  <div className="h-16 w-16 sm:h-20 sm:w-20 lg:h-24 lg:w-24 rounded-full ring-4 ring-[#0D1722] bg-gradient-to-br from-[#00C8FF] to-[#3B82F6] flex items-center justify-center text-2xl font-bold text-[#060B12] overflow-hidden">
+                  <div
+                    className={`h-16 w-16 sm:h-20 sm:w-20 lg:h-24 lg:w-24 rounded-full ring-4 ring-[#0D1722] bg-gradient-to-br from-[#00C8FF] to-[#3B82F6] flex items-center justify-center text-2xl font-bold text-[#060B12] overflow-hidden ${
+                      profile?.profile?.avatar_url ? 'cursor-zoom-in' : ''
+                    }`}
+                    onClick={() => profile?.profile?.avatar_url && setLightboxSrc(profile.profile.avatar_url)}
+                  >
                     {profile?.profile?.avatar_url ? (
                       <img src={profile.profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
                     ) : (
@@ -793,7 +829,9 @@ export default function ProfilePage() {
               {/* Compact stats, still inside the hero */}
               <div className="flex items-center gap-5 mt-2.5 sm:mt-3 pt-2.5 sm:pt-3 border-t border-white/10">
                 <StatPill label="Posts" value={posts.length} />
-                {isOwnProfile && <StatPill label="Friends" value={friends.length} onClick={() => navigate('/')} />}
+                {isOwnProfile && (
+                  <StatPill label="Friends" value={friends.length} onClick={() => handleSidebarNavigate('friends')} />
+                )}
               </div>
             </div>
           </div>
@@ -1059,7 +1097,6 @@ export default function ProfilePage() {
                 [
                   ['posts', 'Posts'],
                   ['shares', 'Shares'],
-                  ['saved', 'Saved'],
                   ['info', 'About'],
                   isOwnProfile ? ['security', 'Security'] : null,
                 ].filter(Boolean) as [typeof activeTab, string][]
@@ -1083,10 +1120,6 @@ export default function ProfilePage() {
                 <ChangePasswordSection />
               ) : activeTab === 'info' ? (
                 <div className="rounded-2xl border border-[#1E3447] bg-[#0D1722] p-6">{renderProfileFields()}</div>
-              ) : activeTab === 'saved' ? (
-                <div className="rounded-2xl border border-[#1E3447] bg-[#0D1722] p-10 text-center">
-                  <p className="text-[#64748B]">Saved posts are coming soon.</p>
-                </div>
               ) : activeTab === 'shares' ? (
                 sharesLoading ? (
                   <div className="rounded-2xl border border-[#1E3447] bg-[#0D1722] p-10 text-center">
@@ -1250,6 +1283,44 @@ export default function ProfilePage() {
         </div>
         </main>
       </div>
+
+      {showRemoveFriendConfirm && (
+        <ConfirmDialog
+          title="Remove Friend?"
+          message={`Are you sure you want to remove ${displayName} from your friends?`}
+          confirmLabel="Remove Friend"
+          cancelLabel="Cancel"
+          isLoading={isRemovingFriend}
+          loadingLabel="Removing..."
+          onConfirm={confirmRemoveFriend}
+          onCancel={() => setShowRemoveFriendConfirm(false)}
+        />
+      )}
+
+      {lightboxSrc && (
+        <div
+          className="fixed inset-0 z-[80] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setLightboxSrc(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Image preview"
+        >
+          <button
+            onClick={() => setLightboxSrc(null)}
+            title="Close"
+            aria-label="Close"
+            className="absolute top-4 right-4 p-2 text-white/80 hover:text-white rounded-full hover:bg-white/10 transition"
+          >
+            <XMarkIcon className="h-6 w-6" />
+          </button>
+          <img
+            src={lightboxSrc}
+            alt="Preview"
+            className="max-w-full max-h-[90vh] object-contain rounded-lg"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }
