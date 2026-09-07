@@ -76,7 +76,15 @@ export function Register() {
     }
 
     try {
-      await registerUser(formData);
+      await registerUser({
+        email: formData.email,
+        username: formData.username,
+        password: formData.password,
+        confirm_password: formData.confirm_password,
+        role: formData.role,
+        invitation_code: formData.invitation_code,
+        terms_accepted: formData.agreeToTerms,
+      });
       setSuccess(true);
 
       setTimeout(() => {
@@ -455,6 +463,18 @@ export function Register() {
                   <FaGithub className="h-5 w-5 text-[#F1F5F9]" />
                 </button>
               </div>
+
+              {/* Google sign-up has no checkbox step of its own, so consent
+                  is made explicit here instead - clicking "Continue with
+                  Google" on this page is treated as agreeing to the Terms,
+                  same as the checkbox above does for email/password signup. */}
+              <p className="text-center text-[11px] text-[#64748B]">
+                By continuing with Google, you agree to our{' '}
+                <Link to="/terms" className="text-[#00C8FF] hover:text-[#00E0FF] transition-colors">
+                  Terms &amp; Conditions
+                </Link>
+                .
+              </p>
 
               {/* Login Link */}
               <p className="mt-2 text-center text-sm text-[#94A3B8]">

@@ -32,6 +32,7 @@ export interface RegisterRequest {
   confirm_password: string;
   role: 'student' | 'professor' | 'admin';
   invitation_code?: string;
+  terms_accepted: boolean;
 }
 
 export interface AuthResponse {

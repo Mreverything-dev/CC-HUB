@@ -179,7 +179,15 @@ class AuthService:
                 # The plaintext token is only ever in the emailed link/Redis
                 # value below, both looked up by this same hash.
                 verification_token=self._hash_token(verification_token),
-                verification_token_expires=verification_expires  # ✅ Store expiration
+                verification_token_expires=verification_expires,  # ✅ Store expiration
+                # request.terms_accepted is guaranteed True here - the
+                # RegisterRequest validator already rejected the request
+                # otherwise - but write literal True/now() rather than the
+                # request value so this row is always exactly "accepted at
+                # account-creation time", not whatever the client happened
+                # to send.
+                terms_accepted=True,
+                terms_accepted_at=datetime.utcnow(),
             )
             
             self.db.add(user)
@@ -300,6 +308,15 @@ class AuthService:
                     role="student",  # Default role for Google users
                     is_active=True,
                     is_verified=True,  # Google verified email
+                    # There's no checkbox in the one-click Google flow, so
+                    # acceptance is implicit in clicking "Continue with
+                    # Google" on a page that visibly links the Terms next
+                    # to that button (see Login.tsx/Register.tsx) - this is
+                    # the same pattern used by the email/password path's
+                    # required checkbox, just recorded automatically here
+                    # instead of read from a request field.
+                    terms_accepted=True,
+                    terms_accepted_at=datetime.utcnow(),
                 )
                 self.db.add(user)
                 await self.db.commit()

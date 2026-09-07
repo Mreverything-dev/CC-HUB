@@ -335,6 +335,17 @@ export function Login() {
                 </button>
               </div>
 
+              {/* Signing in with a brand-new Google account creates one -
+                  same implicit-consent note as the Register page's Google
+                  button, since this path has no checkbox step either. */}
+              <p className="text-center text-[11px] text-[#64748B]">
+                By continuing with Google, you agree to our{' '}
+                <Link to="/terms" className="text-[#00C8FF] hover:text-[#00E0FF] transition-colors">
+                  Terms &amp; Conditions
+                </Link>
+                .
+              </p>
+
               {/* Sign Up Link */}
               <p className="mt-2 text-center text-sm text-[#94A3B8]">
                 Don't have an account?{' '}

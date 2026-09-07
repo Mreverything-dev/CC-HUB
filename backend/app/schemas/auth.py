@@ -93,6 +93,19 @@ class RegisterRequest(UserCreate):
     title: Optional[str] = None
     position: Optional[str] = None
     invitation_code: Optional[str] = None
+    terms_accepted: bool = False
+
+    # always=True is required here: a pydantic v1-style @validator only
+    # runs on a field that was actually present in the input by default -
+    # since terms_accepted defaults to False, a request that omits the
+    # field entirely would otherwise skip this check completely and
+    # register successfully, exactly the bypass this validator exists to
+    # prevent.
+    @validator('terms_accepted', always=True)
+    def validate_terms_accepted(cls, v):
+        if not v:
+            raise ValueError('You must accept the Terms and Conditions to register')
+        return v
 
 class TokenResponse(BaseModel):
     access_token: str

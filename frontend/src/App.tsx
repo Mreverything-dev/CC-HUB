@@ -28,6 +28,7 @@ import MeethubRoom from '@/features/livestream/components/pages/MeethubRoom';
 import LivePage from '@/features/livestream/components/pages/LivePage';
 import { LiveStreamStage } from '@/features/livestream/components/LiveStreamStage';
 import { GoogleProvider } from './app/providers/GoogleProvider';
+import TermsPage from '@/features/legal/pages/TermsPage';
 
 
 function App() {
@@ -47,6 +48,7 @@ function App() {
             <Route path="/verify-email" element={<VerifyEmail />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/confirm-password-change" element={<ConfirmPasswordChange />} />
+            <Route path="/terms" element={<TermsPage />} />
 
             {/* ============================================
                 PROFILE ROUTES

@@ -39,6 +39,12 @@ class User(Base):
     # makes SQLAlchemy bind an explicit ::user_roles cast that Postgres
     # rejects against a varchar column (UndefinedFunctionError).
     role = Column(String(50), default='student')
+    # Recorded once at account-creation time (register() for email/password
+    # signup, google_login() for a brand-new Google account) - never
+    # updated afterward, so it's an audit trail of consent at signup, not a
+    # live "has this user agreed to the latest Terms" flag.
+    terms_accepted = Column(Boolean, nullable=False, default=False)
+    terms_accepted_at = Column(UTCDateTime, nullable=True)
     last_login = Column(UTCDateTime)
     last_seen = Column(UTCDateTime)  # updated on WS connect/disconnect - see app/websocket/manager.py
     created_at = Column(UTCDateTime, default=datetime.utcnow)
