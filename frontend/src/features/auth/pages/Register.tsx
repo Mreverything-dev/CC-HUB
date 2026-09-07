@@ -17,7 +17,6 @@ import {
   User
 } from 'lucide-react';
 import { FcGoogle } from 'react-icons/fc';
-import { FaFacebook, FaGithub } from 'react-icons/fa';
 import heroImage from '@/assets/images/backgrounds/img-bg.png';
 import { LogoIcon } from '@/components/ui/Logo/Logo';
 import toast from 'react-hot-toast';
@@ -56,6 +55,14 @@ export function Register() {
     e.preventDefault();
     setError('');
     setSuccess(false);
+
+    // Validate username format - matches backend RegisterRequest, and is
+    // what lets login later tell an email apart from a username (a
+    // username can never contain "@").
+    if (!/^[A-Za-z0-9_.]{3,50}$/.test(formData.username)) {
+      setError('Username must be 3-50 characters and can only contain letters, numbers, underscores, and dots.');
+      return;
+    }
 
     // Validate password match
     if (formData.password !== formData.confirm_password) {
@@ -142,15 +149,6 @@ export function Register() {
       toast.error('Google sign up cancelled or failed');
     },
   });
-
-  // Mock social login handler
-  const handleSocialLogin = (provider: string) => {
-    if (provider === 'google') {
-      registerWithGoogle();
-    } else {
-      console.log(`TODO: connect ${provider} OAuth`);
-    }
-  };
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden bg-[#050A0F] text-[#F1F5F9]">
@@ -260,6 +258,7 @@ export function Register() {
                   value={formData.username}
                   onChange={(e) => setFormData({...formData, username: e.target.value})}
                   required
+                  maxLength={50}
                   disabled={isLoading || isGoogleLoading || success}
                   className="w-full rounded-xl border border-[#1E3447] bg-[#0A111A]/90 px-4 py-3.5 pl-12 text-[#F1F5F9] placeholder-[#64748B] backdrop-blur-sm transition-all duration-200 focus:border-[#00C8FF] focus:outline-none focus:ring-1 focus:ring-[#00C8FF] focus:shadow-[0_0_16px_rgba(0,200,245,0.2)] disabled:cursor-not-allowed disabled:opacity-50"
                 />
@@ -276,6 +275,7 @@ export function Register() {
                   value={formData.email}
                   onChange={(e) => setFormData({...formData, email: e.target.value})}
                   required
+                  maxLength={255}
                   disabled={isLoading || isGoogleLoading || success}
                   className="w-full rounded-xl border border-[#1E3447] bg-[#0A111A]/90 px-4 py-3.5 pl-12 text-[#F1F5F9] placeholder-[#64748B] backdrop-blur-sm transition-all duration-200 focus:border-[#00C8FF] focus:outline-none focus:ring-1 focus:ring-[#00C8FF] focus:shadow-[0_0_16px_rgba(0,200,245,0.2)] disabled:cursor-not-allowed disabled:opacity-50"
                 />
@@ -337,6 +337,7 @@ export function Register() {
                   value={formData.password}
                   onChange={(e) => setFormData({...formData, password: e.target.value})}
                   required
+                  maxLength={128}
                   disabled={isLoading || isGoogleLoading || success}
                   className="w-full rounded-xl border border-[#1E3447] bg-[#0A111A]/90 px-4 py-3.5 pl-12 pr-12 text-[#F1F5F9] placeholder-[#64748B] backdrop-blur-sm transition-all duration-200 focus:border-[#00C8FF] focus:outline-none focus:ring-1 focus:ring-[#00C8FF] focus:shadow-[0_0_16px_rgba(0,200,245,0.2)] disabled:cursor-not-allowed disabled:opacity-50"
                 />
@@ -366,6 +367,7 @@ export function Register() {
                   value={formData.confirm_password}
                   onChange={(e) => setFormData({...formData, confirm_password: e.target.value})}
                   required
+                  maxLength={128}
                   disabled={isLoading || isGoogleLoading || success}
                   className="w-full rounded-xl border border-[#1E3447] bg-[#0A111A]/90 px-4 py-3.5 pl-12 pr-12 text-[#F1F5F9] placeholder-[#64748B] backdrop-blur-sm transition-all duration-200 focus:border-[#00C8FF] focus:outline-none focus:ring-1 focus:ring-[#00C8FF] focus:shadow-[0_0_16px_rgba(0,200,245,0.2)] disabled:cursor-not-allowed disabled:opacity-50"
                 />
@@ -429,11 +431,11 @@ export function Register() {
                 <div className="h-px flex-1 bg-[#1E3447]" />
               </div>
 
-              {/* ✅ Social Login Buttons - Google now works */}
+              {/* ✅ Social Login Buttons - Google only */}
               <div className="flex gap-3">
                 <button
                   type="button"
-                  onClick={() => handleSocialLogin('google')}
+                  onClick={() => registerWithGoogle()}
                   disabled={isLoading || isGoogleLoading || success}
                   className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[#1E3447] bg-[#0A111A]/90 px-4 py-3 backdrop-blur-sm transition-all duration-200 hover:border-[#00C8FF]/50 hover:bg-[#111E2B] disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -445,22 +447,6 @@ export function Register() {
                   ) : (
                     <FcGoogle className="h-5 w-5" />
                   )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSocialLogin('facebook')}
-                  disabled={isLoading || isGoogleLoading || success}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[#1E3447] bg-[#0A111A]/90 px-4 py-3 backdrop-blur-sm transition-all duration-200 hover:border-[#00C8FF]/50 hover:bg-[#111E2B] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <FaFacebook className="h-5 w-5 text-[#1877F2]" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSocialLogin('github')}
-                  disabled={isLoading || isGoogleLoading || success}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[#1E3447] bg-[#0A111A]/90 px-4 py-3 backdrop-blur-sm transition-all duration-200 hover:border-[#00C8FF]/50 hover:bg-[#111E2B] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <FaGithub className="h-5 w-5 text-[#F1F5F9]" />
                 </button>
               </div>
 

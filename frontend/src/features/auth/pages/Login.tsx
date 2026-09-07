@@ -5,7 +5,6 @@ import { z } from 'zod';
 import { useAuth } from '../hooks/useAuth';
 import { Link, useNavigate } from 'react-router-dom';
 import { FcGoogle } from 'react-icons/fc';
-import { FaFacebook, FaGithub } from 'react-icons/fa';
 import { Mail, AlertCircle, Lock, Eye, EyeOff, Clock } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import heroImage from '@/assets/images/backgrounds/img-bg.png';
@@ -14,9 +13,21 @@ import { useGoogleLogin } from '@react-oauth/google';
 import { useAuthStore } from '../store/auth.store';
 import toast from 'react-hot-toast';
 
+// Matches backend LoginRequest: accepts either a registered email address
+// or a username (see AuthService.login, which looks up both columns).
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const USERNAME_RE = /^[A-Za-z0-9_.]{3,50}$/;
+
 const loginSchema = z.object({
-  email: z.string().email('Invalid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  email: z
+    .string()
+    .trim()
+    .min(1, 'Email or username is required')
+    .max(255, 'Must be 255 characters or fewer')
+    .refine((v) => (v.includes('@') ? EMAIL_RE.test(v) : USERNAME_RE.test(v)), {
+      message: 'Enter a valid email or username',
+    }),
+  password: z.string().min(6, 'Password must be at least 6 characters').max(128, 'Must be 128 characters or fewer'),
   rememberMe: z.boolean().optional(),
 });
 
@@ -107,15 +118,6 @@ export function Login() {
       toast.error('Google login cancelled or failed');
     },
   });
-
-  // Mock social login handler
-  const handleSocialLogin = (provider: string) => {
-    if (provider === 'google') {
-      loginWithGoogle();
-    } else {
-      console.log(`TODO: connect ${provider} OAuth`);
-    }
-  };
 
   // Toggle password visibility
   const togglePasswordVisibility = () => {
@@ -218,6 +220,7 @@ export function Login() {
                 <input
                   type="text"
                   placeholder="Email or Username"
+                  maxLength={255}
                   {...register('email')}
                   autoComplete="username"
                   disabled={isLoading || isGoogleLoading}
@@ -233,6 +236,7 @@ export function Login() {
                 <input
                   type={showPassword ? "text" : "password"}
                   placeholder="Password"
+                  maxLength={128}
                   {...register('password')}
                   autoComplete="current-password"
                   disabled={isLoading || isGoogleLoading}
@@ -300,11 +304,11 @@ export function Login() {
                 <div className="h-px flex-1 bg-[#1E3447]" />
               </div>
 
-              {/* ✅ Social Login Buttons - Google now works */}
+              {/* ✅ Social Login Buttons - Google only */}
               <div className="flex gap-3">
                 <button
                   type="button"
-                  onClick={() => handleSocialLogin('google')}
+                  onClick={() => loginWithGoogle()}
                   disabled={isLoading || isGoogleLoading}
                   className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[#1E3447] bg-[#0A111A]/90 px-4 py-3 backdrop-blur-sm transition-all duration-200 hover:border-[#00C8FF]/50 hover:bg-[#111E2B] disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -316,22 +320,6 @@ export function Login() {
                   ) : (
                     <FcGoogle className="h-5 w-5" />
                   )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSocialLogin('facebook')}
-                  disabled={isLoading || isGoogleLoading}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[#1E3447] bg-[#0A111A]/90 px-4 py-3 backdrop-blur-sm transition-all duration-200 hover:border-[#00C8FF]/50 hover:bg-[#111E2B] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <FaFacebook className="h-5 w-5 text-[#1877F2]" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSocialLogin('github')}
-                  disabled={isLoading || isGoogleLoading}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[#1E3447] bg-[#0A111A]/90 px-4 py-3 backdrop-blur-sm transition-all duration-200 hover:border-[#00C8FF]/50 hover:bg-[#111E2B] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <FaGithub className="h-5 w-5 text-[#F1F5F9]" />
                 </button>
               </div>
 

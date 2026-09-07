@@ -15,19 +15,39 @@ def _normalize_email(v: str) -> str:
     return v.strip().lower()
 
 
+# Letters, digits, underscore, and dot only - matches users.username's
+# real-world usage today and, importantly, guarantees a username can never
+# contain "@", which is what login uses to tell an email apart from a
+# username (see AuthService.login).
+_USERNAME_RE = re.compile(r'^[A-Za-z0-9_.]{3,50}$')
+
+
+def _validate_username_format(v: str) -> str:
+    v = v.strip()
+    if not _USERNAME_RE.match(v):
+        raise ValueError(
+            'Username must be 3-50 characters and can only contain letters, numbers, underscores, and dots'
+        )
+    return v
+
+
 class UserBase(BaseModel):
-    email: EmailStr
-    username: str
+    email: EmailStr = Field(..., max_length=255)
+    username: str = Field(..., min_length=3, max_length=50)
     role: Literal["student", "professor", "admin"] = "student"
 
     @validator('email')
     def normalize_email(cls, v):
         return _normalize_email(v)
 
+    @validator('username')
+    def validate_username(cls, v):
+        return _validate_username_format(v)
+
 class UserCreate(UserBase):
-    password: str = Field(..., min_length=6)
-    confirm_password: str
-    
+    password: str = Field(..., min_length=6, max_length=128)
+    confirm_password: str = Field(..., max_length=128)
+
     @validator('password')
     def validate_password(cls, v):
         if len(v) < 6:
@@ -39,7 +59,7 @@ class UserCreate(UserBase):
         if not re.search(r'\d', v):
             raise ValueError('Password must contain at least one number')
         return v
-    
+
     @validator('confirm_password')
     def passwords_match(cls, v, values, **kwargs):
         if 'password' in values and v != values['password']:
@@ -74,12 +94,21 @@ class UserSearchResult(UserResponse):
     avatar_url: Optional[str] = None
 
 class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
+    # Named `email` for API compatibility with existing clients, but this
+    # now accepts either a registered email address OR username - see
+    # AuthService.login, which looks the value up against both columns.
+    email: str = Field(..., min_length=1, max_length=255)
+    password: str = Field(..., max_length=128)
 
     @validator('email')
-    def normalize_email(cls, v):
-        return _normalize_email(v)
+    def normalize_identifier(cls, v):
+        v = v.strip()
+        if not v:
+            raise ValueError('Email or username is required')
+        # Only fold case for something that looks like an email - a
+        # username's case is significant (registration never normalizes
+        # it), so this must not silently lowercase e.g. "JohnDoe".
+        return v.lower() if '@' in v else v
 
 class RegisterRequest(UserCreate):
     first_name: Optional[str] = None
@@ -145,8 +174,8 @@ class ForgotPasswordRequest(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     token: str
-    new_password: str = Field(..., min_length=6)
-    confirm_password: str
+    new_password: str = Field(..., min_length=6, max_length=128)
+    confirm_password: str = Field(..., max_length=128)
 
     @validator('new_password')
     def validate_password(cls, v):
@@ -172,10 +201,14 @@ class VerificationStatusResponse(BaseModel):
 class UpdateUsernameRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
 
+    @validator('username')
+    def validate_username(cls, v):
+        return _validate_username_format(v)
+
 class ChangePasswordRequest(BaseModel):
-    current_password: str
-    new_password: str = Field(..., min_length=6)
-    confirm_password: str
+    current_password: str = Field(..., max_length=128)
+    new_password: str = Field(..., min_length=6, max_length=128)
+    confirm_password: str = Field(..., max_length=128)
 
     @validator('new_password')
     def validate_password(cls, v):

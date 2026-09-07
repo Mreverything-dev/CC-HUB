@@ -1,6 +1,6 @@
 ﻿# backend/app/services/auth_service.py
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, or_
 from app.models.user import User, Role
 from app.models.invitation_code import InvitationCode
 from app.models.profile import StudentProfile, ProfessorProfile, AdminProfile
@@ -782,15 +782,17 @@ class AuthService:
     # LOGIN
     # ============================================
     async def login(self, request: LoginRequest, client_ip: str = "unknown") -> TokenResponse:
-        """Login user"""
-        logger.info(f"🔐 Login attempt: {request.email}")
+        """Login user - `request.email` may be either a registered email
+        address or a username (see LoginRequest/AuthService.login)."""
+        identifier = request.email
+        logger.info(f"🔐 Login attempt: {identifier}")
 
         # IP scope is checked BEFORE any DB/bcrypt work, and can only ever
         # slow down requests actually coming from that IP - safe to gate
         # here. The email scope is deliberately NOT checked yet (see
         # _fail's own comment below) - a correct password must always be
         # allowed through, no matter how much someone else has been
-        # guessing against this exact email.
+        # guessing against this exact account.
         ip_cooldown = await get_active_login_cooldown("ip", client_ip)
         if ip_cooldown:
             raise HTTPException(
@@ -799,25 +801,31 @@ class AuthService:
                 headers={"Retry-After": str(ip_cooldown)},
             )
 
-        async def _fail() -> None:
+        async def _fail(rate_limit_key: str) -> None:
             """Registers a WRONG attempt against both scopes and raises the
             appropriate error. Both register calls happen regardless, but
             whichever one just triggered/re-triggered a cooldown - possibly
             BOTH, on the exact request that happens to cross a threshold -
             determines the response: 429 with that cooldown, otherwise the
             same generic 401 either way (reveals nothing about whether the
-            email exists or which part of the credential was wrong). This
+            account exists or which part of the credential was wrong). This
             must check both return values, not just email's - otherwise the
             one request that actually crosses the IP threshold would itself
             still get a plain 401 (the block only visible on the NEXT
             request, via the check at the top of this method), silently
-            letting one extra guess through right when it matters most."""
+            letting one extra guess through right when it matters most.
+
+            `rate_limit_key` is the account's real, canonical email when one
+            was found (not necessarily what the caller typed) - so guessing
+            against the same account by alternating between its email and
+            its username can't split the failure count across two separate
+            rate-limit buckets and double the effective attempt budget."""
             ip_cooldown = await register_login_failure(
                 "ip", client_ip,
                 settings.RATE_LIMIT_LOGIN_IP_MAX, settings.RATE_LIMIT_LOGIN_IP_WINDOW_SECONDS,
             )
             email_cooldown = await register_login_failure(
-                "email", request.email,
+                "email", rate_limit_key,
                 settings.RATE_LIMIT_LOGIN_EMAIL_MAX, settings.RATE_LIMIT_LOGIN_EMAIL_WINDOW_SECONDS,
             )
             cooldown = email_cooldown or ip_cooldown
@@ -831,15 +839,18 @@ class AuthService:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
 
         try:
+            # `identifier` may be a registered email or a username -
+            # LoginRequest's own validator only lowercases it when it looks
+            # like an email, so an exact-case username match still works.
             result = await self.db.execute(
-                select(User).where(User.email == request.email)
+                select(User).where(or_(User.email == identifier, User.username == identifier))
             )
             user = result.scalar_one_or_none()
 
             if not user:
-                logger.warning(f"❌ User not found: {request.email}")
+                logger.warning(f"❌ User not found: {identifier}")
                 verify_password(request.password, _DUMMY_PASSWORD_HASH)
-                await _fail()
+                await _fail(identifier)
 
             try:
                 password_valid = verify_password(request.password, user.password_hash)
@@ -851,11 +862,11 @@ class AuthService:
                 )
 
             if not password_valid:
-                logger.warning(f"❌ Invalid password for: {request.email}")
-                await _fail()
+                logger.warning(f"❌ Invalid password for: {identifier}")
+                await _fail(user.email)
 
             if not user.is_active:
-                logger.warning(f"❌ Inactive account: {request.email}")
+                logger.warning(f"❌ Inactive account: {identifier}")
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Account is disabled"
@@ -864,7 +875,7 @@ class AuthService:
             # ✅ Unverified accounts cannot log in - this is the only place
             # that would otherwise hand an unverified user a working session.
             if not user.is_verified:
-                logger.warning(f"❌ Unverified account: {request.email}")
+                logger.warning(f"❌ Unverified account: {identifier}")
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Please verify your email before logging in"
@@ -872,15 +883,18 @@ class AuthService:
 
             user.last_login = datetime.utcnow()
             await self.db.commit()
-            logger.info(f"✅ Login successful: {request.email}")
+            logger.info(f"✅ Login successful: {identifier}")
 
             # A genuinely successful login clears this account's escalation
             # state - a user who mistyped their password a few times
             # shouldn't stay "partway up the ladder" after they actually
-            # get in. The IP scope is left alone on purpose: it's shared
-            # across every account on that network, so one person logging
-            # in successfully shouldn't reset it for everyone else.
-            await reset_login_cooldown("email", request.email)
+            # get in. Keyed by the account's real email (see _fail above)
+            # so this correctly clears the bucket regardless of whether
+            # email or username was used to log in. The IP scope is left
+            # alone on purpose: it's shared across every account on that
+            # network, so one person logging in successfully shouldn't
+            # reset it for everyone else.
+            await reset_login_cooldown("email", user.email)
 
             access_token = create_access_token(
                 data={"sub": str(user.id), "role": user.role}
