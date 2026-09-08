@@ -53,9 +53,9 @@ export function PostReactions({ breakdown, myReaction, onReact, size = 'sm' }: P
     >
       {/* ✅ Individual reaction chips - hidden on mobile, visible on desktop */}
       <div className="hidden md:flex items-center flex-wrap gap-1">
-        {groups.map(([emoji, count]) => (
+        {groups.map(([emoji, count], index) => (
           <button
-            key={emoji}
+            key={`reaction-${emoji}-${index}`}  // ✅ FIXED: Unique key
             type="button"
             onClick={(e) => handleReact(e, emoji)}
             className={`flex items-center gap-1 rounded-full border transition flex-shrink-0 ${chipClass} ${
@@ -122,9 +122,9 @@ export function PostReactions({ breakdown, myReaction, onReact, size = 'sm' }: P
                 md:flex-nowrap
               `}
             >
-              {POST_REACTIONS.map((emoji) => (
+              {POST_REACTIONS.map((emoji, index) => (
                 <button
-                  key={emoji}
+                  key={`picker-${emoji}-${index}`}  // ✅ FIXED: Unique key
                   type="button"
                   onClick={(e) => handleReact(e, emoji)}
                   title={emoji}

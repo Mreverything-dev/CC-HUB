@@ -15,7 +15,6 @@ import {
   SignalIcon,
   UserGroupIcon,
   UserPlusIcon,
-  Cog6ToothIcon,
   QuestionMarkCircleIcon,
   ArrowRightOnRectangleIcon,
   XMarkIcon,
@@ -24,11 +23,7 @@ import {
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { useFriendStore } from '@/features/friends/store/friend.store';
 import { useChatStore } from '@/features/chat/store/chat.store';
-import { profileService } from '@/services/api/profile.service';
 import { livestreamService } from '@/services/api/livestream.service';
-import { useLiveSessionStore } from '@/features/livestream/store/liveSession.store';
-import { Avatar } from './Avatar';
-import { RoleBadge } from './RoleBadge';
 
 export type SidebarSection = 'feed' | 'announcements' | 'sections' | 'classes' | 'users' | 'friends' | 'chat';
 
@@ -41,6 +36,7 @@ interface NavItem {
   comingSoon?: boolean;
   adminOnly?: boolean;
 }
+
 const PulsingSignalIcon = (props: React.ComponentProps<'svg'>) => (
   <SignalIcon {...props} className={`${props.className || ''} text-red-500 animate-pulse`} />
 );
@@ -51,7 +47,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'sections', label: 'Sections', icon: UsersIcon, section: 'sections' },
   { id: 'users', label: 'Users', icon: IdentificationIcon, section: 'users', adminOnly: true },
   { id: 'classes', label: 'Schedule', icon: AcademicCapIcon, section: 'classes' },
-  { id: 'live', label: 'Live Now', icon: PulsingSignalIcon as typeof HomeIcon, href: '/livestreams' }, // 👈 Modified
+  { id: 'live', label: 'Live Now', icon: PulsingSignalIcon as typeof HomeIcon, href: '/livestreams' },
   { id: 'meethub', label: 'Meethub', icon: VideoCameraIcon, href: '/meethub' },
   { id: 'chat', label: 'Chat', icon: ChatBubbleLeftIcon, section: 'chat' },
   { id: 'friends', label: 'Friends', icon: UserPlusIcon, section: 'friends' },
@@ -75,7 +71,6 @@ interface SidebarProps {
 export function Sidebar({ activeSection, onNavigate, isMobileOpen = false, onCloseMobile }: SidebarProps) {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [liveCount, setLiveCount] = useState(0);
 
   // ✅ Read from the already-populated shared stores rather than calling
@@ -85,20 +80,10 @@ export function Sidebar({ activeSection, onNavigate, isMobileOpen = false, onClo
   // NotificationBell both mounted at once) would double-fire notifications.
   const notifications = useFriendStore((state) => state.notifications);
   const chatUnreadCount = useChatStore((state) => state.unreadCount);
-  // Reuses the already-global live session store (no new API call/poll) -
-  // true only while THIS user is actively hosting a livestream right now.
-  const isCurrentlyLive = useLiveSessionStore((s) => s.isHost && s.streamId !== null);
 
   const announcementUnreadCount = notifications.filter(
     (n) => n.type === 'announcement' && !n.is_read
   ).length;
-
-  useEffect(() => {
-    profileService
-      .getMyProfile()
-      .then((res) => setAvatarUrl((res.data.profile as any)?.avatar_url || null))
-      .catch(() => setAvatarUrl(null));
-  }, []);
 
   useEffect(() => {
     const fetchLiveCount = () => {
@@ -134,8 +119,6 @@ export function Sidebar({ activeSection, onNavigate, isMobileOpen = false, onClo
     } else if (item.section) {
       onNavigate(item.section);
     }
-    // No-op when opened from the desktop aside (onCloseMobile is only
-    // passed by the mobile drawer instance), so this is safe either way.
     onCloseMobile?.();
   };
 
@@ -148,10 +131,7 @@ export function Sidebar({ activeSection, onNavigate, isMobileOpen = false, onClo
   // the two never drift out of sync with each other.
   const sidebarContent = (
     <>
-      {/* Logo - clicking it goes to the Home/Feed section, same as clicking
-          the "Feed" nav item below (Sidebar is shared across pages that
-          switch sections in-place rather than routing, so this calls
-          onNavigate directly instead of using a <Link>). */}
+      {/* Logo - clicking it goes to the Home/Feed section */}
       <button
         type="button"
         onClick={() => onNavigate('feed')}
@@ -208,33 +188,9 @@ export function Sidebar({ activeSection, onNavigate, isMobileOpen = false, onClo
         })}
       </nav>
 
-      {/* Bottom - User profile / settings / help / logout */}
-      <div className="border-t border-[rgba(0,200,245,0.1)] p-3 space-y-3">
-        <button
-          onClick={() => navigate('/profile')}
-          className="w-full flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-white/5 transition-all duration-200"
-        >
-          <Avatar src={avatarUrl} name={user?.username} size="sm" isLive={isCurrentlyLive} />
-          <div className="flex-1 min-w-0 text-left">
-            <p className="text-sm font-medium text-[#F1F5F9] truncate">{user?.username || 'User'}</p>
-            <div className="flex items-center gap-2 mt-1">
-              <RoleBadge role={user?.role || 'student'} />
-              <span className="flex items-center gap-1 text-[10px] font-medium text-[#10B981]">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#10B981]" />
-                Online
-              </span>
-            </div>
-          </div>
-        </button>
-
-        <div className="flex items-center justify-center gap-1">
-          <button
-            onClick={() => navigate('/profile')}
-            title="Settings"
-            className="p-2.5 rounded-xl text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5 transition-all duration-200"
-          >
-            <Cog6ToothIcon className="h-5 w-5" />
-          </button>
+      {/* ✅ Bottom - Logout & Help icons only (no highlight box) */}
+      <div className="border-t border-[rgba(0,200,245,0.1)] p-4">
+        <div className="flex items-center justify-center gap-4">
           <button
             onClick={() => toast('Help center coming soon')}
             title="Help"
@@ -256,15 +212,12 @@ export function Sidebar({ activeSection, onNavigate, isMobileOpen = false, onClo
 
   return (
     <>
-      {/* Desktop - unchanged from before, permanently visible at lg: and up */}
+      {/* Desktop */}
       <aside className="hidden lg:flex lg:flex-col w-[280px] h-screen sticky top-0 border-r border-[rgba(0,200,245,0.1)] bg-[#070D13]/95 backdrop-blur-xl">
         {sidebarContent}
       </aside>
 
-      {/* Mobile drawer - stays mounted (rather than being removed from the
-          DOM when closed) so the transform/opacity transitions can actually
-          animate; pointer-events-none plus the translate-x-full offscreen
-          position keep it invisible and unclickable while closed. */}
+      {/* Mobile drawer */}
       <div
         className={`fixed inset-0 z-50 lg:hidden transition-opacity duration-300 ${
           isMobileOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'

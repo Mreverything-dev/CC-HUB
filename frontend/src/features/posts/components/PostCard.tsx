@@ -38,7 +38,7 @@ interface PostCardProps {
   content: string;
   type: string;
   visibility: string;
-  media_urls?: string[];  // ✅ Added media_urls
+  media_urls?: string[];
   likes_count: number;
   comments_count: number;
   shares_count: number;
@@ -59,7 +59,6 @@ interface PostCardProps {
   onReact?: (postId: string, reaction: string) => void;
   onDelete: (postId: string) => void;
   onEdit: (postId: string, content: string) => void;
-  /** Charcoal/cyan theme for the redesigned dashboard. Defaults to the original light theme. */
   dark?: boolean;
 }
 
@@ -71,7 +70,7 @@ export function PostCard({
   avatar_url,
   content,
   visibility,
-  media_urls = [],  // ✅ Default empty array
+  media_urls = [],
   likes_count,
   comments_count,
   shares_count,
@@ -189,12 +188,15 @@ export function PostCard({
     }
   };
 
+  // ✅ Unique key for this instance
+  const instanceKey = `post-${id}`;
+
   const cardClassName = dark
     ? 'rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-4 sm:p-6 hover:border-[#00C8FF]/35 transition-all duration-200'
     : 'glass rounded-xl p-6 transition-all duration-200 hover:shadow-lg hover:border-cyan-500/30';
 
   return (
-    <>
+    <div key={instanceKey}>
       {is_shared && (
         <div className={`flex items-center gap-2 mb-2 text-sm ${dark ? 'text-[#94A3B8]' : 'text-gray-500'}`}>
           <ArrowUpTrayIcon className="h-4 w-4 flex-shrink-0" />
@@ -364,7 +366,7 @@ export function PostCard({
             </>
           )}
 
-          {/* ✅ Media Display */}
+          {/* Media Display */}
           {!isEditing && media_urls && media_urls.length > 0 && (
             <div onClick={(e) => e.stopPropagation()}>
               <ImageGrid images={media_urls} dark={dark} onImageClick={setLightboxIndex} />
@@ -472,6 +474,7 @@ export function PostCard({
         </div>
       </div>
 
+      {/* Lightbox */}
       {lightboxIndex !== null && media_urls[lightboxIndex] && (
         <div
           className="fixed inset-0 z-[70] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
@@ -536,6 +539,7 @@ export function PostCard({
         </div>
       )}
 
+      {/* Modals */}
       {showDetail && (
         <PostDetailModal
           postId={id}
@@ -562,6 +566,6 @@ export function PostCard({
           onCancel={() => setShowReportDialog(false)}
         />
       )}
-    </>
+    </div>
   );
 }

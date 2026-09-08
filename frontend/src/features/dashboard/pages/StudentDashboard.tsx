@@ -185,7 +185,7 @@ export default function StudentDashboard() {
                     <div className="space-y-4">
                       {[0, 1, 2].map((i) => (
                         <div
-                          key={i}
+                          key={`skeleton-${i}`}
                           className="rounded-2xl border border-[rgba(0,200,245,0.1)] bg-[rgba(15,28,40,0.4)] p-6 animate-pulse"
                         >
                           <div className="flex items-center gap-3 mb-4">
@@ -205,9 +205,10 @@ export default function StudentDashboard() {
                       <p className="text-[#94A3B8]">No posts yet. Check back later!</p>
                     </div>
                   ) : (
+                    // ✅ FIX: Added unique prefix to post keys
                     postList.map((post) => (
                       <PostCard
-                        key={post.id}
+                        key={`post-${post.id}`}
                         {...post}
                         onLike={toggleLike}
                         onReact={reactToPost}
@@ -265,6 +266,7 @@ export default function StudentDashboard() {
 
       {searchOpenPostId && (
         <PostDetailModal
+          key={`detail-${searchOpenPostId}`}
           postId={searchOpenPostId}
           onClose={() => setSearchOpenPostId(null)}
           onDelete={deletePost}

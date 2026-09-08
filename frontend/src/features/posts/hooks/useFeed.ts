@@ -20,6 +20,19 @@ export function useFeed() {
   const [hasMore, setHasMore] = useState(true);
   const { isAuthenticated, user } = useAuthStore();
 
+  // ✅ Helper: Deduplicate posts by ID
+  const deduplicatePosts = useCallback((items: Post[]): Post[] => {
+    const seen = new Set<string>();
+    const unique: Post[] = [];
+    for (const item of items) {
+      if (!seen.has(item.id)) {
+        seen.add(item.id);
+        unique.push(item);
+      }
+    }
+    return unique;
+  }, []);
+
   const fetchFeed = useCallback(async (pageNum: number = 1) => {
     if (!isAuthenticated) return;
 
@@ -27,10 +40,18 @@ export function useFeed() {
     try {
       const response = await postService.getFeed(pageNum, 20);
       const { items, total: feedTotal } = response.data;
+      
+      // ✅ Deduplicate items before setting state
+      const uniqueItems = deduplicatePosts(items);
+      
       if (pageNum === 1) {
-        setPosts(items);
+        setPosts(uniqueItems);
       } else {
-        setPosts((prev) => [...prev, ...items]);
+        setPosts((prev) => {
+          // ✅ Merge and deduplicate when loading more
+          const merged = [...prev, ...uniqueItems];
+          return deduplicatePosts(merged);
+        });
       }
       setTotal(feedTotal);
       setHasMore(items.length === 20 && items.length < feedTotal);
@@ -40,7 +61,7 @@ export function useFeed() {
     } finally {
       setIsLoading(false);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, deduplicatePosts]);
 
   // ✅ Updated: Accept object with content, media_urls, and visibility
   const createPost = async (data: { content: string; media_urls?: string[]; visibility?: string }) => {
@@ -65,9 +86,9 @@ export function useFeed() {
   const toggleLike = async (postId: string) => {
     try {
       await postService.likePost(postId);
-      // Update local state
-      setPosts((prev) =>
-        prev.map((post) =>
+      // ✅ Update local state with deduplication
+      setPosts((prev) => {
+        const updated = prev.map((post) =>
           post.id === postId
             ? {
                 ...post,
@@ -77,21 +98,20 @@ export function useFeed() {
                   : post.likes_count + 1,
               }
             : post
-        )
-      );
+        );
+        return deduplicatePosts(updated);
+      });
     } catch (error) {
       console.error('Error toggling like:', error);
     }
   };
 
-  // Add/change/remove the caller's emoji reaction - optimistic locally,
-  // then corrected/confirmed by the server response (and, for every OTHER
-  // connected user, by the post:reaction_updated broadcast handled below).
   const reactToPost = async (postId: string, reaction: string) => {
     const previous = posts.find((p) => p.id === postId);
     const optimisticReaction = previous?.my_reaction === reaction ? null : reaction;
-    setPosts((prev) =>
-      prev.map((post) => {
+    
+    setPosts((prev) => {
+      const updated = prev.map((post) => {
         if (post.id !== postId) return post;
         const breakdown = { ...post.reaction_breakdown };
         if (post.my_reaction) breakdown[post.my_reaction] = Math.max(0, (breakdown[post.my_reaction] || 1) - 1);
@@ -102,12 +122,14 @@ export function useFeed() {
           reaction_breakdown: breakdown,
           reactions_count: Object.values(breakdown).reduce((a, b) => a + b, 0),
         };
-      })
-    );
+      });
+      return deduplicatePosts(updated);
+    });
+
     try {
       const response = await postService.reactToPost(postId, reaction);
-      setPosts((prev) =>
-        prev.map((post) =>
+      setPosts((prev) => {
+        const updated = prev.map((post) =>
           post.id === postId
             ? {
                 ...post,
@@ -116,8 +138,9 @@ export function useFeed() {
                 reactions_count: response.data.reactions_count,
               }
             : post
-        )
-      );
+        );
+        return deduplicatePosts(updated);
+      });
     } catch (error) {
       console.error('Error reacting to post:', error);
       // Roll back to the pre-optimistic state on failure.
@@ -141,11 +164,12 @@ export function useFeed() {
   const editPost = async (postId: string, content: string) => {
     try {
       await postService.updatePost(postId, content);
-      setPosts((prev) =>
-        prev.map((post) =>
+      setPosts((prev) => {
+        const updated = prev.map((post) =>
           post.id === postId ? { ...post, content, updated_at: new Date().toISOString() } : post
-        )
-      );
+        );
+        return deduplicatePosts(updated);
+      });
       toast.success('Post updated successfully');
     } catch (error) {
       console.error('Error updating post:', error);
@@ -165,10 +189,7 @@ export function useFeed() {
     fetchFeed(1);
   }, [fetchFeed]);
 
-  // Real-time updates for every post currently rendered in this feed - joins
-  // each post's room (server already supports joining any room name, see
-  // manager.py; no new socket infra needed) so reaction/comment/share counts
-  // made by OTHER connected users update here without a page refresh.
+  // Real-time updates for every post currently rendered in this feed
   const joinedRoomsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     const currentIds = new Set(posts.map((p) => p.id));
@@ -188,31 +209,33 @@ export function useFeed() {
 
   useEffect(() => {
     const handleReaction = (data: PostReactionUpdatedPayload) => {
-      setPosts((prev) =>
-        prev.map((post) => {
+      setPosts((prev) => {
+        const updated = prev.map((post) => {
           if (post.id !== data.post_id) return post;
           const next = { ...post, reactions_count: data.reactions_count, reaction_breakdown: data.reaction_breakdown };
-          // reaction/breakdown apply to everyone; my_reaction is per-viewer,
-          // so it only updates here when THIS user is who reacted.
           if (data.user_id === user?.id) next.my_reaction = data.reaction;
           return next;
-        })
-      );
+        });
+        return deduplicatePosts(updated);
+      });
     };
     const handleCommentAdded = (data: PostCommentAddedPayload) => {
-      setPosts((prev) =>
-        prev.map((post) => (post.id === data.post_id ? { ...post, comments_count: data.comments_count } : post))
-      );
+      setPosts((prev) => {
+        const updated = prev.map((post) => (post.id === data.post_id ? { ...post, comments_count: data.comments_count } : post));
+        return deduplicatePosts(updated);
+      });
     };
     const handleCommentDeleted = (data: PostCommentDeletedPayload) => {
-      setPosts((prev) =>
-        prev.map((post) => (post.id === data.post_id ? { ...post, comments_count: data.comments_count } : post))
-      );
+      setPosts((prev) => {
+        const updated = prev.map((post) => (post.id === data.post_id ? { ...post, comments_count: data.comments_count } : post));
+        return deduplicatePosts(updated);
+      });
     };
     const handleShare = (data: PostShareUpdatedPayload) => {
-      setPosts((prev) =>
-        prev.map((post) => (post.id === data.post_id ? { ...post, shares_count: data.shares_count } : post))
-      );
+      setPosts((prev) => {
+        const updated = prev.map((post) => (post.id === data.post_id ? { ...post, shares_count: data.shares_count } : post));
+        return deduplicatePosts(updated);
+      });
     };
 
     socketService.on('post:reaction_updated', handleReaction);
@@ -226,7 +249,7 @@ export function useFeed() {
       socketService.off('post:comment_deleted', handleCommentDeleted);
       socketService.off('post:share_updated', handleShare);
     };
-  }, [user?.id]);
+  }, [user?.id, deduplicatePosts]);
 
   // Leave every currently-joined room if the dashboard itself unmounts.
   useEffect(() => {
@@ -242,7 +265,7 @@ export function useFeed() {
     isPosting,
     hasMore,
     total,
-    createPost,  // ✅ Now accepts { content, media_urls }
+    createPost,
     toggleLike,
     reactToPost,
     deletePost,
