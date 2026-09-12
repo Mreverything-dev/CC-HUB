@@ -25,6 +25,9 @@ import { useLiveStreamsFeed } from '@/features/livestream/hooks/useLiveStreamsFe
 import FriendsPage from '@/features/friends/components/FriendsPage';
 import ChatPanel from '@/features/chat/components/ChatPanel';
 import { TeachingAssignment } from '@/types/section.types';
+import { FeedTabs, FeedFilter } from '@/features/dashboard/components/FeedTabs';
+
+
 
 function professorLabel(ta: { professor_first_name?: string | null; professor_last_name?: string | null; professor_username?: string | null }): string {
   const name = ta.professor_first_name ? `${ta.professor_first_name} ${ta.professor_last_name || ''}`.trim() : ta.professor_username;
@@ -57,6 +60,8 @@ export default function StudentDashboard() {
     reactToPost,
     deletePost,
     editPost,
+    filter,        // ✅ Get filter
+    setFilter,     // ✅ Get setFilter
   } = useFeed();
 
   // Announcements
@@ -178,6 +183,9 @@ export default function StudentDashboard() {
                   coverPhoto={coverPhoto}
                 />
 
+                {/* ✅ Feed filter tabs */}
+                <FeedTabs active={filter as FeedFilter} onChange={setFilter} />
+
                 <CreatePost onCreatePost={handleCreatePost} isLoading={isPosting} dark avatarUrl={avatarUrl} />
 
                 <div className="space-y-4">
@@ -202,7 +210,12 @@ export default function StudentDashboard() {
                     </div>
                   ) : postList.length === 0 ? (
                     <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-10 text-center">
-                      <p className="text-[#94A3B8]">No posts yet. Check back later!</p>
+                      <p className="text-[#94A3B8]">
+                        {filter === 'all' && 'No posts yet. Check back later!'}
+                        {filter === 'following' && 'No posts shared with friends yet.'}
+                        {filter === 'section' && 'No posts from your section yet.'}
+                        {filter === 'video' && 'No video posts yet.'}
+                      </p>
                     </div>
                   ) : (
                     // ✅ FIX: Added unique prefix to post keys
