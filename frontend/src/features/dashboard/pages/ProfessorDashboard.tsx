@@ -28,6 +28,7 @@ import { useLiveStreamsFeed } from '@/features/livestream/hooks/useLiveStreamsFe
 import FriendsPage from '@/features/friends/components/FriendsPage';
 import ChatPanel from '@/features/chat/components/ChatPanel';
 import { TeachingAssignment } from '@/types/section.types';
+import { FeedTabs, FeedFilter } from '@/features/dashboard/components/FeedTabs';
 
 export default function ProfessorDashboard() {
   const location = useLocation();
@@ -55,6 +56,8 @@ export default function ProfessorDashboard() {
     reactToPost,
     deletePost,
     editPost,
+    filter,
+    setFilter,
   } = useFeed();
 
   // Announcements
@@ -184,6 +187,9 @@ export default function ProfessorDashboard() {
                   coverPhoto={coverPhoto}
                 />
 
+                {/* ✅ Feed filter tabs */}
+                <FeedTabs active={filter as FeedFilter} onChange={setFilter} />
+
                 <CreatePost onCreatePost={handleCreatePost} isLoading={isPosting} dark avatarUrl={avatarUrl} />
 
                 <div className="space-y-4">
@@ -208,7 +214,12 @@ export default function ProfessorDashboard() {
                     </div>
                   ) : postList.length === 0 ? (
                     <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-10 text-center">
-                      <p className="text-[#94A3B8]">No posts yet. Share something with your students!</p>
+                      <p className="text-[#94A3B8]">
+                        {filter === 'all' && 'No posts yet. Share something with your students!'}
+                        {filter === 'following' && 'No friends-only posts yet.'}
+                        {filter === 'section' && 'No section posts yet.'}
+                        {filter === 'video' && 'No video posts yet.'}
+                      </p>
                     </div>
                   ) : (
                     postList.map((post) => (

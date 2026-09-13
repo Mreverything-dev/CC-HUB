@@ -1,4 +1,4 @@
-# CCS HUB
+﻿# CCS HUB
 
 CCS HUB is a web platform built for a College of Computer Studies that combines a
 campus social feed, academic section/class management, real-time chat, and
@@ -378,8 +378,8 @@ uploads directly to it.
 3. Set the matching values in `backend/.env`:
    ```env
    MINIO_ENDPOINT=localhost:9000
-   MINIO_ACCESS_KEY=minioadmin
-   MINIO_SECRET_KEY=minioadmin
+   MINIO_ACCESS_KEY=
+   MINIO_SECRET_KEY=
    MINIO_BUCKET=ccs-hub
    MINIO_SECURE=False
    ```

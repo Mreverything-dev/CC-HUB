@@ -1,5 +1,5 @@
 // frontend/src/features/dashboard/components/FeedTabs.tsx
-export type FeedFilter = 'all' | 'following' | 'section' | 'saved';
+export type FeedFilter = 'all' | 'following' | 'section' | 'video';
 
 interface FeedTabsProps {
   active: FeedFilter;
@@ -8,9 +8,9 @@ interface FeedTabsProps {
 
 const TABS: { id: FeedFilter; label: string }[] = [
   { id: 'all', label: 'All Posts' },
-  { id: 'following', label: 'Following' },
+  { id: 'following', label: 'Friends' },
   { id: 'section', label: 'My Section' },
-  { id: 'saved', label: 'Saved' },
+  { id: 'video', label: 'Videos' },
 ];
 
 export function FeedTabs({ active, onChange }: FeedTabsProps) {
@@ -20,7 +20,7 @@ export function FeedTabs({ active, onChange }: FeedTabsProps) {
         <button
           key={tab.id}
           onClick={() => onChange(tab.id)}
-          className={`px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200 ${
+          className={`flex-1 px-2 py-2 text-xs font-medium rounded-xl transition-all duration-200 sm:flex-none sm:px-4 sm:text-sm ${
             active === tab.id
               ? 'bg-[#00C8FF]/15 text-[#00C8FF] shadow-[0_0_12px_rgba(0,200,245,0.18)]'
               : 'text-text-secondary hover:text-text-primary hover:bg-glass'
