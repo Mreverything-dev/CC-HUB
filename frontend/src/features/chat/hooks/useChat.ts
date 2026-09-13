@@ -60,21 +60,43 @@ export function useChat() {
     enabled: isAuthenticated,
   });
 
-  // Get messages for a conversation
-  const getMessages = useCallback(async (conversationId: string) => {
+  // Get messages for a conversation.
+  // - Initial load: pass nothing (default 50 latest).
+  // - Backread: pass { before: <oldest.created_at>, append: true } to
+  //   fetch older messages and prepend them to the existing list.
+  const getMessages = useCallback(async (
+    conversationId: string,
+    options?: { limit?: number; before?: string; append?: boolean }
+  ) => {
     setLoading(true);
     try {
-      const response = await chatApi.getMessages(conversationId);
-      setMessages(response.data);
-      // Join the conversation room
-      socketService.joinConversation(conversationId);
-      // Mark messages as read
-      socketService.markRead(conversationId);
-      resetUnreadCount();
+      const response = await chatApi.getMessages(
+        conversationId,
+        options?.limit ?? 50,
+        options?.before
+      );
+
+      if (options?.append) {
+        // Backread: idagdag sa TAAS ng existing messages (dedupe by id)
+        const existing = useChatStore.getState().messages;
+        const existingIds = new Set(existing.map((m) => m.id));
+        const newOnes = response.data.filter((m) => !existingIds.has(m.id));
+        setMessages([...newOnes, ...existing]);
+      } else {
+        // Initial load: i-replace lahat
+        setMessages(response.data);
+        // Join the conversation room
+        socketService.joinConversation(conversationId);
+        // Mark messages as read
+        socketService.markRead(conversationId);
+        resetUnreadCount();
+      }
+
       return response.data;
     } catch (error) {
       console.error('Error fetching messages:', error);
       toast.error('Failed to load messages');
+      return [];
     } finally {
       setLoading(false);
     }

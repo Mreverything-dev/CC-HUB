@@ -15,7 +15,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmojiPicker } from './EmojiPicker';
 import { PostContentBody } from './PostContentBody';
 import { PostReactions } from './PostReactions';
-import { ImageGrid, isVideoUrl } from './ImageGrid';
+import { ImageGrid } from './ImageGrid';
 import { extractYouTubeId } from '@/lib/youtube';
 import { YouTubeEmbed } from '@/components/ui/YouTubeEmbed';
 import { extractGiphyGifUrl } from '@/lib/giphy';

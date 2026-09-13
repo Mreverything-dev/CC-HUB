@@ -59,7 +59,6 @@ export function MessageReactions({ messageId, reactions }: MessageReactionsProps
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, [pickerOpen]);
 
-  const myReaction = localReactions.find((r) => r.user_id === user?.id)?.reaction;
 
   const counts = new Map<string, number>();
   localReactions.forEach((r) => counts.set(r.reaction, (counts.get(r.reaction) || 0) + 1));

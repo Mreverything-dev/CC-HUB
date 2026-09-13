@@ -17,7 +17,7 @@ interface PostReactionsProps {
   size?: 'sm' | 'md';
 }
 
-export function PostReactions({ breakdown, myReaction, onReact, size = 'sm' }: PostReactionsProps) {
+export function PostReactions({ breakdown, onReact, size = 'sm' }: PostReactionsProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(0);
   const [hoveredEmoji, setHoveredEmoji] = useState<string | null>(null);

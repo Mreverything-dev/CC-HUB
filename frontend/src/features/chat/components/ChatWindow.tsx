@@ -103,6 +103,11 @@ export function ChatWindow({ conversationId, onBack, onClose }: ChatWindowProps)
   const messageMenuRef = useRef<HTMLDivElement>(null);
   const messageMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
 
+  // Backread / infinite-scroll state
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+
   useEffect(() => {
     if (!showMoreMenu) return;
     const handleOutsideClick = (e: MouseEvent) => {
@@ -175,6 +180,48 @@ export function ChatWindow({ conversationId, onBack, onClose }: ChatWindowProps)
 
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
     messagesEndRef.current?.scrollIntoView({ behavior });
+  };
+
+  // Reset backread state when switching conversations
+  useEffect(() => {
+    setHasMore(true);
+    setIsLoadingMore(false);
+  }, [conversationId]);
+
+  // Auto-load older messages when the user scrolls to the top
+  const handleScrollBackread = async (e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    if (el.scrollTop > 40) return;
+    if (!hasMore || isLoadingMore || isLoading || messages.length === 0) return;
+
+    const oldest = messages[0];
+    if (!oldest?.created_at) return;
+
+    setIsLoadingMore(true);
+    const prevScrollHeight = el.scrollHeight;
+    const prevScrollTop = el.scrollTop;
+
+    try {
+      const loaded = await getMessages(conversationId, {
+        limit: 50,
+        before: oldest.created_at,
+        append: true,
+      });
+      if (!loaded || loaded.length < 50) setHasMore(false);
+
+      // Preserve scroll position so the view doesn't jump
+      requestAnimationFrame(() => {
+        if (messagesContainerRef.current) {
+          const newScrollHeight = messagesContainerRef.current.scrollHeight;
+          messagesContainerRef.current.scrollTop =
+            newScrollHeight - prevScrollHeight + prevScrollTop;
+        }
+      });
+    } catch {
+      // toast is already shown by getMessages
+    } finally {
+      setIsLoadingMore(false);
+    }
   };
 
   useEffect(() => {
@@ -488,7 +535,16 @@ export function ChatWindow({ conversationId, onBack, onClose }: ChatWindowProps)
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2 scrollbar-hide">
+      <div
+        ref={messagesContainerRef}
+        onScroll={handleScrollBackread}
+        className="flex-1 overflow-y-auto px-3 py-3 space-y-2 scrollbar-hide"
+      >
+        {isLoadingMore && (
+          <div className="flex justify-center py-2">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#00C8FF]" />
+          </div>
+        )}
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00C8FF]"></div>
@@ -502,7 +558,6 @@ export function ChatWindow({ conversationId, onBack, onClose }: ChatWindowProps)
             const isOwn = message.sender_id === user?.id;
             const prevMessage = messages[index - 1];
             const showAvatar = !prevMessage || prevMessage.sender_id !== message.sender_id;
-            const hasCaption = message.content.replace(/[​\u200B]/g, '').trim().length > 0;
             const hasReactions = message.reactions && message.reactions.length > 0;
             const isLastMessage = index === messages.length - 1;
             const isLastOwnMessage =

@@ -1,7 +1,6 @@
 // frontend/src/features/dashboard/components/Sidebar.tsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import toast from 'react-hot-toast';
 import { LogoIcon } from '@/components/ui/Logo/Logo';
 import {
   HomeIcon,
