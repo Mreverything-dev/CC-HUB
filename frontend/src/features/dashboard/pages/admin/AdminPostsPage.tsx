@@ -24,9 +24,6 @@ import { Pagination } from '../../components/admin/users/Pagination';
 
 const LIMIT = 15;
 
-/** Plain checkbox that also supports a visual "indeterminate" (some but not
- * all selected) state - React has no declarative prop for that, it has to
- * be set imperatively on the DOM node via a ref. */
 function SelectionCheckbox({
   checked,
   indeterminate = false,
@@ -51,7 +48,7 @@ function SelectionCheckbox({
       onChange={onChange}
       onClick={(e) => e.stopPropagation()}
       aria-label={label}
-      className="h-4 w-4 rounded border-[#1E3447] bg-[#0A111A] text-[#00C8FF] accent-[#00C8FF] cursor-pointer"
+      className="h-4 w-4 rounded border-border bg-bg text-[#00C8FF] accent-[#00C8FF] cursor-pointer"
     />
   );
 }
@@ -69,20 +66,20 @@ function PostActionsMenu({
       <button
         onClick={() => setIsOpen((v) => !v)}
         title="Actions"
-        className="p-1.5 rounded-lg text-[#64748B] hover:text-[#F1F5F9] hover:bg-white/5 transition"
+        className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-glass transition"
       >
         <EllipsisVerticalIcon className="h-5 w-5" />
       </button>
       {isOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
-          <div className="absolute right-0 mt-1 w-44 rounded-xl border border-[#1E3447] bg-[#111E2B] shadow-xl py-1 z-20">
+          <div className="absolute right-0 mt-1 w-44 rounded-xl border border-border bg-bg shadow-xl py-1 z-20">
             <button
               onClick={() => {
                 setIsOpen(false);
                 onView();
               }}
-              className="flex items-center gap-2 w-full px-3.5 py-2 text-sm text-[#94A3B8] hover:bg-white/5 hover:text-[#F1F5F9] transition"
+              className="flex items-center gap-2 w-full px-3.5 py-2 text-sm text-text-secondary hover:bg-glass hover:text-text-primary transition"
             >
               <EyeIcon className="h-4 w-4" />
               View Details
@@ -106,7 +103,7 @@ function PostActionsMenu({
 
 function EngagementStats({ post }: { post: AdminPostListItem }) {
   return (
-    <div className="flex items-center gap-3 text-xs text-[#64748B]">
+    <div className="flex items-center gap-3 text-xs text-text-muted">
       <span className="flex items-center gap-1">
         <HeartIcon className="h-3.5 w-3.5" />
         {post.likes_count}
@@ -138,19 +135,12 @@ export default function AdminPostsPage() {
     search: search.trim() || undefined,
   });
 
-  // The modal's edit/delete come from the same feed mutations the rest of
-  // the app already uses for a post opened via global search - reused here
-  // rather than re-implemented, then this page's own admin-scoped list is
-  // refetched so the table reflects the change immediately.
   const { deletePost: feedDeletePost, editPost: feedEditPost } = useFeed();
 
   useEffect(() => {
     setPage(1);
   }, [search]);
 
-  // Selection is scoped to what's currently loaded - switching page or
-  // search changes the underlying set of posts, so a stale selection from
-  // a different page/filter would be confusing to act on.
   useEffect(() => {
     setSelectedIds(new Set());
   }, [page, search]);
@@ -200,39 +190,39 @@ export default function AdminPostsPage() {
     <div className="max-w-6xl mx-auto space-y-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-[#F1F5F9]">Posts</h1>
-          <p className="text-[#94A3B8] mt-1 text-sm">Moderate every post across CCS HUB.</p>
+          <h1 className="text-2xl font-bold text-text-primary">Posts</h1>
+          <p className="text-text-secondary mt-1 text-sm">Moderate every post across CCS HUB.</p>
         </div>
         <button
           onClick={() => refetch()}
           disabled={isFetching}
           title="Refresh"
-          className="p-2 rounded-xl border border-[#1E3447] bg-[rgba(10,20,30,0.75)] text-[#94A3B8] hover:text-[#00C8FF] hover:border-[#00C8FF]/30 transition disabled:opacity-50 flex-shrink-0"
+          className="p-2 rounded-xl border border-border bg-glass text-text-secondary hover:text-[#00C8FF] hover:border-[#00C8FF]/30 transition disabled:opacity-50 flex-shrink-0"
         >
           <ArrowPathIcon className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
         </button>
       </div>
 
       <div className="relative">
-        <MagnifyingGlassIcon className="h-4 w-4 text-[#64748B] absolute left-3 top-1/2 -translate-y-1/2" />
+        <MagnifyingGlassIcon className="h-4 w-4 text-text-muted absolute left-3 top-1/2 -translate-y-1/2" />
         <input
           type="text"
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
           placeholder="Search posts by content or author..."
-          className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-[#1E3447] bg-[rgba(10,20,30,0.75)] text-sm text-[#F1F5F9] placeholder-[#64748B] focus:outline-none focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition"
+          className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-border bg-glass text-sm text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition"
         />
       </div>
 
       {selectedIds.size > 0 && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-xl border border-[#00C8FF]/30 bg-[#00C8FF]/5 px-4 py-2.5">
-          <p className="text-sm text-[#F1F5F9]">
+          <p className="text-sm text-text-primary">
             <span className="font-semibold">{selectedIds.size}</span> post{selectedIds.size === 1 ? '' : 's'} selected
           </p>
           <div className="flex items-center gap-2">
             <button
               onClick={clearSelection}
-              className="text-sm font-medium text-[#94A3B8] hover:text-[#F1F5F9] px-3 py-1.5 rounded-xl hover:bg-white/5 transition"
+              className="text-sm font-medium text-text-secondary hover:text-text-primary px-3 py-1.5 rounded-xl hover:bg-glass transition"
             >
               Clear Selection
             </button>
@@ -248,37 +238,36 @@ export default function AdminPostsPage() {
       )}
 
       {isLoading ? (
-        <div className="rounded-2xl border border-[rgba(0,200,245,0.15)] bg-[rgba(10,20,30,0.75)] overflow-hidden">
+        <div className="rounded-2xl border border-border bg-glass overflow-hidden">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="flex items-center gap-3 px-4 py-3.5 border-b border-[#1E3447] last:border-0 animate-pulse">
-              <div className="h-9 w-9 rounded-full bg-[#1E3447] flex-shrink-0" />
+            <div key={i} className="flex items-center gap-3 px-4 py-3.5 border-b border-border last:border-0 animate-pulse">
+              <div className="h-9 w-9 rounded-full bg-border flex-shrink-0" />
               <div className="flex-1 space-y-1.5">
-                <div className="h-3 w-32 rounded bg-[#1E3447]" />
-                <div className="h-2.5 w-64 rounded bg-[#1E3447]" />
+                <div className="h-3 w-32 rounded bg-border" />
+                <div className="h-2.5 w-64 rounded bg-border" />
               </div>
             </div>
           ))}
         </div>
       ) : isError ? (
-        <div className="rounded-2xl border border-[rgba(0,200,245,0.15)] bg-[rgba(10,20,30,0.75)] p-10 text-center">
-          <p className="text-sm text-[#94A3B8]">Unable to load posts</p>
+        <div className="rounded-2xl border border-border bg-glass p-10 text-center">
+          <p className="text-sm text-text-secondary">Unable to load posts</p>
           <button onClick={() => refetch()} className="mt-3 flex items-center gap-1.5 mx-auto px-3.5 py-1.5 text-sm font-medium text-[#00C8FF] hover:bg-[#00C8FF]/10 rounded-lg transition">
             <ArrowPathIcon className="h-4 w-4" />
             Retry
           </button>
         </div>
       ) : items.length === 0 ? (
-        <div className="rounded-2xl border border-[rgba(0,200,245,0.15)] bg-[rgba(10,20,30,0.75)] p-10 text-center">
-          <DocumentTextIcon className="h-10 w-10 mx-auto text-[#1E3447]" />
-          <p className="text-[#94A3B8] mt-3">{search ? `No posts match "${search}"` : 'No posts yet'}</p>
+        <div className="rounded-2xl border border-border bg-glass p-10 text-center">
+          <DocumentTextIcon className="h-10 w-10 mx-auto text-border" />
+          <p className="text-text-secondary mt-3">{search ? `No posts match "${search}"` : 'No posts yet'}</p>
         </div>
       ) : (
         <>
-          {/* Desktop table */}
-          <div className="hidden sm:block rounded-2xl border border-[rgba(0,200,245,0.15)] bg-[rgba(10,20,30,0.75)] overflow-x-auto">
+          <div className="hidden sm:block rounded-2xl border border-border bg-glass overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="border-b border-[#1E3447]">
+                <tr className="border-b border-border">
                   <th className="w-10 px-4 py-3">
                     <SelectionCheckbox
                       checked={allSelected}
@@ -287,18 +276,18 @@ export default function AdminPostsPage() {
                       label="Select all posts on this page"
                     />
                   </th>
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-[#64748B]">Author</th>
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-[#64748B]">Content</th>
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-[#64748B]">Engagement</th>
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-[#64748B]">Posted</th>
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-[#64748B] text-right">Actions</th>
+                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-muted">Author</th>
+                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-muted">Content</th>
+                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-muted">Engagement</th>
+                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-muted">Posted</th>
+                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-text-muted text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((post) => (
                   <tr
                     key={post.id}
-                    className={`border-b border-[#1E3447] last:border-0 hover:bg-white/[0.03] transition ${
+                    className={`border-b border-border last:border-0 hover:bg-glass transition ${
                       selectedIds.has(post.id) ? 'bg-[#00C8FF]/[0.04]' : ''
                     }`}
                   >
@@ -313,21 +302,21 @@ export default function AdminPostsPage() {
                       <div className="flex items-center gap-2.5 min-w-0">
                         <Avatar src={post.author_avatar_url} name={post.author_full_name || post.author_username} size="sm" />
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-[#F1F5F9] truncate">{post.author_full_name || post.author_username}</p>
+                          <p className="text-sm font-medium text-text-primary truncate">{post.author_full_name || post.author_username}</p>
                           <RoleBadge role={post.author_role} />
                         </div>
                       </div>
                     </td>
                     <td className="px-4 py-3 max-w-xs">
-                      <p className="text-sm text-[#94A3B8] line-clamp-2 [overflow-wrap:anywhere]">{post.content || '(no text - media only)'}</p>
+                      <p className="text-sm text-text-secondary line-clamp-2 [overflow-wrap:anywhere]">{post.content || '(no text - media only)'}</p>
                       {post.media_urls.length > 0 && (
-                        <span className="text-[10px] text-[#64748B]">{post.media_urls.length} attachment{post.media_urls.length > 1 ? 's' : ''}</span>
+                        <span className="text-[10px] text-text-muted">{post.media_urls.length} attachment{post.media_urls.length > 1 ? 's' : ''}</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
                       <EngagementStats post={post} />
                     </td>
-                    <td className="px-4 py-3 text-sm text-[#94A3B8] whitespace-nowrap">{formatDate(post.created_at)}</td>
+                    <td className="px-4 py-3 text-sm text-text-secondary whitespace-nowrap">{formatDate(post.created_at)}</td>
                     <td className="px-4 py-3 text-right">
                       <PostActionsMenu onView={() => setViewPostId(post.id)} onDelete={() => setConfirmTarget(post)} />
                     </td>
@@ -337,7 +326,6 @@ export default function AdminPostsPage() {
             </table>
           </div>
 
-          {/* Mobile cards */}
           <div className="sm:hidden space-y-3">
             <div className="flex items-center gap-2 px-1">
               <SelectionCheckbox
@@ -346,7 +334,7 @@ export default function AdminPostsPage() {
                 onChange={toggleSelectAll}
                 label="Select all posts on this page"
               />
-              <span className="text-xs font-medium text-[#94A3B8]">Select All</span>
+              <span className="text-xs font-medium text-text-secondary">Select All</span>
             </div>
             {items.map((post) => (
               <div
@@ -354,7 +342,7 @@ export default function AdminPostsPage() {
                 className={`rounded-2xl border p-4 transition ${
                   selectedIds.has(post.id)
                     ? 'border-[#00C8FF]/40 bg-[#00C8FF]/[0.05]'
-                    : 'border-[rgba(0,200,245,0.15)] bg-[rgba(10,20,30,0.75)]'
+                    : 'border-border bg-glass'
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
@@ -366,16 +354,16 @@ export default function AdminPostsPage() {
                     />
                     <Avatar src={post.author_avatar_url} name={post.author_full_name || post.author_username} size="sm" />
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-[#F1F5F9] truncate">{post.author_full_name || post.author_username}</p>
+                      <p className="text-sm font-medium text-text-primary truncate">{post.author_full_name || post.author_username}</p>
                       <RoleBadge role={post.author_role} />
                     </div>
                   </div>
                   <PostActionsMenu onView={() => setViewPostId(post.id)} onDelete={() => setConfirmTarget(post)} />
                 </div>
-                <p className="text-sm text-[#94A3B8] mt-3 line-clamp-3 [overflow-wrap:anywhere]">{post.content || '(no text - media only)'}</p>
+                <p className="text-sm text-text-secondary mt-3 line-clamp-3 [overflow-wrap:anywhere]">{post.content || '(no text - media only)'}</p>
                 <div className="flex items-center justify-between mt-3">
                   <EngagementStats post={post} />
-                  <p className="text-xs text-[#64748B]">{formatDate(post.created_at)}</p>
+                  <p className="text-xs text-text-muted">{formatDate(post.created_at)}</p>
                 </div>
               </div>
             ))}

@@ -4,14 +4,12 @@ import { ArrowUpIcon, ArrowDownIcon } from '@heroicons/react/24/solid';
 interface StatCardProps {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
-  /** null/undefined means there's genuinely no backend data for this metric yet. */
   value: number | null | undefined;
   trendPercent?: number | null;
   trendLabel?: string;
   accent?: string;
   isLoading?: boolean;
   onClick?: () => void;
-  /** For metrics like "Active Now" with no numeric trend, e.g. an online dot + label. */
   statusLabel?: string;
   unavailableReason?: string;
 }
@@ -30,11 +28,11 @@ export function StatCard({
 }: StatCardProps) {
   if (isLoading) {
     return (
-      <div className="rounded-2xl border border-[rgba(0,200,245,0.12)] bg-[rgba(10,20,30,0.75)] p-4 animate-pulse">
-        <div className="h-8 w-8 rounded-lg bg-[#1E3447]" />
-        <div className="h-3 w-20 rounded bg-[#1E3447] mt-3" />
-        <div className="h-6 w-14 rounded bg-[#1E3447] mt-2" />
-        <div className="h-2.5 w-24 rounded bg-[#1E3447] mt-2" />
+      <div className="rounded-2xl border border-border bg-glass p-4 animate-pulse">
+        <div className="h-8 w-8 rounded-lg bg-border" />
+        <div className="h-3 w-20 rounded bg-border mt-3" />
+        <div className="h-6 w-14 rounded bg-border mt-2" />
+        <div className="h-2.5 w-24 rounded bg-border mt-2" />
       </div>
     );
   }
@@ -45,7 +43,7 @@ export function StatCard({
   return (
     <Wrapper
       onClick={onClick}
-      className={`w-full text-left rounded-2xl border border-[rgba(0,200,245,0.15)] bg-[rgba(10,20,30,0.75)] backdrop-blur-xl p-4 transition-all duration-200 hover:border-[#00C8FF]/35 hover:-translate-y-0.5 ${
+      className={`w-full text-left rounded-2xl border border-border bg-glass backdrop-blur-xl p-4 transition-all duration-200 hover:border-[#00C8FF]/35 hover:-translate-y-0.5 ${
         onClick ? 'cursor-pointer' : ''
       }`}
     >
@@ -58,12 +56,12 @@ export function StatCard({
         </div>
       </div>
 
-      <p className="text-xs text-[#94A3B8] mt-3">{label}</p>
+      <p className="text-xs text-text-secondary mt-3">{label}</p>
 
       {hasValue ? (
-        <p className="text-2xl font-bold text-[#F1F5F9] mt-0.5">{value.toLocaleString()}</p>
+        <p className="text-2xl font-bold text-text-primary mt-0.5">{value.toLocaleString()}</p>
       ) : (
-        <p className="text-2xl font-bold text-[#3D4A5C] mt-0.5" title={unavailableReason}>
+        <p className="text-2xl font-bold text-text-muted mt-0.5" title={unavailableReason}>
           N/A
         </p>
       )}
@@ -84,12 +82,12 @@ export function StatCard({
           ) : (
             <ArrowDownIcon className="h-3 w-3" />
           )}
-          {Math.abs(trendPercent)}% <span className="text-[#64748B]">{trendLabel}</span>
+          {Math.abs(trendPercent)}% <span className="text-text-muted">{trendLabel}</span>
         </p>
       ) : !hasValue ? (
-        <p className="text-xs text-[#64748B] mt-1">{unavailableReason || 'No data'}</p>
+        <p className="text-xs text-text-muted mt-1">{unavailableReason || 'No data'}</p>
       ) : (
-        <p className="text-xs text-[#64748B] mt-1">&nbsp;</p>
+        <p className="text-xs text-text-muted mt-1">&nbsp;</p>
       )}
     </Wrapper>
   );

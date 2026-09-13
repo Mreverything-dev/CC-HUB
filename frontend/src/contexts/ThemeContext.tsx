@@ -49,5 +49,5 @@ export function useTheme() {
   return context;
 }
 
-// Alias para sa mga lumang import na `ThemeContextProvider`
+// Alias para sa mga lumang import na ThemeContextProvider
 export const ThemeContextProvider = ThemeProvider;

@@ -15,6 +15,10 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmojiPicker } from './EmojiPicker';
 import { PostContentBody } from './PostContentBody';
 import { PostReactions } from './PostReactions';
+import { ImageGrid } from './ImageGrid';
+import { extractYouTubeId } from '@/lib/youtube';
+import { YouTubeEmbed } from '@/components/ui/YouTubeEmbed';
+import { extractGiphyGifUrl } from '@/lib/giphy';
 import { usePostRoom } from '../hooks/usePostRoom';
 import { Comment } from '@/types/comment.types';
 import toast from 'react-hot-toast';
@@ -260,15 +264,6 @@ export default function PostDetailModal({
         image_url: uploadedImageUrl,
         parent_id: replyingTo?.id ?? null,
       });
-      // Dedup by id - the post:comment_added broadcast (see usePostRoom
-      // below) travels over a separate connection from this HTTP response
-      // and can arrive at this same client first, since it's already
-      // joined to this post's room while the modal is open. Without this
-      // check, both paths would unconditionally prepend the same comment,
-      // producing a real duplicate entry in the array (same id twice) -
-      // that was the exact cause of the visual "double comment on Enter"
-      // bug, self-correcting only because closing/reopening re-fetches the
-      // true (single) list from the server.
       setComments((prev) => (prev.some((c) => c.id === response.data.id) ? prev : [response.data, ...prev]));
       setNewComment('');
       setReplyingTo(null);
@@ -355,10 +350,10 @@ export default function PostDetailModal({
         <Avatar src={comment.avatar_url} name={comment.username} size="sm" />
       </button>
       <div className="flex-1 min-w-0">
-        <div className="bg-[#111E2B] border border-[#1E3447] rounded-2xl px-3 py-2">
+        <div className="bg-glass border border-border rounded-2xl px-3 py-2">
           <button
             onClick={() => navigate(`/profile/${comment.user_id}`)}
-            className="text-sm font-medium text-[#F1F5F9] hover:text-[#00C8FF] transition"
+            className="text-sm font-medium text-text-primary hover:text-[#00C8FF] transition"
           >
             {comment.username}
           </button>
@@ -368,7 +363,7 @@ export default function PostDetailModal({
                 value={editingCommentContent}
                 onChange={(e) => setEditingCommentContent(e.target.value)}
                 rows={2}
-                className="w-full p-2 rounded-lg border border-[#1E3447] bg-[#0A111A] text-sm text-[#F1F5F9] focus:outline-none focus:ring-2 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition resize-none"
+                className="w-full p-2 rounded-lg border border-border bg-bg text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition resize-none"
               />
               <div className="flex gap-2">
                 <button
@@ -379,7 +374,7 @@ export default function PostDetailModal({
                 </button>
                 <button
                   onClick={() => setEditingCommentId(null)}
-                  className="px-3 py-1 text-xs font-medium text-[#94A3B8] hover:text-[#F1F5F9] transition"
+                  className="px-3 py-1 text-xs font-medium text-text-secondary hover:text-text-primary transition"
                 >
                   Cancel
                 </button>
@@ -387,16 +382,34 @@ export default function PostDetailModal({
             </div>
           ) : (
             <>
-              {comment.content && (
-                <p className="text-sm text-[#CBD5E1] whitespace-pre-wrap break-words">{comment.content}</p>
-              )}
+              {comment.content && (() => {
+                const giphyGifUrl = extractGiphyGifUrl(comment.content);
+                const displayText = giphyGifUrl
+                  ? comment.content.replace(/https?:\/\/\S+/g, '').trim()
+                  : comment.content;
+                return (
+                  <>
+                    {displayText && (
+                      <p className="text-sm text-text-primary whitespace-pre-wrap break-words">{displayText}</p>
+                    )}
+                    {giphyGifUrl && (
+                      <img
+                        src={giphyGifUrl}
+                        alt="GIF"
+                        className="mt-1.5 rounded-xl max-w-full max-h-64 object-contain"
+                        loading="lazy"
+                      />
+                    )}
+                  </>
+                );
+              })()}
               {comment.image_url && (
                 <img src={comment.image_url} alt="" className="mt-1.5 rounded-xl max-w-full max-h-56 object-cover" />
               )}
             </>
           )}
         </div>
-        <div className="flex items-center gap-3 mt-1 px-1 text-xs text-[#64748B] flex-wrap">
+        <div className="flex items-center gap-3 mt-1 px-1 text-xs text-text-muted flex-wrap">
           <span>{formatRelativeTime(comment.created_at)}</span>
           <PostReactions
             breakdown={comment.reaction_breakdown || {}}
@@ -459,14 +472,13 @@ export default function PostDetailModal({
   return (
     <div
       className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4 z-50"
-      onClick={() => !isPostingComment && onClose()}
     >
       <div
-        className="bg-[#0D1722] w-full sm:max-w-2xl sm:rounded-2xl border border-[#1E3447] shadow-2xl h-full sm:h-auto sm:max-h-[90vh] flex flex-col overflow-hidden"
+        className="bg-bg w-full sm:max-w-2xl sm:rounded-2xl border border-border shadow-2xl h-full sm:h-auto sm:max-h-[90vh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="sticky top-0 bg-[#0D1722] border-b border-[#1E3447] p-4 flex items-start justify-between flex-shrink-0 z-10">
+        <div className="sticky top-0 bg-bg border-b border-border p-4 flex items-start justify-between flex-shrink-0 z-10">
           <div className="flex items-center gap-3 min-w-0">
             <button onClick={() => navigate(`/profile/${post.user_id}`)} className="flex-shrink-0">
               <Avatar src={post.avatar_url} name={post.username} size="md" />
@@ -475,13 +487,13 @@ export default function PostDetailModal({
               <div className="flex items-center gap-2 flex-wrap">
                 <button
                   onClick={() => navigate(`/profile/${post.user_id}`)}
-                  className="font-medium text-[#F1F5F9] hover:text-[#00C8FF] transition truncate"
+                  className="font-medium text-text-primary hover:text-[#00C8FF] transition truncate"
                 >
                   {post.username}
                 </button>
                 <RoleBadge role={post.user_role} />
               </div>
-              <div className="flex items-center gap-2 text-xs text-[#64748B] mt-0.5">
+              <div className="flex items-center gap-2 text-xs text-text-muted mt-0.5">
                 <span>{formatRelativeTime(post.created_at)}</span>
                 <span>•</span>
                 <span>{visibilityLabels[post.visibility] || post.visibility}</span>
@@ -495,12 +507,12 @@ export default function PostDetailModal({
                 <button
                   onClick={() => setShowPostMenu((v) => !v)}
                   title="More options"
-                  className="p-1.5 text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5 rounded-lg transition"
+                  className="p-1.5 text-text-secondary hover:text-text-primary hover:bg-glass-hover rounded-lg transition"
                 >
                   <EllipsisVerticalIcon className="h-5 w-5" />
                 </button>
                 {showPostMenu && (
-                  <div className="absolute right-0 top-full mt-1 w-40 rounded-xl border border-[#1E3447] bg-[#111E2B] shadow-xl z-20 overflow-hidden">
+                  <div className="absolute right-0 top-full mt-1 w-40 rounded-xl border border-border bg-bg shadow-xl z-20 overflow-hidden">
                     <button
                       onClick={() => {
                         setShowPostMenu(false);
@@ -529,7 +541,7 @@ export default function PostDetailModal({
               onClick={() => !isPostingComment && onClose()}
               disabled={isPostingComment}
               title="Close"
-              className="p-1.5 text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5 rounded-lg transition disabled:opacity-40"
+              className="p-1.5 text-text-secondary hover:text-text-primary hover:bg-glass-hover rounded-lg transition disabled:opacity-40"
             >
               <XMarkIcon className="h-5 w-5" />
             </button>
@@ -544,7 +556,7 @@ export default function PostDetailModal({
                 <textarea
                   value={editContent}
                   onChange={(e) => setEditContent(e.target.value)}
-                  className="w-full p-3 rounded-xl border border-[#1E3447] bg-[#0A111A] text-sm text-[#F1F5F9] focus:outline-none focus:ring-2 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition resize-none"
+                  className="w-full p-3 rounded-xl border border-border bg-glass text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition resize-none"
                   rows={6}
                 />
                 <div className="flex gap-2">
@@ -559,20 +571,47 @@ export default function PostDetailModal({
                       setIsEditing(false);
                       setEditContent(post.content);
                     }}
-                    className="px-4 py-2 text-sm font-medium text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5 rounded-xl transition"
+                    className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-glass-hover rounded-xl transition"
                   >
                     Cancel
                   </button>
                 </div>
               </div>
             ) : (
-              <PostContentBody content={post.content} className="text-[#E2E8F0]" />
+              <>
+                <PostContentBody content={post.content} className="text-text-primary" />
+
+                {/* YouTube embed — if the post's content contains a YouTube link */}
+                {(() => {
+                  const youtubeId = extractYouTubeId(post.content);
+                  if (!youtubeId) return null;
+                  return (
+                    <div className="mt-3">
+                      <YouTubeEmbed videoId={youtubeId} className="w-full" />
+                    </div>
+                  );
+                })()}
+
+                {/* Media grid — images/videos attached to the post */}
+                {post.media_urls && post.media_urls.length > 0 && (
+                  <div className="mt-3">
+                    <ImageGrid
+                      images={post.media_urls}
+                      onImageClick={(index) => {
+                        // Open lightbox — for now, just open the first image
+                        // (we can add a lightbox later)
+                        window.open(post.media_urls[index], '_blank');
+                      }}
+                    />
+                  </div>
+                )}
+              </>
             )}
 
             {/* Actions */}
-            <div className="flex items-center gap-4 sm:gap-6 pt-4 mt-4 border-t border-[#1E3447] flex-wrap">
+            <div className="flex items-center gap-4 sm:gap-6 pt-4 mt-4 border-t border-border flex-wrap">
               <PostReactions breakdown={reactionBreakdown} myReaction={myReaction} onReact={handleReact} size="md" />
-              <div className="flex items-center gap-1.5 text-sm font-medium text-[#94A3B8]">
+              <div className="flex items-center gap-1.5 text-sm font-medium text-text-secondary">
                 <ChatBubbleLeftIcon className="h-5 w-5" />
                 <span>{comments.length}</span>
               </div>
@@ -581,7 +620,7 @@ export default function PostDetailModal({
                 disabled={isSharing}
                 title={isShared ? 'You already shared this post' : 'Share'}
                 className={`flex items-center gap-1.5 text-sm font-medium transition disabled:opacity-50 ${
-                  isShared ? 'text-[#22C55E]' : 'text-[#94A3B8] hover:text-[#22C55E]'
+                  isShared ? 'text-[#22C55E]' : 'text-text-secondary hover:text-[#22C55E]'
                 }`}
               >
                 <ArrowUpTrayIcon className="h-5 w-5" />
@@ -590,8 +629,8 @@ export default function PostDetailModal({
             </div>
 
             {/* Comments */}
-            <div className="mt-4 pt-4 border-t border-[#1E3447]">
-              <h3 className="text-sm font-semibold text-[#F1F5F9] mb-3">
+            <div className="mt-4 pt-4 border-t border-border">
+              <h3 className="text-sm font-semibold text-text-primary mb-3">
                 Comments {comments.length > 0 && `(${comments.length})`}
               </h3>
 
@@ -600,7 +639,7 @@ export default function PostDetailModal({
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#00C8FF]" />
                 </div>
               ) : comments.length === 0 ? (
-                <p className="text-sm text-[#64748B] text-center py-4">No comments yet. Be the first!</p>
+                <p className="text-sm text-text-muted text-center py-4">No comments yet. Be the first!</p>
               ) : (
                 <div className="space-y-3">
                   {!showAllComments && topLevelComments.length > INITIAL_VISIBLE_COMMENTS && (
@@ -612,13 +651,13 @@ export default function PostDetailModal({
                     </button>
                   )}
                   {!showAllComments && topLevelComments.length <= INITIAL_VISIBLE_COMMENTS && topLevelComments.length > 0 && (
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-[#64748B]">Latest comments</p>
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-text-muted">Latest comments</p>
                   )}
                   {visibleTopLevel.map((comment) => renderCommentNode(comment, false))}
                   {showAllComments && topLevelComments.length > INITIAL_VISIBLE_COMMENTS && (
                     <button
                       onClick={() => setShowAllComments(false)}
-                      className="text-xs font-medium text-[#94A3B8] hover:text-[#F1F5F9] transition"
+                      className="text-xs font-medium text-text-secondary hover:text-text-primary transition"
                     >
                       Show less
                     </button>
@@ -630,29 +669,29 @@ export default function PostDetailModal({
         </div>
 
         {/* Sticky comment composer */}
-        <div className="flex-shrink-0 border-t border-[#1E3447] bg-[#0D1722] p-3 sm:p-4">
+        <div className="flex-shrink-0 border-t border-border bg-bg p-3 sm:p-4">
           {replyingTo && (
-            <div className="flex items-center justify-between mb-2 px-3 py-1.5 rounded-lg bg-[#0A111A] border border-[#1E3447] text-xs">
-              <span className="text-[#94A3B8]">
+            <div className="flex items-center justify-between mb-2 px-3 py-1.5 rounded-lg bg-glass border border-border text-xs">
+              <span className="text-text-secondary">
                 Replying to <span className="text-[#00C8FF] font-medium">@{replyingTo.username}</span>
               </span>
               <button
                 onClick={() => setReplyingTo(null)}
                 title="Cancel reply"
-                className="p-0.5 text-[#64748B] hover:text-[#F1F5F9] rounded-full hover:bg-white/5 transition"
+                className="p-0.5 text-text-muted hover:text-text-primary rounded-full hover:bg-glass-hover transition"
               >
                 <XMarkIcon className="h-3.5 w-3.5" />
               </button>
             </div>
           )}
           {commentImageFile && (
-            <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-xl border border-[#1E3447] bg-[#0A111A]">
+            <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-xl border border-border bg-glass">
               <img src={commentImagePreview!} alt="" className="h-10 w-10 rounded-lg object-cover flex-shrink-0" />
-              <span className="text-sm text-[#F1F5F9] truncate flex-1">{commentImageFile.name}</span>
+              <span className="text-sm text-text-primary truncate flex-1">{commentImageFile.name}</span>
               <button
                 onClick={removeCommentImage}
                 disabled={isUploadingCommentImage}
-                className="p-1 text-[#64748B] hover:text-[#F1F5F9] rounded-full hover:bg-white/5 transition disabled:opacity-50"
+                className="p-1 text-text-muted hover:text-text-primary rounded-full hover:bg-glass-hover transition disabled:opacity-50"
               >
                 <XMarkIcon className="h-4 w-4" />
               </button>
@@ -670,7 +709,7 @@ export default function PostDetailModal({
               onClick={() => commentImageInputRef.current?.click()}
               disabled={isUploadingCommentImage}
               title="Attach an image"
-              className="p-1.5 text-[#64748B] hover:text-[#00C8FF] hover:bg-white/5 rounded-lg transition disabled:opacity-50 flex-shrink-0"
+              className="p-1.5 text-text-muted hover:text-[#00C8FF] hover:bg-glass-hover rounded-lg transition disabled:opacity-50 flex-shrink-0"
             >
               <PhotoIcon className="h-5 w-5" />
             </button>
@@ -687,7 +726,7 @@ export default function PostDetailModal({
               }}
               placeholder={replyingTo ? `Reply to @${replyingTo.username}...` : 'Write a comment...'}
               rows={1}
-              className="flex-1 px-3 py-2 rounded-xl border border-[#1E3447] bg-[#0A111A] text-sm text-[#F1F5F9] placeholder-[#64748B] focus:outline-none focus:ring-2 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition resize-none max-h-24"
+              className="flex-1 px-3 py-2 rounded-xl border border-border bg-glass text-sm text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition resize-none max-h-24"
             />
             <button
               onClick={handleAddComment}

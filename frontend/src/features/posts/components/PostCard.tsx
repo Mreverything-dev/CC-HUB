@@ -1,5 +1,5 @@
 // frontend/src/features/posts/components/PostCard.tsx
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatRelativeTime } from '@/lib/formatters';
 import { PostContentBody } from './PostContentBody';
@@ -14,8 +14,6 @@ import {
   EllipsisVerticalIcon,
 } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
-import { Button } from '@/components/ui/Button/Button';
-import { Badge } from '@/components/ui/Badge/Badge';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { postService } from '@/services/api/post.service';
@@ -28,6 +26,9 @@ import { RoleBadge } from '@/features/dashboard/components/RoleBadge';
 import { Avatar } from '@/features/dashboard/components/Avatar';
 import { ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import { ImageGrid, isVideoUrl } from './ImageGrid';
+import { extractYouTubeId, stripYouTubeUrl } from '@/lib/youtube';
+import { YouTubeEmbed } from '@/components/ui/YouTubeEmbed';
+import { extractGiphyGifUrl, stripGiphyUrl } from '@/lib/giphy';
 
 interface PostCardProps {
   id: string;
@@ -88,7 +89,6 @@ export function PostCard({
   onReact,
   onDelete,
   onEdit,
-  dark = false,
 }: PostCardProps) {
   const [isLiked, setIsLiked] = useState(is_liked_by_current_user);
   const [likeCount, setLikeCount] = useState(likes_count);
@@ -103,18 +103,22 @@ export function PostCard({
   const [showReportDialog, setShowReportDialog] = useState(false);
   const [isReporting, setIsReporting] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  const [showHeartBurst, setShowHeartBurst] = useState(false);
+  const [heartPosition, setHeartPosition] = useState<{ x: number; y: number } | null>(null);
+
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // Single/double tap tracking for the CARD (not media — ImageGrid handles media)
+  const cardClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cardLastTapRef = useRef<number>(0);
+
   const { user } = useAuthStore();
   const navigate = useNavigate();
 
   const goToAuthorProfile = (e: React.MouseEvent) => {
     e.stopPropagation();
     navigate(`/profile/${user_id}`);
-  };
-
-  const roleColors = {
-    admin: 'bg-purple-500 text-white',
-    professor: 'bg-cyan-500 text-white',
-    student: 'bg-blue-500 text-white',
   };
 
   const visibilityLabels = {
@@ -124,15 +128,92 @@ export function PostCard({
     private: '🔒 Private',
   };
 
-  const handleLike = async () => {
+  const handleLike = async (forceLike?: boolean) => {
     try {
+      if (onReact) {
+        const newReaction = my_reaction === '❤️' ? null : '❤️';
+        if (newReaction) {
+          onReact(id, newReaction);
+        }
+        return;
+      }
+
+      const shouldLike = forceLike ? true : !isLiked;
+      if (forceLike && isLiked) return;
+
       await onLike(id);
-      setIsLiked(!isLiked);
-      setLikeCount(isLiked ? likeCount - 1 : likeCount + 1);
+      setIsLiked(shouldLike);
+      setLikeCount((prev) => {
+        if (shouldLike && !isLiked) return prev + 1;
+        if (!shouldLike && isLiked) return prev - 1;
+        return prev;
+      });
     } catch (error) {
       console.error('Error toggling like:', error);
     }
   };
+
+  // Heart burst at a position (in viewport coordinates).
+  // We convert to card-relative coordinates so the heart renders in the
+  // correct position inside the card's stacking context.
+  const triggerHeartBurst = (clientX: number, clientY: number) => {
+    const cardEl = cardRef.current;
+    if (!cardEl) return;
+
+    const rect = cardEl.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+
+    setHeartPosition({ x, y });
+    setShowHeartBurst(true);
+    setTimeout(() => {
+      setShowHeartBurst(false);
+      setHeartPosition(null);
+    }, 800);
+
+    if (onReact) {
+      if (my_reaction !== '❤️') {
+        onReact(id, '❤️');
+      }
+    } else {
+      handleLike(true);
+    }
+  };
+
+  // Click anywhere on the card body (not media, not buttons)
+  const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (isEditing) return;
+
+    // Ignore clicks on interactive elements (buttons, links, inputs)
+    const target = e.target as HTMLElement;
+    if (target.closest('button, a, input, textarea, select')) return;
+
+    const now = Date.now();
+    const timeSinceLastTap = now - cardLastTapRef.current;
+
+    if (timeSinceLastTap < 300) {
+      // Double tap -> heart burst + react
+      if (cardClickTimerRef.current) {
+        clearTimeout(cardClickTimerRef.current);
+        cardClickTimerRef.current = null;
+      }
+      triggerHeartBurst(e.clientX, e.clientY);
+      cardLastTapRef.current = 0;
+    } else {
+      // Possible single tap -> open detail after 300ms
+      cardLastTapRef.current = now;
+      cardClickTimerRef.current = setTimeout(() => {
+        setShowDetail(true);
+        cardClickTimerRef.current = null;
+      }, 300);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (cardClickTimerRef.current) clearTimeout(cardClickTimerRef.current);
+    };
+  }, []);
 
   const handleShare = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -182,50 +263,67 @@ export function PostCard({
     }
   };
 
-  const handleCardClick = () => {
-    if (!isEditing) {
-      setShowDetail(true);
-    }
-  };
-
-  // ✅ Unique key for this instance
   const instanceKey = `post-${id}`;
 
-  const cardClassName = dark
-    ? 'rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-4 sm:p-6 hover:border-[#00C8FF]/35 transition-all duration-200'
-    : 'glass rounded-xl p-6 transition-all duration-200 hover:shadow-lg hover:border-cyan-500/30';
+  // Detect a YouTube or Giphy link in the post's content. If one is found,
+  // we'll render an embed/gif and strip the raw URL from the displayed text.
+  const youtubeId = extractYouTubeId(content);
+  const giphyGifUrl = extractGiphyGifUrl(content);
+  const displayContent = youtubeId
+    ? stripYouTubeUrl(content)
+    : giphyGifUrl
+    ? stripGiphyUrl(content)
+    : content;
 
   return (
     <div key={instanceKey}>
       {is_shared && (
-        <div className={`flex items-center gap-2 mb-2 text-sm ${dark ? 'text-[#94A3B8]' : 'text-gray-500'}`}>
+        <div className="flex items-center gap-2 mb-2 text-sm text-text-secondary">
           <ArrowUpTrayIcon className="h-4 w-4 flex-shrink-0" />
           <Avatar src={shared_by_avatar_url} name={shared_by_username || undefined} size="xs" />
           <span>
-            <span className={`font-medium ${dark ? 'text-[#F1F5F9]' : 'text-gray-800'}`}>{shared_by_username}</span>{' '}
+            <span className="font-medium text-text-primary">{shared_by_username}</span>{' '}
             shared a post
-            {shared_at && <span className={dark ? 'text-[#64748B]' : 'text-gray-400'}> · {formatRelativeTime(shared_at)}</span>}
+            {shared_at && <span className="text-text-muted"> · {formatRelativeTime(shared_at)}</span>}
           </span>
         </div>
       )}
       <div
-        className="cursor-pointer hover:shadow-lg transition-shadow"
+        ref={cardRef}
+        // select-none prevents blue text-selection on double-tap
+        className="relative cursor-pointer select-none"
         onClick={handleCardClick}
       >
-        <div className={cardClassName}>
+        {showHeartBurst && heartPosition && (
+          <div
+            className="absolute z-30 pointer-events-none"
+            style={{
+              left: heartPosition.x,
+              top: heartPosition.y,
+              transform: 'translate(-50%, -50%)',
+            }}
+          >
+            <HeartIconSolid
+              className="h-24 w-24 text-[#EF4444] drop-shadow-[0_0_20px_rgba(239,68,68,0.5)]"
+              style={{
+                animation: 'heartBurst 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
+              }}
+            />
+          </div>
+        )}
+
+        <div className="rounded-2xl border border-border bg-glass backdrop-blur-xl p-4 sm:p-6 transition-all duration-200">
           {/* Header */}
           <div className="flex items-start justify-between mb-3 gap-2">
             <div className="flex items-center space-x-3 min-w-0 flex-1">
               <div
                 onClick={goToAuthorProfile}
-                className={`w-10 h-10 rounded-full flex items-center justify-center hover:opacity-80 transition cursor-pointer overflow-hidden flex-shrink-0 ${
-                  dark ? 'bg-gradient-to-br from-[#00C8FF] to-[#3B82F6]' : 'bg-gray-200'
-                }`}
+                className="w-10 h-10 rounded-full flex items-center justify-center hover:opacity-80 transition cursor-pointer overflow-hidden flex-shrink-0 bg-gradient-to-br from-[#00C8FF] to-[#3B82F6]"
               >
                 {avatar_url ? (
                   <img src={avatar_url} alt={username} className="w-full h-full object-cover" />
                 ) : (
-                  <span className={`font-semibold ${dark ? 'text-[#060B12]' : 'text-gray-600'}`}>
+                  <span className="font-semibold text-[#060B12]">
                     {username?.charAt(0).toUpperCase() || 'U'}
                   </span>
                 )}
@@ -234,19 +332,13 @@ export function PostCard({
                 <div className="flex items-center space-x-2">
                   <p
                     onClick={goToAuthorProfile}
-                    className={`font-medium hover:underline cursor-pointer truncate ${dark ? 'text-[#F1F5F9]' : 'text-gray-800'}`}
+                    className="font-medium hover:underline cursor-pointer truncate text-text-primary"
                   >
                     {username}
                   </p>
-                  {dark ? (
-                    <RoleBadge role={user_role} />
-                  ) : (
-                    <Badge size="sm" className={roleColors[user_role as keyof typeof roleColors]}>
-                      {user_role?.charAt(0).toUpperCase() + user_role?.slice(1)}
-                    </Badge>
-                  )}
+                  <RoleBadge role={user_role} />
                 </div>
-                <div className={`flex items-center space-x-2 text-xs truncate ${dark ? 'text-[#64748B]' : 'text-gray-400'}`}>
+                <div className="flex items-center space-x-2 text-xs truncate text-text-muted">
                   <span>{formatRelativeTime(created_at)}</span>
                   <span>•</span>
                   <span>{visibilityLabels[visibility as keyof typeof visibilityLabels]}</span>
@@ -257,29 +349,19 @@ export function PostCard({
             <div className="relative flex-shrink-0" onClick={(e) => e.stopPropagation()}>
               <button
                 onClick={() => setShowMenu(!showMenu)}
-                className={`p-1.5 rounded-xl transition ${dark ? 'text-[#64748B] hover:text-[#F1F5F9] hover:bg-white/5' : 'hover:bg-gray-100'}`}
+                className="p-1.5 rounded-xl transition text-text-muted hover:text-text-primary hover:bg-glass"
               >
-                {dark ? (
-                  <EllipsisVerticalIcon className="h-5 w-5" />
-                ) : (
-                  <span className="block w-5 text-center leading-none text-gray-400">⋮</span>
-                )}
+                <EllipsisVerticalIcon className="h-5 w-5" />
               </button>
               {showMenu && (
-                <div
-                  className={`absolute right-0 mt-2 w-48 rounded-xl shadow-lg py-1 z-10 ${
-                    dark ? 'bg-[#111E2B] border border-[#1E3447]' : 'bg-white border border-gray-100'
-                  }`}
-                >
+                <div className="absolute right-0 mt-2 w-48 rounded-xl shadow-lg py-1 z-10 bg-bg border border-border">
                   {is_owned_by_current_user && (
                     <button
                       onClick={() => {
                         setIsEditing(true);
                         setShowMenu(false);
                       }}
-                      className={`flex items-center space-x-2 w-full px-4 py-2 text-sm transition ${
-                        dark ? 'text-[#94A3B8] hover:bg-white/5 hover:text-[#F1F5F9]' : 'text-gray-700 hover:bg-gray-50'
-                      }`}
+                      className="flex items-center space-x-2 w-full px-4 py-2 text-sm transition text-text-secondary hover:bg-glass hover:text-text-primary"
                     >
                       <span className="w-4 text-center leading-none">✎</span>
                       <span>Edit</span>
@@ -291,9 +373,7 @@ export function PostCard({
                         setShowMenu(false);
                         setShowDeleteConfirm(true);
                       }}
-                      className={`flex items-center space-x-2 w-full px-4 py-2 text-sm transition ${
-                        dark ? 'text-[#EF4444] hover:bg-[#EF4444]/10' : 'text-red-600 hover:bg-red-50'
-                      }`}
+                      className="flex items-center space-x-2 w-full px-4 py-2 text-sm transition text-[#EF4444] hover:bg-[#EF4444]/10"
                     >
                       <span className="w-4 text-center leading-none">🗑</span>
                       <span>Delete</span>
@@ -305,9 +385,7 @@ export function PostCard({
                         setShowMenu(false);
                         setShowReportDialog(true);
                       }}
-                      className={`flex items-center space-x-2 w-full px-4 py-2 text-sm transition ${
-                        dark ? 'text-[#94A3B8] hover:bg-white/5 hover:text-[#F1F5F9]' : 'text-gray-700 hover:bg-gray-50'
-                      }`}
+                      className="flex items-center space-x-2 w-full px-4 py-2 text-sm transition text-text-secondary hover:bg-glass hover:text-text-primary"
                     >
                       <span className="w-4 text-center leading-none">⚑</span>
                       <span>Report Post</span>
@@ -324,151 +402,133 @@ export function PostCard({
               <textarea
                 value={editContent}
                 onChange={(e) => setEditContent(e.target.value)}
-                className={
-                  dark
-                    ? 'w-full p-3 rounded-xl border border-[#1E3447] bg-[#0A111A] text-[#F1F5F9] focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] focus:outline-none transition'
-                    : 'w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-transparent'
-                }
+                className="w-full p-3 rounded-xl border border-border bg-bg text-text-primary focus:ring-1 focus:ring-border focus:border-border focus:outline-none transition"
                 rows={3}
               />
               <div className="flex space-x-2">
-                {dark ? (
-                  <>
-                    <button
-                      onClick={handleEdit}
-                      className="px-3 py-1.5 text-sm font-semibold bg-gradient-to-br from-[#00C8FF] to-[#3B82F6] text-[#060B12] rounded-xl hover:opacity-90 transition"
-                    >
-                      Save
-                    </button>
-                    <button
-                      onClick={() => setIsEditing(false)}
-                      className="px-3 py-1.5 text-sm font-medium text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5 rounded-xl transition"
-                    >
-                      Cancel
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <Button size="sm" onClick={handleEdit}>Save</Button>
-                    <Button size="sm" variant="ghost" onClick={() => setIsEditing(false)}>Cancel</Button>
-                  </>
-                )}
+                <button
+                  onClick={handleEdit}
+                  className="px-3 py-1.5 text-sm font-semibold bg-gradient-to-br from-[#00C8FF] to-[#3B82F6] text-[#060B12] rounded-xl hover:opacity-90 transition"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => setIsEditing(false)}
+                  className="px-3 py-1.5 text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-glass rounded-xl transition"
+                >
+                  Cancel
+                </button>
               </div>
             </div>
           ) : (
             <>
-              <PostContentBody content={content} compact className={dark ? 'text-[#CBD5E1]' : 'text-gray-700'} />
-              {content.length > 150 && (
-                <p className={`text-sm mt-1 ${dark ? 'text-[#00C8FF] hover:text-[#00E0FF]' : 'text-cyan-500 hover:text-cyan-400'}`}>
+              {displayContent && (
+                <PostContentBody content={displayContent} compact className="text-text-secondary" />
+              )}
+              {displayContent.length > 150 && (
+                <p className="text-sm mt-1 text-[#00C8FF] hover:text-[#00E0FF]">
                   Click to read more →
                 </p>
               )}
             </>
           )}
 
-          {/* Media Display */}
-          {!isEditing && media_urls && media_urls.length > 0 && (
-            <div onClick={(e) => e.stopPropagation()}>
-              <ImageGrid images={media_urls} dark={dark} onImageClick={setLightboxIndex} />
+          {/* YouTube embed — shown when the post's content contains a
+              YouTube link. The raw URL is stripped from the text above. */}
+          {!isEditing && youtubeId && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              onDoubleClick={(e) => e.stopPropagation()}
+              className="mt-3"
+            >
+              <YouTubeEmbed videoId={youtubeId} />
             </div>
+          )}
+
+          {/* Giphy GIF — shown when the post's content contains a Giphy link.
+              The raw URL is stripped from the text above. */}
+          {!isEditing && !youtubeId && giphyGifUrl && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              onDoubleClick={(e) => e.stopPropagation()}
+              className="mt-3"
+            >
+              <img
+                src={giphyGifUrl}
+                alt="GIF"
+                className="rounded-2xl max-w-full max-h-96 object-contain"
+                loading="lazy"
+              />
+            </div>
+          )}
+
+          {/* Media Display - ImageGrid handles single/double tap itself.
+              single tap -> open lightbox
+              double tap -> heart burst (via onDoubleTap) */}
+          {!isEditing && media_urls && media_urls.length > 0 && (
+            <ImageGrid
+              images={media_urls}
+              onImageClick={(index) => {
+                setLightboxIndex(index);
+              }}
+              onDoubleTap={(clientX, clientY) => {
+                triggerHeartBurst(clientX, clientY);
+              }}
+            />
           )}
 
           {/* Actions */}
           <div
-            className={`flex items-center justify-between mt-4 pt-4 border-t ${dark ? 'border-[#1E3447]' : 'border-gray-100/50'}`}
+            className="flex items-center justify-between mt-4 pt-4 border-t border-border"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center space-x-1">
-              {dark && onReact ? (
+              {onReact ? (
                 <PostReactions
                   breakdown={reaction_breakdown}
                   myReaction={my_reaction}
                   onReact={(reaction) => onReact(id, reaction)}
                   size="md"
                 />
-              ) : dark ? (
+              ) : (
                 <button
-                  onClick={handleLike}
+                  onClick={() => handleLike()}
                   className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl transition ${
-                    isLiked ? 'text-[#EF4444]' : 'text-[#94A3B8] hover:text-[#EF4444] hover:bg-white/5'
+                    isLiked ? 'text-[#EF4444]' : 'text-text-secondary hover:text-[#EF4444] hover:bg-glass'
                   }`}
                 >
                   {isLiked ? <HeartIconSolid className="h-[18px] w-[18px]" /> : <HeartIcon className="h-[18px] w-[18px]" />}
                   <span className="text-sm">{likeCount}</span>
                 </button>
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleLike}
-                  className={`flex items-center space-x-1 ${
-                    isLiked ? 'text-red-500' : 'text-gray-500 hover:text-red-500'
-                  }`}
-                >
-                  <span className={`w-4 text-center leading-none ${isLiked ? 'text-red-500' : ''}`}>
-                    {isLiked ? '♥' : '♡'}
-                  </span>
-                  <span>{likeCount}</span>
-                </Button>
               )}
-              {dark ? (
-                <button
-                  onClick={() => setShowDetail(true)}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5 transition"
-                >
-                  <ChatBubbleLeftIcon className="h-[18px] w-[18px]" />
-                  <span className="text-sm">{comments_count}</span>
-                </button>
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="flex items-center space-x-1 text-gray-500"
-                  onClick={() => setShowDetail(true)}
-                >
-                  <span className="w-4 text-center leading-none">◌</span>
-                  <span>{comments_count}</span>
-                </Button>
-              )}
-              {dark ? (
-                <button
-                  onClick={handleShare}
-                  disabled={isSharing}
-                  title={isShared ? 'You already shared this post' : 'Share'}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl transition disabled:opacity-50 ${
-                    isShared ? 'text-[#10B981]' : 'text-[#94A3B8] hover:text-[#10B981] hover:bg-white/5'
-                  }`}
-                >
-                  <ShareIcon className="h-[18px] w-[18px]" />
-                  <span className="text-sm">{shareCount}</span>
-                </button>
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleShare}
-                  disabled={isSharing}
-                  title={isShared ? 'You already shared this post' : 'Share'}
-                  className={`flex items-center space-x-1 disabled:opacity-50 ${
-                    isShared ? 'text-green-500' : 'text-gray-500 hover:text-green-500'
-                  }`}
-                >
-                  <span className="w-4 text-center leading-none">↗</span>
-                  <span>{shareCount}</span>
-                </Button>
-              )}
-              {dark && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toast('Saving posts is coming soon');
-                  }}
-                  title="Save"
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[#94A3B8] hover:text-[#00C8FF] hover:bg-white/5 transition"
-                >
-                  <BookmarkIcon className="h-[18px] w-[18px]" />
-                </button>
-              )}
+              <button
+                onClick={() => setShowDetail(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-text-secondary hover:text-text-primary hover:bg-glass transition"
+              >
+                <ChatBubbleLeftIcon className="h-[18px] w-[18px]" />
+                <span className="text-sm">{comments_count}</span>
+              </button>
+              <button
+                onClick={handleShare}
+                disabled={isSharing}
+                title={isShared ? 'You already shared this post' : 'Share'}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl transition disabled:opacity-50 ${
+                  isShared ? 'text-[#10B981]' : 'text-text-secondary hover:text-[#10B981] hover:bg-glass'
+                }`}
+              >
+                <ShareIcon className="h-[18px] w-[18px]" />
+                <span className="text-sm">{shareCount}</span>
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toast('Saving posts is coming soon');
+                }}
+                title="Save"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-text-secondary hover:text-[#00C8FF] hover:bg-glass transition"
+              >
+                <BookmarkIcon className="h-[18px] w-[18px]" />
+              </button>
             </div>
           </div>
         </div>
@@ -478,10 +538,16 @@ export function PostCard({
       {lightboxIndex !== null && media_urls[lightboxIndex] && (
         <div
           className="fixed inset-0 z-[70] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setLightboxIndex(null)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setLightboxIndex(null);
+          }}
         >
           <button
-            onClick={() => setLightboxIndex(null)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setLightboxIndex(null);
+            }}
             title="Close"
             className="absolute top-4 right-4 p-2 text-white/80 hover:text-white rounded-full hover:bg-white/10 transition"
           >

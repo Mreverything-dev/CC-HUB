@@ -26,10 +26,10 @@ interface ClassesPageProps {
 }
 
 const STATUS_STYLES: Record<OccurrenceStatus, string> = {
-  now: 'bg-gradient-to-r from-emerald-500/20 to-emerald-400/10 text-emerald-400 border-emerald-500/30 shadow-[0_0_20px_rgba(52,211,153,0.15)]',
-  next: 'bg-gradient-to-r from-cyan-500/20 to-blue-500/10 text-cyan-400 border-cyan-500/30 shadow-[0_0_20px_rgba(0,200,255,0.15)]',
-  upcoming: 'bg-white/5 text-slate-400 border-slate-700/50',
-  completed: 'bg-white/5 text-slate-500 border-slate-700/30 opacity-60',
+  now: 'bg-gradient-to-r from-emerald-500/20 to-emerald-400/10 text-emerald-500 dark:text-emerald-400 border-emerald-500/30 shadow-[0_0_20px_rgba(52,211,153,0.15)]',
+  next: 'bg-gradient-to-r from-cyan-500/20 to-blue-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/30 shadow-[0_0_20px_rgba(0,200,255,0.15)]',
+  upcoming: 'bg-glass text-text-secondary border-border',
+  completed: 'bg-glass text-text-muted border-border opacity-60',
 };
 
 const STATUS_LABELS: Record<OccurrenceStatus, string> = {
@@ -45,8 +45,8 @@ const STATUS_LABELS: Record<OccurrenceStatus, string> = {
 const ROW_ACCENT: Record<OccurrenceStatus, string> = {
   now: 'border-l-emerald-400 bg-emerald-500/[0.04] hover:bg-emerald-500/[0.07]',
   next: 'border-l-cyan-400 bg-cyan-500/[0.04] hover:bg-cyan-500/[0.07]',
-  upcoming: 'border-l-transparent hover:bg-white/[0.03]',
-  completed: 'border-l-transparent opacity-50 hover:opacity-75 hover:bg-white/[0.03]',
+  upcoming: 'border-l-transparent hover:bg-glass-hover',
+  completed: 'border-l-transparent opacity-50 hover:opacity-75 hover:bg-glass-hover',
 };
 
 const DAY_ORDER = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -62,16 +62,16 @@ function StatChip({ icon: Icon, value, label, accent, gradient }: {
     <motion.div
       whileHover={{ scale: 1.02, y: -2 }}
       transition={{ duration: 0.2 }}
-      className="relative overflow-hidden rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-800/40 to-slate-900/40 backdrop-blur-xl px-4 py-3 shadow-xl"
+      className="relative overflow-hidden rounded-2xl border border-border bg-glass backdrop-blur-xl px-4 py-3 shadow-xl"
     >
       <div className={`absolute inset-0 bg-gradient-to-br ${gradient} opacity-5`} />
       <div className="relative flex items-center gap-3">
-        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-white/10 to-white/5 border border-white/10 backdrop-blur-sm">
+        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-glass-hover border border-border backdrop-blur-sm">
           <Icon className="h-5 w-5" style={{ color: accent }} />
         </div>
         <div className="min-w-0">
-          <p className="text-2xl font-bold text-white leading-tight tracking-tight">{value}</p>
-          <p className="text-xs text-slate-400 truncate font-medium">{label}</p>
+          <p className="text-2xl font-bold text-text-primary leading-tight tracking-tight">{value}</p>
+          <p className="text-xs text-text-secondary truncate font-medium">{label}</p>
         </div>
       </div>
     </motion.div>
@@ -138,10 +138,10 @@ export default function ClassesPage({ occurrences, sectionsCount, totalHours, is
             </div>
           </div>
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-white bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
+            <h1 className="text-2xl sm:text-3xl font-bold text-text-primary">
               My Schedule
             </h1>
-            <p className="text-slate-400 text-sm mt-0.5">Your weekly class timetable</p>
+            <p className="text-text-secondary text-sm mt-0.5">Your weekly class timetable</p>
           </div>
         </div>
       </div>
@@ -165,33 +165,33 @@ export default function ClassesPage({ occurrences, sectionsCount, totalHours, is
       {isLoading ? (
         <div className="space-y-2">
           {[0, 1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-14 rounded-xl bg-slate-800/20 animate-pulse border border-slate-700/30" />
+            <div key={i} className="h-14 rounded-xl bg-glass animate-pulse border border-border" />
           ))}
         </div>
       ) : schedule.length === 0 ? (
-        <div className="relative overflow-hidden rounded-2xl border border-slate-700/30 bg-gradient-to-br from-slate-800/30 to-slate-900/30 backdrop-blur-xl p-12 text-center">
-          <BookOpenIcon className="h-12 w-12 mx-auto text-slate-600" />
-          <p className="text-slate-400 mt-3 text-sm">No classes scheduled yet.</p>
+        <div className="relative overflow-hidden rounded-2xl border border-border bg-glass backdrop-blur-xl p-12 text-center">
+          <BookOpenIcon className="h-12 w-12 mx-auto text-text-muted" />
+          <p className="text-text-secondary mt-3 text-sm">No classes scheduled yet.</p>
         </div>
       ) : (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-800/40 to-slate-900/40 backdrop-blur-xl shadow-xl overflow-hidden"
+          className="rounded-2xl border border-border bg-glass backdrop-blur-xl shadow-xl overflow-hidden"
         >
           <div className="overflow-x-auto scrollbar-hide">
             <table className="w-full min-w-[760px] border-collapse text-sm">
               <thead>
-                <tr className="border-b border-slate-700/50 bg-white/[0.03]">
-                  <th className="text-left font-semibold text-slate-400 text-xs uppercase tracking-wider px-4 py-3">Day</th>
-                  <th className="text-left font-semibold text-slate-400 text-xs uppercase tracking-wider px-4 py-3">Time</th>
-                  <th className="text-left font-semibold text-slate-400 text-xs uppercase tracking-wider px-4 py-3">Code</th>
-                  <th className="text-left font-semibold text-slate-400 text-xs uppercase tracking-wider px-4 py-3">Subject</th>
-                  <th className="text-left font-semibold text-slate-400 text-xs uppercase tracking-wider px-4 py-3">
+                <tr className="border-b border-border bg-glass-hover">
+                  <th className="text-left font-semibold text-text-secondary text-xs uppercase tracking-wider px-4 py-3">Day</th>
+                  <th className="text-left font-semibold text-text-secondary text-xs uppercase tracking-wider px-4 py-3">Time</th>
+                  <th className="text-left font-semibold text-text-secondary text-xs uppercase tracking-wider px-4 py-3">Code</th>
+                  <th className="text-left font-semibold text-text-secondary text-xs uppercase tracking-wider px-4 py-3">Subject</th>
+                  <th className="text-left font-semibold text-text-secondary text-xs uppercase tracking-wider px-4 py-3">
                     {isProfessor ? 'Section' : 'Professor'}
                   </th>
-                  <th className="text-left font-semibold text-slate-400 text-xs uppercase tracking-wider px-4 py-3">Room</th>
+                  <th className="text-left font-semibold text-text-secondary text-xs uppercase tracking-wider px-4 py-3">Room</th>
                 </tr>
               </thead>
               <tbody>
@@ -199,41 +199,41 @@ export default function ClassesPage({ occurrences, sectionsCount, totalHours, is
                   <tr
                     key={occ.id}
                     onClick={() => setSelected(occ)}
-                    className={`cursor-pointer border-b border-slate-800/60 last:border-0 border-l-2 transition-colors ${ROW_ACCENT[occ.status]}`}
+                    className={`cursor-pointer border-b border-border last:border-0 border-l-2 transition-colors ${ROW_ACCENT[occ.status]}`}
                   >
                     <td className="px-4 py-3.5 whitespace-nowrap">
                       <span
                         className={`inline-flex items-center justify-center min-w-[3.25rem] rounded-lg px-2 py-1 text-xs font-bold uppercase tracking-wide ${
                           occ.status === 'now'
-                            ? 'bg-emerald-500/15 text-emerald-400'
+                            ? 'bg-emerald-500/15 text-emerald-500 dark:text-emerald-400'
                             : occ.status === 'next'
-                            ? 'bg-cyan-500/15 text-cyan-400'
-                            : 'bg-white/5 text-slate-300'
+                            ? 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400'
+                            : 'bg-glass text-text-primary'
                         }`}
                       >
                         {occ.day}
                       </span>
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap text-slate-300 font-medium">
+                    <td className="px-4 py-3.5 whitespace-nowrap text-text-primary font-medium">
                       {formatTimeRange(occ.scheduleStart, occ.scheduleEnd)}
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap text-slate-400 font-mono text-xs">
+                    <td className="px-4 py-3.5 whitespace-nowrap text-text-secondary font-mono text-xs">
                       {occ.assignment.subject_code || '—'}
                     </td>
                     <td className="px-4 py-3.5 min-w-[180px]">
-                      <p className="font-semibold text-white">{occ.subject}</p>
+                      <p className="font-semibold text-text-primary">{occ.subject}</p>
                     </td>
                     <td className="px-4 py-3.5 min-w-[180px]">
                       {isProfessor ? (
-                        <span className="text-slate-300">{occ.secondaryMeta || occ.primaryMeta}</span>
+                        <span className="text-text-primary">{occ.secondaryMeta || occ.primaryMeta}</span>
                       ) : (
                         <div className="flex items-center gap-2">
                           <Avatar src={occ.assignment.professor_avatar} name={occ.primaryMeta.replace(/^Prof\.\s*/, '')} size="xs" />
-                          <span className="text-slate-300 truncate">{occ.primaryMeta}</span>
+                          <span className="text-text-primary truncate">{occ.primaryMeta}</span>
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3.5 whitespace-nowrap text-slate-300">{occ.assignment.room || '—'}</td>
+                    <td className="px-4 py-3.5 whitespace-nowrap text-text-primary">{occ.assignment.room || '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -254,16 +254,16 @@ export default function ClassesPage({ occurrences, sectionsCount, totalHours, is
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               transition={{ duration: 0.2 }}
-              className="w-full max-w-md rounded-2xl border border-slate-700/50 bg-gradient-to-br from-slate-800/90 to-slate-900/90 backdrop-blur-xl p-6 shadow-2xl"
+              className="w-full max-w-md rounded-2xl border border-border bg-bg backdrop-blur-xl p-6 shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Modal content */}
               <div className="flex items-start justify-between gap-3 mb-4">
                 <div className="min-w-0">
-                  <h3 className="text-xl font-bold text-white">
+                  <h3 className="text-xl font-bold text-text-primary">
                     {selected.subject}
                     {selected.assignment.subject_code && (
-                      <span className="ml-1.5 text-sm font-medium text-slate-400">({selected.assignment.subject_code})</span>
+                      <span className="ml-1.5 text-sm font-medium text-text-secondary">({selected.assignment.subject_code})</span>
                     )}
                   </h3>
                   <div className="flex items-center gap-2 mt-1">
@@ -274,7 +274,7 @@ export default function ClassesPage({ occurrences, sectionsCount, totalHours, is
                 </div>
                 <button
                   onClick={() => setSelected(null)}
-                  className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-full transition"
+                  className="p-2 text-text-secondary hover:text-text-primary hover:bg-glass-hover rounded-full transition"
                 >
                   <XMarkIcon className="h-5 w-5" />
                 </button>
@@ -282,40 +282,40 @@ export default function ClassesPage({ occurrences, sectionsCount, totalHours, is
 
               <div className="space-y-4">
                 {!isProfessor && (
-                  <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-800/40 border border-slate-700/30">
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-glass border border-border">
                     <Avatar
                       src={selected.assignment.professor_avatar}
                       name={selected.primaryMeta.replace(/^Prof\.\s*/, '')}
                       size="md"
                     />
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-white truncate">{selected.primaryMeta}</p>
-                      <p className="text-xs text-slate-400">Professor</p>
+                      <p className="text-sm font-semibold text-text-primary truncate">{selected.primaryMeta}</p>
+                      <p className="text-xs text-text-secondary">Professor</p>
                     </div>
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-slate-800/30 border border-slate-700/30">
+                <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-glass border border-border">
                   <div>
-                    <p className="text-xs text-slate-400">Section</p>
-                    <p className="text-sm font-medium text-white mt-0.5">
+                    <p className="text-xs text-text-secondary">Section</p>
+                    <p className="text-sm font-medium text-text-primary mt-0.5">
                       {isProfessor ? selected.primaryMeta : selected.secondaryMeta || '—'}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-400">Schedule</p>
-                    <p className="text-sm font-medium text-white mt-0.5">
+                    <p className="text-xs text-text-secondary">Schedule</p>
+                    <p className="text-sm font-medium text-text-primary mt-0.5">
                       {selected.assignment.schedule_days.join(', ')}
                       <br />
-                      <span className="text-xs text-slate-400">
+                      <span className="text-xs text-text-secondary">
                         {formatTimeRange(selected.scheduleStart, selected.scheduleEnd)}
                       </span>
                     </p>
                   </div>
                   {selected.assignment.room && (
                     <div>
-                      <p className="text-xs text-slate-400">Room</p>
-                      <p className="text-sm font-medium text-white mt-0.5">{selected.assignment.room}</p>
+                      <p className="text-xs text-text-secondary">Room</p>
+                      <p className="text-sm font-medium text-text-primary mt-0.5">{selected.assignment.room}</p>
                     </div>
                   )}
                 </div>
@@ -349,7 +349,7 @@ export default function ClassesPage({ occurrences, sectionsCount, totalHours, is
                         navigate(`/profile/${selected.assignment.professor_id}`);
                         setSelected(null);
                       }}
-                      className="py-3 text-sm font-medium text-slate-400 hover:text-white hover:bg-white/5 rounded-xl transition"
+                      className="py-3 text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-glass-hover rounded-xl transition"
                     >
                       View Professor Profile
                     </button>

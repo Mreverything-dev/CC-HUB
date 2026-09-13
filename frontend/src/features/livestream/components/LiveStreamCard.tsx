@@ -39,18 +39,18 @@ export function LiveStreamCard({ stream, sectionName, onClick }: LiveStreamCardP
           onClick();
         }
       }}
-      className="group rounded-2xl border border-[#1E3447] bg-[#0A111A] overflow-hidden cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:border-[#00C8FF]/50 hover:shadow-[0_0_28px_rgba(0,200,255,0.12)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00C8FF]/60"
+      className="group rounded-2xl border border-border bg-bg overflow-hidden cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:border-[#00C8FF]/50 hover:shadow-[0_0_28px_rgba(0,200,255,0.12)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00C8FF]/60"
     >
       {/* Thumbnail */}
-      <div className="relative aspect-video bg-gradient-to-br from-[#0D1722] via-[#0A111A] to-[#162534] overflow-hidden">
+      <div className="relative aspect-video bg-gradient-to-br from-bg via-bg to-border overflow-hidden">
         {stream.thumbnail_url ? (
           <img src={stream.thumbnail_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center">
-            <VideoCameraIcon className="h-10 w-10 text-[#1E3447] group-hover:text-[#00C8FF]/30 transition-colors" />
+            <VideoCameraIcon className="h-10 w-10 text-border group-hover:text-[#00C8FF]/30 transition-colors" />
           </div>
         )}
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#060B12]/70 via-transparent to-transparent" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
 
         {/* LIVE + viewers */}
         <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
@@ -58,14 +58,14 @@ export function LiveStreamCard({ stream, sectionName, onClick }: LiveStreamCardP
             <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
             Live
           </span>
-          <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/50 backdrop-blur-sm text-[#F1F5F9] text-[10px] font-medium">
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/50 backdrop-blur-sm text-white text-[10px] font-medium">
             <EyeIcon className="h-3 w-3" />
             {stream.viewer_count}
           </span>
         </div>
 
         {/* Visibility */}
-        <div className="absolute top-2.5 right-2.5 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/50 backdrop-blur-sm text-[#94A3B8] text-[10px] font-medium">
+        <div className="absolute top-2.5 right-2.5 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/50 backdrop-blur-sm text-white text-[10px] font-medium">
           <VisibilityIcon className="h-3 w-3" />
           {visibility.label}
         </div>
@@ -81,14 +81,14 @@ export function LiveStreamCard({ stream, sectionName, onClick }: LiveStreamCardP
         >
           <Avatar src={stream.host_avatar} name={stream.host_username} size="sm" />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-[#F1F5F9] truncate hover:text-[#00C8FF] hover:underline">
+            <p className="text-sm font-medium text-text-primary truncate hover:text-[#00C8FF] hover:underline">
               {stream.host_username}
             </p>
             <RoleBadge role={stream.host_role} className="mt-0.5" />
           </div>
         </button>
 
-        <h3 className="text-sm font-semibold text-[#F1F5F9] line-clamp-1 group-hover:text-[#00C8FF] transition-colors">
+        <h3 className="text-sm font-semibold text-text-primary line-clamp-1 group-hover:text-[#00C8FF] transition-colors">
           {stream.title}
         </h3>
 

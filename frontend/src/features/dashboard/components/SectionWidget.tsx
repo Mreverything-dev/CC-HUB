@@ -11,24 +11,24 @@ interface SectionWidgetProps {
 
 export function SectionWidget({ section, isLoading, onGoToSection }: SectionWidgetProps) {
   return (
-    <div className="rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-4 sm:p-5 transition hover:border-[#00C8FF]/30">
-      <h3 className="flex items-center gap-2 text-sm font-semibold text-[#F1F5F9] mb-3">
+    <div className="rounded-2xl border border-border bg-glass backdrop-blur-xl p-4 sm:p-5 transition hover:border-[#00C8FF]/30">
+      <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary mb-3">
         <UsersIcon className="h-4 w-4 text-[#00C8FF]" />
         Your Section
       </h3>
 
       {isLoading ? (
-        <p className="text-xs text-[#64748B] py-4 text-center">Loading...</p>
+        <p className="text-xs text-text-muted py-4 text-center">Loading...</p>
       ) : !section ? (
-        <p className="text-xs text-[#64748B] py-4 text-center">
+        <p className="text-xs text-text-muted py-4 text-center">
           You're not enrolled in a section yet.
         </p>
       ) : (
         <div>
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-[#F1F5F9] truncate">{section.name}</p>
-              {section.course && <p className="text-xs text-[#64748B] truncate">{section.course}</p>}
+              <p className="text-sm font-semibold text-text-primary truncate">{section.name}</p>
+              {section.course && <p className="text-xs text-text-muted truncate">{section.course}</p>}
             </div>
             <span className="flex-shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[#10B981] bg-[#10B981]/10 border border-[#10B981]/30 rounded-full px-2 py-0.5">
               Active
@@ -43,13 +43,13 @@ export function SectionWidget({ section, isLoading, onGoToSection }: SectionWidg
             ).size;
             if (professorCount > 0) {
               return (
-                <p className="text-xs text-[#94A3B8] mt-2">
+                <p className="text-xs text-text-secondary mt-2">
                   {professorCount} professor{professorCount === 1 ? '' : 's'} assigned
                 </p>
               );
             }
             return section.advisor_id ? (
-              <p className="text-xs text-[#94A3B8] mt-2">Advisor assigned</p>
+              <p className="text-xs text-text-secondary mt-2">Advisor assigned</p>
             ) : null;
           })()}
 
@@ -61,11 +61,11 @@ export function SectionWidget({ section, isLoading, onGoToSection }: SectionWidg
                   src={m.user_avatar}
                   name={m.user_username || undefined}
                   size="xs"
-                  className="ring-2 ring-[#0D1722]"
+                  className="ring-2 ring-bg"
                 />
               ))}
               {section.member_count > 5 && (
-                <div className="w-7 h-7 rounded-full bg-[#1E3447] ring-2 ring-[#0D1722] flex items-center justify-center text-[10px] font-medium text-[#94A3B8]">
+                <div className="w-7 h-7 rounded-full bg-border ring-2 ring-bg flex items-center justify-center text-[10px] font-medium text-text-secondary">
                   +{section.member_count - 5}
                 </div>
               )}

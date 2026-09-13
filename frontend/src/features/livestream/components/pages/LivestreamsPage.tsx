@@ -5,6 +5,7 @@ import { livestreamService } from '@/services/api/livestream.service';
 import { Livestream } from '@/types/livestream.types';
 import { useSections } from '@/features/sections/hooks/useSections';
 import { useAuthStore } from '@/features/auth/store/auth.store';
+import { useMinimumLoading } from '@/features/dashboard/hooks/useMinimumLoading';
 import { profileService } from '@/services/api/profile.service';
 import { Sidebar, SidebarSection } from '@/features/dashboard/components/Sidebar';
 import { Topbar } from '@/features/dashboard/components/Topbar';
@@ -22,21 +23,15 @@ import {
   FilmIcon,
 } from '@heroicons/react/24/outline';
 
-const gridBg = {
-  backgroundImage:
-    'linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)',
-  backgroundSize: '44px 44px',
-};
-
 function StatCard({ icon: Icon, value, label, tint }: { icon: typeof SignalIcon; value: number; label: string; tint: string }) {
   return (
-    <div className="rounded-2xl border border-[#1E3447] bg-[rgba(15,25,38,0.75)] backdrop-blur-xl p-3.5 flex items-center gap-3">
+    <div className="rounded-2xl border border-border bg-bg p-3.5 flex items-center gap-3">
       <div className={`h-9 w-9 rounded-xl flex items-center justify-center flex-shrink-0 ${tint}`}>
         <Icon className="h-[18px] w-[18px]" />
       </div>
       <div className="min-w-0">
-        <p className="text-lg font-bold text-[#F1F5F9] leading-tight">{value}</p>
-        <p className="text-[11px] text-[#94A3B8] truncate">{label}</p>
+        <p className="text-lg font-bold text-text-primary leading-tight">{value}</p>
+        <p className="text-[11px] text-text-secondary truncate">{label}</p>
       </div>
     </div>
   );
@@ -44,18 +39,18 @@ function StatCard({ icon: Icon, value, label, tint }: { icon: typeof SignalIcon;
 
 function CardSkeleton() {
   return (
-    <div className="rounded-2xl border border-[#1E3447] bg-[#0A111A] overflow-hidden animate-pulse">
-      <div className="aspect-video bg-[#162534]" />
+    <div className="rounded-2xl border border-border bg-bg overflow-hidden animate-pulse">
+      <div className="aspect-video bg-border" />
       <div className="p-3.5 space-y-2.5">
         <div className="flex items-center gap-2.5">
-          <div className="h-9 w-9 rounded-full bg-[#162534]" />
+          <div className="h-9 w-9 rounded-full bg-border" />
           <div className="flex-1 space-y-1.5">
-            <div className="h-2.5 w-24 rounded bg-[#162534]" />
-            <div className="h-2 w-14 rounded bg-[#162534]" />
+            <div className="h-2.5 w-24 rounded bg-border" />
+            <div className="h-2 w-14 rounded bg-border" />
           </div>
         </div>
-        <div className="h-3 w-3/4 rounded bg-[#162534]" />
-        <div className="h-4 w-16 rounded-full bg-[#162534]" />
+        <div className="h-3 w-3/4 rounded bg-border" />
+        <div className="h-4 w-16 rounded-full bg-border" />
       </div>
     </div>
   );
@@ -69,6 +64,9 @@ export default function LivestreamsPage() {
   const [upcomingStreams, setUpcomingStreams] = useState<Livestream[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showGoLive, setShowGoLive] = useState(false);
+
+  // ✅ Force a minimum 5-second skeleton so the page doesn't flash in
+  const showSkeleton = useMinimumLoading(isLoading, 5000);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('all');
   const [reminders, setReminders] = useState<Set<string>>(new Set());
@@ -78,8 +76,6 @@ export default function LivestreamsPage() {
     fetchStreams();
   }, []);
 
-  // Sidebar/Topbar reflect the current logged-in user, same as every other
-  // dashboard page - reuses the same profile fetch pattern used there.
   useEffect(() => {
     profileService
       .getMyProfile()
@@ -87,10 +83,6 @@ export default function LivestreamsPage() {
       .catch(() => setSidebarAvatarUrl(null));
   }, []);
 
-  // Livestreams isn't one of the dashboard's in-page sections, so nothing in
-  // the sidebar renders as "active" here. Section nav items route back to the
-  // user's role dashboard and deep-link into that section via router state
-  // (the "Live Streams" item itself is an href-based item Sidebar navigates directly).
   const dashboardPath =
     user?.role === 'admin' ? '/admin/dashboard' : user?.role === 'professor' ? '/professor/dashboard' : '/student/dashboard';
   const handleSidebarNavigate = (section: SidebarSection) => navigate(dashboardPath, { state: { section } });
@@ -166,9 +158,7 @@ export default function LivestreamsPage() {
   const handleGoLive = () => setShowGoLive(true);
 
   return (
-    <div className="min-h-screen bg-[#060B12] text-[#F1F5F9] flex">
-      <div className="pointer-events-none fixed inset-0 opacity-[0.15]" style={gridBg} />
-
+    <div className="min-h-screen bg-bg text-text-primary flex">
       <Sidebar activeSection={null} onNavigate={handleSidebarNavigate} />
 
       <div className="flex-1 min-w-0 flex flex-col">
@@ -179,137 +169,136 @@ export default function LivestreamsPage() {
         />
 
         <main className="relative flex-1 max-w-7xl w-full mx-auto px-4 py-6 lg:px-8">
-        {/* Header */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-[#F1F5F9] flex items-center gap-2">
-              Live Streams
-              <SignalIcon className="h-6 w-6 text-[#00C8FF]" />
-            </h1>
-            <p className="text-[#94A3B8] mt-1 text-sm">Watch and interact with live content</p>
-          </div>
-
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <div className="relative flex-1 sm:w-72">
-              <MagnifyingGlassIcon className="h-4 w-4 text-[#64748B] absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search streams, users, or sections..."
-                className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-[#1E3447] bg-[rgba(15,25,38,0.75)] text-sm text-[#F1F5F9] placeholder-[#64748B] focus:outline-none focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition"
-              />
+          {/* Header */}
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-text-primary flex items-center gap-2">
+                Live Streams
+                <SignalIcon className="h-6 w-6 text-[#00C8FF]" />
+              </h1>
+              <p className="text-text-secondary mt-1 text-sm">Watch and interact with live content</p>
             </div>
-            <button
-              onClick={handleGoLive}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-br from-[#EF4444] to-[#c62828] text-white rounded-xl font-semibold text-sm shadow-[0_0_20px_rgba(239,68,68,0.25)] hover:opacity-90 active:scale-[0.98] transition flex-shrink-0"
-            >
-              <VideoCameraIcon className="h-5 w-5" />
-              <span>Go Live</span>
-            </button>
-          </div>
-        </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-          <StatCard icon={SignalIcon} value={stats.liveNow} label="Live Now" tint="bg-[#EF4444]/10 text-[#EF4444]" />
-          <StatCard icon={EyeIcon} value={stats.totalWatching} label="Total Watching" tint="bg-[#3B82F6]/10 text-[#3B82F6]" />
-          <StatCard icon={UserGroupIcon} value={stats.streamers} label="Streamers" tint="bg-[#8B5CF6]/10 text-[#8B5CF6]" />
-          <StatCard icon={FilmIcon} value={stats.totalStreams} label="Total Streams" tint="bg-[#00C8FF]/10 text-[#00C8FF]" />
-        </div>
-
-        {/* Category filters */}
-        <div className="flex items-center gap-1.5 mb-6 overflow-x-auto themed-scrollbar pb-1 -mx-1 px-1">
-          {STREAM_CATEGORY_FILTER_OPTIONS.map((opt) => (
-            <button
-              key={opt.id}
-              onClick={() => setCategory(opt.id)}
-              className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition border ${
-                category === opt.id
-                  ? 'border-[#00C8FF]/40 bg-[#00C8FF]/10 text-[#00C8FF]'
-                  : 'border-[#1E3447] text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5'
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Live Now */}
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="h-2 w-2 rounded-full bg-[#EF4444] animate-pulse" />
-            <h2 className="text-base font-semibold text-[#F1F5F9]">Live Now</h2>
-          </div>
-
-          {isLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {[0, 1, 2, 3].map((i) => <CardSkeleton key={i} />)}
-            </div>
-          ) : filteredLive.length === 0 ? (
-            <div className="rounded-2xl border border-[#1E3447] bg-[#0A111A] py-14 text-center">
-              <VideoCameraIcon className="h-12 w-12 mx-auto text-[#1E3447]" />
-              <h3 className="text-base font-medium text-[#F1F5F9] mt-3">
-                {liveStreams.length === 0 ? 'No Live Streams' : 'No streams match your filters'}
-              </h3>
-              <p className="text-[#94A3B8] text-sm mt-1">
-                {liveStreams.length === 0 ? 'There are no active streams right now' : 'Try a different search or category'}
-              </p>
-              {liveStreams.length === 0 && (
-                <button
-                  onClick={handleGoLive}
-                  className="mt-4 px-4 py-2 bg-[#00C8FF] text-[#060B12] rounded-xl font-medium text-sm hover:bg-[#00C8FF]/80 transition"
-                >
-                  Start a Stream
-                </button>
-              )}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filteredLive.map((stream) => (
-                <LiveStreamCard
-                  key={stream.id}
-                  stream={stream}
-                  sectionName={getSectionName(stream)}
-                  onClick={() => handleStreamClick(stream.id)}
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="relative flex-1 sm:w-72">
+                <MagnifyingGlassIcon className="h-4 w-4 text-text-muted absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search streams, users, or sections..."
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-border bg-glass text-sm text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition"
                 />
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Upcoming Streams */}
-        {(isLoading || upcomingStreams.length > 0) && (
-          <div>
-            <h2 className="text-base font-semibold text-[#F1F5F9] mb-3">Upcoming Streams</h2>
-
-            {isLoading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {[0, 1].map((i) => <CardSkeleton key={i} />)}
               </div>
-            ) : filteredUpcoming.length === 0 ? (
-              <div className="rounded-2xl border border-[#1E3447] bg-[#0A111A] py-8 text-center text-sm text-[#94A3B8]">
-                No upcoming streams match your filters
+              <button
+                onClick={handleGoLive}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-br from-[#EF4444] to-[#c62828] text-white rounded-xl font-semibold text-sm shadow-[0_0_20px_rgba(239,68,68,0.25)] hover:opacity-90 active:scale-[0.98] transition flex-shrink-0"
+              >
+                <VideoCameraIcon className="h-5 w-5" />
+                <span>Go Live</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+            <StatCard icon={SignalIcon} value={stats.liveNow} label="Live Now" tint="bg-[#EF4444]/10 text-[#EF4444]" />
+            <StatCard icon={EyeIcon} value={stats.totalWatching} label="Total Watching" tint="bg-[#3B82F6]/10 text-[#3B82F6]" />
+            <StatCard icon={UserGroupIcon} value={stats.streamers} label="Streamers" tint="bg-[#8B5CF6]/10 text-[#8B5CF6]" />
+            <StatCard icon={FilmIcon} value={stats.totalStreams} label="Total Streams" tint="bg-[#00C8FF]/10 text-[#00C8FF]" />
+          </div>
+
+          {/* Category filters */}
+          <div className="flex items-center gap-1.5 mb-6 overflow-x-auto themed-scrollbar pb-1 -mx-1 px-1">
+            {STREAM_CATEGORY_FILTER_OPTIONS.map((opt) => (
+              <button
+                key={opt.id}
+                onClick={() => setCategory(opt.id)}
+                className={`flex-shrink-0 px-3.5 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition border ${
+                  category === opt.id
+                    ? 'border-[#00C8FF]/40 bg-[#00C8FF]/10 text-[#00C8FF]'
+                    : 'border-border text-text-secondary hover:text-text-primary hover:bg-glass'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Live Now */}
+          <div className="mb-8">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="h-2 w-2 rounded-full bg-[#EF4444] animate-pulse" />
+              <h2 className="text-base font-semibold text-text-primary">Live Now</h2>
+            </div>
+
+            {showSkeleton ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {[0, 1, 2, 3].map((i) => <CardSkeleton key={i} />)}
+              </div>
+            ) : filteredLive.length === 0 ? (
+              <div className="rounded-2xl border border-border bg-glass py-14 text-center">
+                <VideoCameraIcon className="h-12 w-12 mx-auto text-border" />
+                <h3 className="text-base font-medium text-text-primary mt-3">
+                  {liveStreams.length === 0 ? 'No Live Streams' : 'No streams match your filters'}
+                </h3>
+                <p className="text-text-secondary text-sm mt-1">
+                  {liveStreams.length === 0 ? 'There are no active streams right now' : 'Try a different search or category'}
+                </p>
+                {liveStreams.length === 0 && (
+                  <button
+                    onClick={handleGoLive}
+                    className="mt-4 px-4 py-2 bg-[#00C8FF] text-[#060B12] rounded-xl font-medium text-sm hover:bg-[#00C8FF]/80 transition"
+                  >
+                    Start a Stream
+                  </button>
+                )}
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {filteredUpcoming.map((stream) => (
-                  <UpcomingStreamCard
+                {filteredLive.map((stream) => (
+                  <LiveStreamCard
                     key={stream.id}
                     stream={stream}
                     sectionName={getSectionName(stream)}
-                    isReminderSet={reminders.has(stream.id)}
-                    onToggleReminder={() => toggleReminder(stream.id)}
+                    onClick={() => handleStreamClick(stream.id)}
                   />
                 ))}
               </div>
             )}
           </div>
-        )}
+
+          {/* Upcoming Streams */}
+          {(showSkeleton || upcomingStreams.length > 0) && (
+            <div>
+              <h2 className="text-base font-semibold text-text-primary mb-3">Upcoming Streams</h2>
+
+              {showSkeleton ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {[0, 1].map((i) => <CardSkeleton key={i} />)}
+                </div>
+              ) : filteredUpcoming.length === 0 ? (
+                <div className="rounded-2xl border border-border bg-glass py-8 text-center text-sm text-text-secondary">
+                  No upcoming streams match your filters
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {filteredUpcoming.map((stream) => (
+                    <UpcomingStreamCard
+                      key={stream.id}
+                      stream={stream}
+                      sectionName={getSectionName(stream)}
+                      isReminderSet={reminders.has(stream.id)}
+                      onToggleReminder={() => toggleReminder(stream.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </main>
       </div>
 
-      {/* Go Live Modal */}
       {showGoLive && (
         <GoLiveModal
           onClose={() => setShowGoLive(false)}

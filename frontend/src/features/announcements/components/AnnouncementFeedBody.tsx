@@ -11,6 +11,7 @@ import { AnnouncementFilterBar } from './AnnouncementFilterBar';
 import { AnnouncementCategorySidebar, AnnouncementSidebarFilter } from './AnnouncementCategorySidebar';
 import { AnnouncementCategory, matchesAnnouncementFilters } from '../constants';
 import { Announcement } from '@/types/announcement.types';
+import { useMinimumLoading } from '@/features/dashboard/hooks/useMinimumLoading';
 
 function matchesSidebarFilter(a: Announcement, search: string, filter: AnnouncementSidebarFilter): boolean {
   if (filter === 'important' && a.priority !== 'urgent') return false;
@@ -18,27 +19,16 @@ function matchesSidebarFilter(a: Announcement, search: string, filter: Announcem
   return matchesAnnouncementFilters(a, search, category);
 }
 
-// The backend already only ever returns announcements a student's own
-// sections (plus public/CCS-wide ones) can see - this narrows that
-// already-correctly-scoped list further, to just one specific section, for
-// the Section page's "View Announcements" quick action / Section Announcement
-// widget. Strictly section-targeted only (excludes CCS-wide/public
-// announcements) so a section's dedicated view only ever shows what was
-// actually posted to that section. Reuses the existing target_sections field
-// already on each announcement; no new API call.
 function matchesSection(a: Announcement, sectionId: string | null): boolean {
   if (!sectionId) return true;
   return a.target_sections?.includes(sectionId) ?? false;
 }
 
-/**
- * The full Announcements experience (header, search/filter, card feed,
- * category/popular/notify sidebar) - shared by the standalone /announcements
- * route (AnnouncementFeed) and the dashboards' embedded "Announcements" tab,
- * so both surfaces stay a single consistent implementation.
- */
 export default function AnnouncementFeedBody() {
   const { announcements, isLoading, error, deleteAnnouncement, togglePublish } = useAnnouncements();
+
+  // ✅ Force a minimum 5-second skeleton so announcements don't flash in immediately
+  const showAnnouncementsSkeleton = useMinimumLoading(isLoading, 5000);
   const { user } = useAuthStore();
   const { sections } = useSections();
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -46,9 +36,6 @@ export default function AnnouncementFeedBody() {
   const [filter, setFilter] = useState<AnnouncementSidebarFilter>('all');
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Set via the Section page's "View Announcements" quick action
-  // (?section=<id>) - narrows the feed to just that section (plus
-  // public/CCS-wide announcements) instead of every section the user can see.
   const sectionFilterId = searchParams.get('section');
   const sectionFilterName = sectionFilterId ? sections.find((s) => s.id === sectionFilterId)?.name : null;
   const clearSectionFilter = () => {
@@ -57,9 +44,6 @@ export default function AnnouncementFeedBody() {
     setSearchParams(next, { replace: true });
   };
 
-  // Section mayors/officers can also create announcements (matches
-  // CreateAnnouncement's own internal permission check) - not just
-  // professors/admins.
   const isOfficer =
     user?.role === 'student' &&
     sections.some((s) => s.members?.some((m) => m.user_id === user?.id && (m.is_mayor || m.is_officer)));
@@ -80,8 +64,8 @@ export default function AnnouncementFeedBody() {
       {/* Page header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-5">
         <div>
-          <h1 className="text-2xl font-bold text-[#F1F5F9]">Announcements</h1>
-          <p className="text-[#94A3B8] mt-1 text-sm">
+          <h1 className="text-2xl font-bold text-text-primary">Announcements</h1>
+          <p className="text-text-secondary mt-1 text-sm">
             Stay informed about important updates and news.
           </p>
         </div>
@@ -122,21 +106,21 @@ export default function AnnouncementFeedBody() {
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-5">
         {/* Main feed */}
         <div className="space-y-4 min-w-0">
-          {isLoading ? (
+          {showAnnouncementsSkeleton ? (
             <div className="space-y-4">
               {[0, 1, 2].map((i) => (
-                <div key={i} className="h-40 rounded-2xl border border-[#1E3447] bg-[#0D1722]/60 animate-pulse" />
+                <div key={i} className="h-40 rounded-2xl border border-border bg-glass animate-pulse" />
               ))}
             </div>
           ) : error ? (
             <div className="rounded-2xl border border-[#EF4444]/30 bg-[#EF4444]/10 p-8 text-center">
               <ExclamationTriangleIcon className="h-8 w-8 mx-auto text-[#EF4444] mb-2" />
-              <p className="text-sm text-[#F1F5F9]">Failed to load announcements. Please try again.</p>
+              <p className="text-sm text-text-primary">Failed to load announcements. Please try again.</p>
             </div>
           ) : filteredAnnouncements.length === 0 ? (
-            <div className="text-center py-16 rounded-2xl border border-[#1E3447] bg-[#0D1722]/60 backdrop-blur-xl">
-              <MegaphoneIcon className="h-10 w-10 mx-auto text-[#1E3447]" />
-              <p className="text-[#94A3B8] mt-3">
+            <div className="text-center py-16 rounded-2xl border border-border bg-glass backdrop-blur-xl">
+              <MegaphoneIcon className="h-10 w-10 mx-auto text-border" />
+              <p className="text-text-secondary mt-3">
                 {announcementList.length === 0 ? 'No announcements yet' : 'No announcements match your filters'}
               </p>
               {canCreate && announcementList.length === 0 && (
@@ -160,8 +144,7 @@ export default function AnnouncementFeedBody() {
           )}
         </div>
 
-        {/* Right sidebar - hidden on mobile/small tablet, stacks below the
-            feed at lg, becomes a true side column at xl. */}
+        {/* Right sidebar */}
         <div className="hidden lg:block xl:sticky xl:top-24 xl:self-start">
           <AnnouncementCategorySidebar
             announcements={announcementList}
