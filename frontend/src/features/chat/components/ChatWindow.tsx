@@ -1,5 +1,6 @@
 // frontend/src/features/chat/components/ChatWindow.tsx
-import { useState, useEffect, useRef, } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useChat } from '../hooks/useChat';
 import { useAuthStore } from '@/features/auth/store/auth.store';
@@ -15,6 +16,9 @@ import { chatApi } from '@/services/api/chat.service';
 import { MessageReactions } from './MessageReactions';
 import { EmojiPicker } from '@/features/posts/components/EmojiPicker';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { extractYouTubeId } from '@/lib/youtube';
+import { YouTubeEmbed } from '@/components/ui/YouTubeEmbed';
+import { extractGiphyGifUrl } from '@/lib/giphy';
 import toast from 'react-hot-toast';
 import {
   PaperAirplaneIcon,
@@ -23,18 +27,22 @@ import {
   DocumentIcon,
   ArrowDownTrayIcon,
   ArrowLeftIcon,
-  PhoneIcon,
-  VideoCameraIcon,
   EllipsisVerticalIcon,
   UserIcon,
   CameraIcon,
   TrashIcon,
 } from '@heroicons/react/24/outline';
 
-// Keep in sync with backend ALLOWED_TYPES in app/api/v1/endpoints/media.py
 const ALLOWED_ATTACHMENT_TYPES = [
+  // Images
   'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
+  'image/bmp', 'image/tiff', 'image/heic', 'image/heif', 'image/avif',
+  // Videos (all common types)
   'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo',
+  'video/x-matroska', 'video/x-ms-wmv', 'video/x-flv', 'video/mpeg',
+  'video/mp2t', 'video/3gpp', 'video/3gpp2', 'video/ogg', 'video/x-m4v',
+  'video/x-ms-asf', 'video/x-msvideo',
+  // Documents
   'application/pdf', 'application/msword', 'text/plain', 'application/zip',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.ms-excel',
@@ -51,14 +59,26 @@ function attachmentTypeOf(file: File): 'image' | 'video' | 'file' {
 
 interface ChatWindowProps {
   conversationId: string;
-  /** Shows a back button (mobile only) that returns to the conversation list. */
   onBack?: () => void;
+  onClose?: () => void;
 }
 
-export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
+export function ChatWindow({ conversationId, onBack, onClose }: ChatWindowProps) {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { currentConversation, messages, getMessages, sendMessage, handleTyping, isLoading, typingByConversation, updateConversation, deleteConversation, unsendMessage, removeMessageForMe } = useChat();
+  const {
+    currentConversation,
+    messages,
+    getMessages,
+    sendMessage,
+    handleTyping,
+    isLoading,
+    typingByConversation,
+    updateConversation,
+    deleteConversation,
+    unsendMessage,
+    removeMessageForMe,
+  } = useChat();
   const { friends } = useFriends();
   const [newMessage, setNewMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -73,6 +93,7 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeletingChat, setIsDeletingChat] = useState(false);
   const [messageMenuFor, setMessageMenuFor] = useState<string | null>(null);
+  const [messageMenuPos, setMessageMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [unsendTarget, setUnsendTarget] = useState<string | null>(null);
   const [isUnsending, setIsUnsending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -80,6 +101,7 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
   const messageMenuRef = useRef<HTMLDivElement>(null);
+  const messageMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     if (!showMoreMenu) return;
@@ -92,21 +114,23 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, [showMoreMenu]);
 
-  // Per-message "..." menu (Unsend / Remove for Me) - a single piece of
-  // state (which message's menu is open) rather than one per row, same
-  // approach as showMoreMenu above.
   useEffect(() => {
     if (!messageMenuFor) return;
     const handleOutsideClick = (e: MouseEvent) => {
-      if (messageMenuRef.current && !messageMenuRef.current.contains(e.target as Node)) {
-        setMessageMenuFor(null);
+      const target = e.target as Node;
+      if (
+        messageMenuRef.current?.contains(target) ||
+        messageMenuTriggerRef.current?.contains(target)
+      ) {
+        return;
       }
+      setMessageMenuFor(null);
+      setMessageMenuPos(null);
     };
     document.addEventListener('mousedown', handleOutsideClick);
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, [messageMenuFor]);
 
-  // Re-render periodically so "2 mins ago" style timestamps stay accurate.
   useTick(30000);
 
   const typingUserIds = (typingByConversation[conversationId] || []).filter((id) => id !== user?.id);
@@ -120,9 +144,6 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
     }
   }, [conversationId, getMessages]);
 
-  // Only group chats have a logo to change, and only their professor(s)/
-  // mayor/officer are allowed to - ask the backend rather than guessing the
-  // rule client-side, so this never drifts from ChatService.can_edit_group_logo.
   useEffect(() => {
     if (currentConversation?.type !== 'group') {
       setCanEditLogo(false);
@@ -142,12 +163,18 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
     };
   }, [currentConversation?.type, currentConversation?.id]);
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, typingUserIds.length]);
+  const hasScrolledRef = useRef<string | null>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  useEffect(() => {
+    if (isLoading) return;
+    if (messages.length === 0) return;
+    const isFirstScrollForConversation = hasScrolledRef.current !== conversationId;
+    hasScrolledRef.current = conversationId;
+    scrollToBottom(isFirstScrollForConversation ? 'auto' : 'smooth');
+  }, [messages, typingUserIds.length, conversationId, isLoading]);
+
+  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    messagesEndRef.current?.scrollIntoView({ behavior });
   };
 
   useEffect(() => {
@@ -156,18 +183,38 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
     };
   }, [attachmentPreview]);
 
+  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+
   const handleAttachmentSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-    if (!ALLOWED_ATTACHMENT_TYPES.includes(file.type)) {
+
+    // Check file size
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error(`File too large. Maximum ${MAX_FILE_SIZE / 1024 / 1024}MB.`);
+      return;
+    }
+
+    // Check MIME type — but also allow if the file extension is a known
+    // video/image type, in case the browser sends an empty or non-standard
+    // MIME type (common for screen recordings and some Android phones).
+    const isKnownMime = ALLOWED_ATTACHMENT_TYPES.includes(file.type);
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    const videoExts = ['mp4', 'mov', 'webm', 'avi', 'mkv', 'wmv', 'flv', 'mpeg', 'mpg', '3gp', 'm4v', 'ogv'];
+    const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'tiff', 'heic', 'heif', 'avif'];
+    const docExts = ['pdf', 'doc', 'docx', 'txt', 'zip', 'xls', 'xlsx', 'ppt', 'pptx'];
+    const isKnownExt = [...videoExts, ...imageExts, ...docExts].includes(ext);
+
+    if (!isKnownMime && !isKnownExt) {
       toast.error('Unsupported file type');
       return;
     }
+
     setAttachmentFile(file);
     setAttachmentPreview((prev) => {
       if (prev) URL.revokeObjectURL(prev);
-      return file.type.startsWith('image/') || file.type.startsWith('video/')
+      return file.type.startsWith('image/') || file.type.startsWith('video/') || videoExts.includes(ext) || imageExts.includes(ext)
         ? URL.createObjectURL(file)
         : null;
     });
@@ -186,14 +233,18 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
     if (attachmentFile) {
       setIsUploadingAttachment(true);
       try {
-        const uploaded = await mediaService.uploadFiles([attachmentFile]);
-        // Backend requires non-empty content; use a zero-width placeholder
-        // when there's no real caption so the filename never shows up as if
-        // it were typed text (see the message render below, which hides it).
+        // Rename the file to a safe name (no spaces / colons / special chars)
+        // before uploading — screen recordings and files with spaces often
+        // fail MinIO's upload because the object name can't contain them.
+        const ext = attachmentFile.name.split('.').pop() || 'bin';
+        const safeName = `attachment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        const safeFile = new File([attachmentFile], safeName, { type: attachmentFile.type });
+
+        const uploaded = await mediaService.uploadFiles([safeFile]);
         sendMessage(conversationId, newMessage.trim() || '​', {
-          type: attachmentTypeOf(attachmentFile),
+          type: attachmentTypeOf(safeFile),
           mediaUrl: uploaded.urls[0],
-          mediaName: attachmentFile.name,
+          mediaName: attachmentFile.name, // keep the original name for display
         });
       } catch (err: any) {
         toast.error(err.response?.data?.detail || 'Failed to upload attachment');
@@ -220,11 +271,11 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
         setIsTyping(true);
         handleTyping(conversationId, true);
       }
-      
+
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
-      
+
       typingTimeoutRef.current = setTimeout(() => {
         setIsTyping(false);
         handleTyping(conversationId, false);
@@ -247,9 +298,6 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
     return otherParticipant?.username || 'User';
   };
 
-  // Only show a real presence indicator when we actually know it - the
-  // Friends feature tracks is_online, but there's no such data for a
-  // non-friend or for group chats, so omit the dot/label rather than guess.
   const otherFriendRecord = otherParticipant
     ? friends.find((f) => f.user_id === otherParticipant.id)
     : undefined;
@@ -259,11 +307,6 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
     setNewMessage((prev) => prev + emoji);
   };
 
-  // "Delete Chat" - removes it from THIS user's own conversation list only.
-  // The conversation, its messages, and every other member's access are
-  // untouched (see ChatService.delete_conversation_for_user); it reappears
-  // automatically once there's new activity, or (for a section/subject
-  // group) the next time the user re-opens it from the section itself.
   const handleDeleteChat = async () => {
     if (!currentConversation) return;
     setIsDeletingChat(true);
@@ -276,10 +319,6 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
     }
   };
 
-  // "Unsend" - visible to everyone in the conversation, so it gets a
-  // confirmation first. The actual removal (is_deleted/content wiped) is
-  // applied via the real-time message:unsent broadcast, not optimistically
-  // here - see useChat.unsendMessage.
   const handleConfirmUnsend = async () => {
     if (!unsendTarget) return;
     setIsUnsending(true);
@@ -291,43 +330,65 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
     }
   };
 
-  // "Remove for Me" - local-only, no confirmation needed (nothing visible
-  // to anyone else changes, and it's the exact kind of low-stakes action
-  // this app already treats as instant elsewhere, e.g. blocking a
-  // suggestion card).
   const handleRemoveForMe = async (messageId: string) => {
     setMessageMenuFor(null);
+    setMessageMenuPos(null);
     await removeMessageForMe(messageId);
+  };
+
+  const openMessageMenu = (e: React.MouseEvent<HTMLButtonElement>, messageId: string) => {
+    e.stopPropagation();
+    if (messageMenuFor === messageId) {
+      setMessageMenuFor(null);
+      setMessageMenuPos(null);
+      return;
+    }
+    const rect = e.currentTarget.getBoundingClientRect();
+    const MENU_WIDTH = 160;
+    const MENU_HEIGHT = 80;
+    let left = rect.left - MENU_WIDTH - 4;
+    let top = rect.top;
+
+    if (left < 8) left = rect.right + 4;
+
+    if (top + MENU_HEIGHT > window.innerHeight - 8) {
+      top = window.innerHeight - MENU_HEIGHT - 8;
+    }
+    if (top < 8) top = 8;
+
+    messageMenuTriggerRef.current = e.currentTarget;
+    setMessageMenuPos({ top, left });
+    setMessageMenuFor(messageId);
   };
 
   if (!currentConversation) {
     return (
-      <div className="flex items-center justify-center h-full w-full bg-[#0A111A]">
-        <div className="text-center text-[#64748B]">
+      <div className="flex items-center justify-center h-full w-full bg-bg">
+        <div className="text-center text-text-muted">
           <p className="text-2xl">💬</p>
-          <p className="mt-2 text-[#94A3B8]">Select a conversation to start chatting</p>
+          <p className="mt-2 text-text-secondary">Select a conversation to start chatting</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full w-full min-w-0 bg-[#0A111A]">
+    <div className="flex flex-col h-full w-full min-w-0 bg-bg">
       {/* Header */}
-      <div className="p-3 sm:p-4 border-b border-[#1E3447] flex items-center gap-2 sm:gap-3 flex-shrink-0">
+      <div className="px-2.5 py-2 border-b border-border flex items-center gap-2 flex-shrink-0">
         {onBack && (
           <button
             onClick={onBack}
             title="Back to conversations"
-            className="p-1.5 -ml-1 rounded-xl text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5 transition sm:hidden flex-shrink-0"
+            className="p-1.5 -ml-0.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-glass-hover transition flex-shrink-0"
           >
-            <ArrowLeftIcon className="h-5 w-5" />
+            <ArrowLeftIcon className="h-4 w-4" />
           </button>
         )}
         <ConversationAvatar conversation={currentConversation} currentUserId={user?.id} size="sm" />
         <div className="min-w-0 flex-1">
-          <h3 className="font-semibold text-[#F1F5F9] truncate">{getConversationName()}</h3>
-          <p className="text-xs text-[#64748B] flex items-center gap-1.5">
+          <h3 className="text-sm font-semibold text-text-primary truncate leading-tight">{getConversationName()}</h3>
+          <p className="text-[11px] text-text-muted flex items-center gap-1.5 leading-tight">
             {currentConversation.type === 'group' ? (
               <button
                 type="button"
@@ -338,7 +399,7 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
               </button>
             ) : isOtherOnline !== null ? (
               <>
-                <span className={`h-1.5 w-1.5 rounded-full ${isOtherOnline ? 'bg-[#22C55E]' : 'bg-[#64748B]'}`} />
+                <span className={`h-1.5 w-1.5 rounded-full ${isOtherOnline ? 'bg-[#22C55E]' : 'bg-text-muted'}`} />
                 {isOtherOnline ? 'Online' : 'Offline'}
               </>
             ) : (
@@ -347,34 +408,19 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
           </p>
         </div>
 
-        {/* Header actions */}
-        <div className="flex items-center gap-1 flex-shrink-0">
-          <button
-            onClick={() => toast('Voice calling coming soon')}
-            title="Voice call"
-            className="p-2 rounded-xl text-[#94A3B8] hover:text-[#00C8FF] hover:bg-white/5 transition"
-          >
-            <PhoneIcon className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => toast('Video calling coming soon')}
-            title="Video call"
-            className="p-2 rounded-xl text-[#94A3B8] hover:text-[#00C8FF] hover:bg-white/5 transition"
-          >
-            <VideoCameraIcon className="h-4 w-4" />
-          </button>
+        <div className="flex items-center gap-0.5 flex-shrink-0">
           <div className="relative" ref={moreMenuRef}>
             <button
               onClick={() => setShowMoreMenu((v) => !v)}
               title="More"
               aria-haspopup="menu"
               aria-expanded={showMoreMenu}
-              className="p-2 rounded-xl text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5 transition"
+              className="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-glass-hover transition"
             >
-              <EllipsisVerticalIcon className="h-5 w-5" />
+              <EllipsisVerticalIcon className="h-4 w-4" />
             </button>
             {showMoreMenu && (
-              <div role="menu" className="absolute right-0 mt-2 w-48 rounded-xl border border-[#1E3447] bg-[#111E2B] shadow-xl py-1 z-20">
+              <div role="menu" className="absolute right-0 mt-2 w-48 rounded-xl border border-border bg-bg shadow-xl py-1 z-20">
                 {otherParticipant && (
                   <button
                     role="menuitem"
@@ -382,7 +428,7 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
                       setShowMoreMenu(false);
                       navigate(`/profile/${otherParticipant.id}`);
                     }}
-                    className="flex items-center gap-2 w-full px-4 py-2 text-sm text-[#94A3B8] hover:bg-white/5 hover:text-[#F1F5F9] transition"
+                    className="flex items-center gap-2 w-full px-4 py-2 text-sm text-text-secondary hover:bg-glass-hover hover:text-text-primary transition"
                   >
                     <UserIcon className="h-4 w-4" />
                     View Profile
@@ -395,7 +441,7 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
                       setShowMoreMenu(false);
                       setShowMembersModal(true);
                     }}
-                    className="flex items-center gap-2 w-full px-4 py-2 text-sm text-[#94A3B8] hover:bg-white/5 hover:text-[#F1F5F9] transition"
+                    className="flex items-center gap-2 w-full px-4 py-2 text-sm text-text-secondary hover:bg-glass-hover hover:text-text-primary transition"
                   >
                     <UserIcon className="h-4 w-4" />
                     View Members
@@ -408,13 +454,13 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
                       setShowMoreMenu(false);
                       setShowLogoModal(true);
                     }}
-                    className="flex items-center gap-2 w-full px-4 py-2 text-sm text-[#94A3B8] hover:bg-white/5 hover:text-[#F1F5F9] transition"
+                    className="flex items-center gap-2 w-full px-4 py-2 text-sm text-text-secondary hover:bg-glass-hover hover:text-text-primary transition"
                   >
                     <CameraIcon className="h-4 w-4" />
                     Change Group Logo
                   </button>
                 )}
-                <div className="my-1 border-t border-[#1E3447]" />
+                <div className="my-1 border-t border-border" />
                 <button
                   role="menuitem"
                   onClick={() => {
@@ -429,17 +475,26 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
               </div>
             )}
           </div>
+          {onClose && (
+            <button
+              onClick={onClose}
+              title="Close"
+              className="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-glass-hover transition"
+            >
+              <XMarkIcon className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 themed-scrollbar">
+      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2 scrollbar-hide">
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00C8FF]"></div>
           </div>
         ) : messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-[#64748B]">
+          <div className="flex items-center justify-center h-full text-text-muted">
             <p>No messages yet. Say hello!</p>
           </div>
         ) : (
@@ -447,84 +502,74 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
             const isOwn = message.sender_id === user?.id;
             const prevMessage = messages[index - 1];
             const showAvatar = !prevMessage || prevMessage.sender_id !== message.sender_id;
-            // The placeholder used when an attachment is sent without a real
-            // caption (see handleSendMessage) is a zero-width space - strip
-            // it so no empty bubble/filename-as-caption ever renders.
-            const hasCaption = message.content.replace(/​/g, '').trim().length > 0;
+            const hasCaption = message.content.replace(/[​\u200B]/g, '').trim().length > 0;
+            const hasReactions = message.reactions && message.reactions.length > 0;
+            const isLastMessage = index === messages.length - 1;
+            const isLastOwnMessage =
+              isOwn && !messages.slice(index + 1).some((m) => m.sender_id === user?.id);
+
+            // Detect YouTube or Giphy link in this message (text messages only)
+            const youtubeId =
+              message.type === 'text' ? extractYouTubeId(message.content) : null;
+            const giphyGifUrl =
+              message.type === 'text' && !youtubeId
+                ? extractGiphyGifUrl(message.content)
+                : null;
+
+            // Text to show in a bubble. For YouTube/Giphy messages we strip
+            // the URL out (the embed/gif already represents it).
+            const bubbleText = youtubeId || giphyGifUrl
+              ? message.content.replace(/https?:\/\/\S+/g, '').replace(/[​\u200B]/g, '').trim()
+              : message.content.replace(/[​\u200B]/g, '').trim();
+
+            const showTextBubble = bubbleText.length > 0;
+
+            // Status label: only "Sent" / "Seen" (no backend "delivered" flag yet)
+            let statusLabel: string | null = null;
+            if (isLastOwnMessage) {
+              statusLabel = message.is_read ? 'Seen' : 'Sent';
+            }
+
             return (
               <div
                 key={message.id}
-                className={`group flex items-end gap-2 ${isOwn ? 'justify-end' : 'justify-start'}`}
+                className={`group flex items-start gap-1.5 ${isOwn ? 'justify-end' : 'justify-start'}`}
               >
                 {!isOwn && (
                   <div className="w-7 flex-shrink-0">
-                    {showAvatar && (
+                    {showAvatar ? (
                       <Avatar src={message.sender_avatar} name={message.sender_username} size="xs" />
-                    )}
+                    ) : null}
                   </div>
                 )}
 
-                {/* Sender-only "..." menu (Unsend / Remove for Me) - hover-
-                    revealed, matching the existing group-hover reveal
-                    pattern already used for comment reactions/reply
-                    elsewhere in this app. Never rendered for someone else's
-                    message or an already-unsent one. */}
                 {isOwn && !message.is_deleted && (
                   <div className="relative self-center opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition flex-shrink-0">
                     <button
                       type="button"
-                      onClick={() => setMessageMenuFor(messageMenuFor === message.id ? null : message.id)}
+                      onClick={(e) => openMessageMenu(e, message.id)}
                       title="Message options"
                       aria-haspopup="menu"
-                      className="p-1 rounded-lg text-[#64748B] hover:text-[#F1F5F9] hover:bg-white/5 transition"
+                      className="p-1 rounded-lg text-text-muted hover:text-text-primary hover:bg-glass-hover transition"
                     >
                       <EllipsisVerticalIcon className="h-4 w-4" />
                     </button>
-                    {messageMenuFor === message.id && (
-                      <div
-                        ref={messageMenuRef}
-                        role="menu"
-                        className="absolute right-0 bottom-full mb-1 w-40 rounded-xl border border-[#1E3447] bg-[#111E2B] shadow-xl py-1 z-20"
-                      >
-                        <button
-                          role="menuitem"
-                          onClick={() => handleRemoveForMe(message.id)}
-                          className="flex items-center gap-2 w-full px-3 py-2 text-sm text-[#94A3B8] hover:bg-white/5 hover:text-[#F1F5F9] transition"
-                        >
-                          Remove for Me
-                        </button>
-                        <button
-                          role="menuitem"
-                          onClick={() => {
-                            setMessageMenuFor(null);
-                            setUnsendTarget(message.id);
-                          }}
-                          className="flex items-center gap-2 w-full px-3 py-2 text-sm text-[#EF4444] hover:bg-[#EF4444]/10 transition"
-                        >
-                          <TrashIcon className="h-3.5 w-3.5" />
-                          Unsend
-                        </button>
-                      </div>
-                    )}
                   </div>
                 )}
 
-                <div className={`flex flex-col max-w-[75%] sm:max-w-[70%] ${isOwn ? 'items-end' : 'items-start'}`}>
-                  {!isOwn && showAvatar && (
-                    <p className="text-xs font-semibold text-[#00C8FF] mb-1 px-1">
-                      {message.sender_username}
-                    </p>
-                  )}
-
+                <div className={`flex flex-col min-w-0 ${isOwn ? 'items-end' : 'items-start'} ${
+                  youtubeId || giphyGifUrl
+                    ? 'max-w-[95%] sm:max-w-[90%]'
+                    : 'max-w-[78%] sm:max-w-[72%]'
+                }`}>
                   {message.is_deleted ? (
-                    <div className="px-4 py-2 rounded-2xl bg-[#101D2A]/50 border border-[#1E3447]">
-                      <p className="italic text-sm text-[#64748B]">
+                    <div className="px-3 py-2 rounded-2xl bg-glass border border-border">
+                      <p className="italic text-sm text-text-muted">
                         {isOwn ? 'You unsent this message' : 'This message was unsent'}
                       </p>
                     </div>
                   ) : (
-                    <>
-                      {/* Media renders on its own, without the colored/padded bubble around it */}
+                    <div className="relative min-w-0 max-w-full">
                       {message.type === 'image' && message.media_url && (
                         <button
                           type="button"
@@ -546,67 +591,93 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
                           href={message.media_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-[#101D2A] border border-[#1E3447] hover:bg-white/5 transition max-w-full"
+                          className="flex items-center gap-2 px-3 py-2 rounded-2xl bg-glass border border-border hover:bg-glass-hover transition max-w-full"
                         >
-                          <DocumentIcon className="h-5 w-5 flex-shrink-0 text-[#94A3B8]" />
-                          <span className="text-sm text-[#F1F5F9] truncate">{message.media_name || 'File'}</span>
-                          <ArrowDownTrayIcon className="h-4 w-4 flex-shrink-0 text-[#64748B]" />
+                          <DocumentIcon className="h-5 w-5 flex-shrink-0 text-text-secondary" />
+                          <span className="text-sm text-text-primary truncate">{message.media_name || 'File'}</span>
+                          <ArrowDownTrayIcon className="h-4 w-4 flex-shrink-0 text-text-muted" />
                         </a>
                       )}
 
-                      {/* Colored bubble only for plain text or a real caption */}
-                      {(message.type === 'text' || hasCaption) && (
-                        <div
-                          className={`px-4 py-2 rounded-2xl ${message.type !== 'text' ? 'mt-1.5' : ''} ${
-                            isOwn
-                              ? 'bg-gradient-to-br from-[#00C8FF] to-[#3B82F6] text-[#060B12] shadow-[0_0_16px_rgba(0,200,255,0.15)]'
-                              : 'bg-[#101D2A] text-[#F1F5F9] border border-[#1E3447]'
-                          }`}
-                        >
-                          <p className="break-words">{message.content}</p>
+                      {/* YouTube embed — only when a valid video ID was found. */}
+                      {youtubeId && (
+                        <div className="w-[280px] max-w-full">
+                          <YouTubeEmbed videoId={youtubeId} className="w-full" />
                         </div>
                       )}
-                    </>
+
+                      {/* Giphy GIF — only when a Giphy link was found. */}
+                      {giphyGifUrl && (
+                        <img
+                          src={giphyGifUrl}
+                          alt="GIF"
+                          className="rounded-2xl max-w-full max-h-72 object-contain"
+                          loading="lazy"
+                        />
+                      )}
+
+                      {/* Text bubble — only when there's actual text to show. */}
+                      {showTextBubble && (
+                        <div
+                          className={`inline-block px-3.5 py-2 rounded-2xl min-w-0 max-w-full ${
+                            isOwn
+                              ? 'bg-gradient-to-br from-[#00C8FF] to-[#3B82F6] text-[#060B12] shadow-[0_0_16px_rgba(0,200,255,0.15)]'
+                              : 'bg-glass text-text-primary border border-border'
+                          } ${(message.type !== 'text' || youtubeId || giphyGifUrl) ? 'mt-1.5' : ''}`}
+                        >
+                          <p className="whitespace-pre-wrap break-all text-sm">{bubbleText}</p>
+                        </div>
+                      )}
+
+                      {/* Reaction pill — small, hover-only, tucked at TOP-inner corner */}
+                      <div
+                        className={`absolute -top-2 ${
+                          isOwn ? 'left-1' : 'right-1'
+                        } ${
+                          hasReactions
+                            ? 'opacity-100'
+                            : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'
+                        } transition pointer-events-none`}
+                      >
+                        <div className="pointer-events-auto">
+                          <MessageReactions
+                            messageId={message.id}
+                            reactions={message.reactions}
+                            align={isOwn ? 'right' : 'left'}
+                          />
+                        </div>
+                      </div>
+                    </div>
                   )}
 
-                  <p className={`text-xs text-[#64748B] mt-1 px-1`}>
-                    {formatChatTime(message.created_at)}
-                    {isOwn && message.is_read && ' ✓✓'}
-                  </p>
-
-                  {!message.is_deleted && (
-                    <MessageReactions
-                      messageId={message.id}
-                      reactions={message.reactions}
-                      align={isOwn ? 'right' : 'left'}
-                    />
+                  {isLastMessage && (
+                    <span className="text-[10px] text-text-muted px-1 mt-1">
+                      {isLastOwnMessage && statusLabel ? `${statusLabel} · ` : ''}
+                      {formatChatTime(message.created_at)}
+                    </span>
                   )}
                 </div>
+
                 {isOwn && (
                   <div className="w-7 flex-shrink-0">
-                    {showAvatar && (
+                    {showAvatar ? (
                       <Avatar src={message.sender_avatar} name={message.sender_username} size="xs" />
-                    )}
+                    ) : null}
                   </div>
                 )}
               </div>
             );
           })
         )}
+
+        {/* Typing indicator — small bubble with 3 animated dots only. */}
         {typingNames.length > 0 && (
-          <div className="flex items-end gap-2 justify-start">
-            <div className="w-7 flex-shrink-0">
-              <Avatar name={typingNames[0]} size="xs" />
-            </div>
-            <div className="px-4 py-2 rounded-2xl bg-[#101D2A] border border-[#1E3447] flex items-center gap-1.5">
-              <span className="text-xs text-[#94A3B8]">
-                {typingNames.length === 1 ? `${typingNames[0]} is typing` : `${typingNames.join(', ')} are typing`}
-              </span>
-              <span className="flex gap-0.5">
-                <span className="w-1 h-1 rounded-full bg-[#00C8FF] animate-bounce [animation-delay:-0.3s]" />
-                <span className="w-1 h-1 rounded-full bg-[#00C8FF] animate-bounce [animation-delay:-0.15s]" />
-                <span className="w-1 h-1 rounded-full bg-[#00C8FF] animate-bounce" />
-              </span>
+          <div className="flex items-start gap-1.5 justify-start">
+            <div className="w-7 flex-shrink-0" />
+            <div className="px-3 py-2 rounded-2xl bg-glass border border-border flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-text-muted animate-bounce [animation-delay:-0.3s]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-text-muted animate-bounce [animation-delay:-0.15s]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-text-muted animate-bounce" />
             </div>
           </div>
         )}
@@ -614,9 +685,9 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
       </div>
 
       {/* Input */}
-      <form onSubmit={handleSendMessage} className="p-3 sm:p-4 border-t border-[#1E3447] flex-shrink-0">
+      <form onSubmit={handleSendMessage} className="px-3 py-2.5 border-t border-border flex-shrink-0">
         {attachmentFile && (
-          <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-xl border border-[#1E3447] bg-[#0A111A]">
+          <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-xl border border-border bg-glass">
             {attachmentPreview ? (
               attachmentFile.type.startsWith('video/') ? (
                 <video src={attachmentPreview} className="h-10 w-10 rounded-lg object-cover flex-shrink-0" />
@@ -624,20 +695,20 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
                 <img src={attachmentPreview} alt="" className="h-10 w-10 rounded-lg object-cover flex-shrink-0" />
               )
             ) : (
-              <DocumentIcon className="h-6 w-6 text-[#64748B] flex-shrink-0" />
+              <DocumentIcon className="h-6 w-6 text-text-muted flex-shrink-0" />
             )}
-            <span className="text-sm text-[#F1F5F9] truncate flex-1">{attachmentFile.name}</span>
+            <span className="text-sm text-text-primary truncate flex-1">{attachmentFile.name}</span>
             <button
               type="button"
               onClick={removeAttachment}
               disabled={isUploadingAttachment}
-              className="p-1 text-[#64748B] hover:text-[#F1F5F9] rounded-full hover:bg-white/5 transition disabled:opacity-50"
+              className="p-1 text-text-muted hover:text-text-primary rounded-full hover:bg-glass-hover transition disabled:opacity-50"
             >
               <XMarkIcon className="h-4 w-4" />
             </button>
           </div>
         )}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="flex items-center gap-1.5">
           <input
             ref={fileInputRef}
             type="file"
@@ -650,7 +721,7 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
             onClick={() => fileInputRef.current?.click()}
             disabled={isUploadingAttachment}
             title="Attach a file, image, or video"
-            className="p-2 text-[#64748B] hover:text-[#00C8FF] hover:bg-white/5 rounded-lg transition disabled:opacity-50 flex-shrink-0"
+            className="p-1.5 text-text-muted hover:text-[#00C8FF] hover:bg-glass-hover rounded-lg transition disabled:opacity-50 flex-shrink-0"
           >
             <PhotoIcon className="h-5 w-5" />
           </button>
@@ -660,7 +731,7 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
             value={newMessage}
             onChange={handleTypingChange}
             placeholder={attachmentFile ? 'Add a caption (optional)...' : 'Type a message...'}
-            className="flex-1 min-w-0 px-4 py-2 rounded-xl border border-[#1E3447] bg-[#0A111A] text-sm text-[#F1F5F9] placeholder-[#64748B] focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] focus:outline-none transition"
+            className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-border bg-glass text-sm text-text-primary placeholder-text-muted focus:ring-1 focus:ring-border focus:border-border focus:outline-none transition"
           />
           <button
             type="submit"
@@ -671,6 +742,43 @@ export function ChatWindow({ conversationId, onBack }: ChatWindowProps) {
           </button>
         </div>
       </form>
+
+      {/* Message options menu — rendered in a portal so it can never be
+          clipped by the chat container's overflow. */}
+      {messageMenuFor && messageMenuPos &&
+        createPortal(
+          <div
+            ref={messageMenuRef}
+            role="menu"
+            className="fixed z-[9999] w-40 rounded-xl border border-border bg-bg shadow-xl py-1"
+            style={{
+              top: messageMenuPos.top,
+              left: messageMenuPos.left,
+            }}
+          >
+            <button
+              role="menuitem"
+              onClick={() => handleRemoveForMe(messageMenuFor)}
+              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-text-secondary hover:bg-glass-hover hover:text-text-primary transition"
+            >
+              Remove for Me
+            </button>
+            <button
+              role="menuitem"
+              onClick={() => {
+                const id = messageMenuFor;
+                setMessageMenuFor(null);
+                setMessageMenuPos(null);
+                setUnsendTarget(id);
+              }}
+              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-[#EF4444] hover:bg-[#EF4444]/10 transition"
+            >
+              <TrashIcon className="h-3.5 w-3.5" />
+              Unsend
+            </button>
+          </div>,
+          document.body
+        )}
 
       {/* Fullscreen image lightbox */}
       {lightboxUrl && (

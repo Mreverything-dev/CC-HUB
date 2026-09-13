@@ -49,7 +49,7 @@ export function UserGrowthChart() {
           pointRadius: 0,
           pointHoverRadius: 4,
           pointHoverBackgroundColor: '#00C8FF',
-          pointHoverBorderColor: '#0A111A',
+          pointHoverBorderColor: 'rgb(var(--color-bg))',
           borderWidth: 2,
         },
       ],
@@ -59,13 +59,13 @@ export function UserGrowthChart() {
   const selectedLabel = RANGE_OPTIONS.find((r) => r.id === range)?.label;
 
   return (
-    <div className="rounded-2xl border border-[rgba(0,200,245,0.15)] bg-[rgba(10,20,30,0.75)] backdrop-blur-xl p-4 sm:p-5">
+    <div className="rounded-2xl border border-border bg-glass backdrop-blur-xl p-4 sm:p-5">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-[#F1F5F9]">User Growth</h3>
+        <h3 className="text-sm font-semibold text-text-primary">User Growth</h3>
         <div className="relative">
           <button
             onClick={() => setShowRangeMenu((v) => !v)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#1E3447] bg-[#0A111A] text-xs font-medium text-[#94A3B8] hover:text-[#F1F5F9] hover:border-[#00C8FF]/30 transition"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border bg-bg text-xs font-medium text-text-secondary hover:text-text-primary hover:border-[#00C8FF]/30 transition"
           >
             {selectedLabel}
             <ChevronDownIcon className={`h-3.5 w-3.5 transition-transform ${showRangeMenu ? 'rotate-180' : ''}`} />
@@ -73,7 +73,7 @@ export function UserGrowthChart() {
           {showRangeMenu && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setShowRangeMenu(false)} />
-              <div className="absolute right-0 top-full mt-1.5 w-36 rounded-xl border border-[#1E3447] bg-[#111E2B] shadow-xl z-20 overflow-hidden">
+              <div className="absolute right-0 top-full mt-1.5 w-36 rounded-xl border border-border bg-bg shadow-xl z-20 overflow-hidden">
                 {RANGE_OPTIONS.map((opt) => (
                   <button
                     key={opt.id}
@@ -82,7 +82,7 @@ export function UserGrowthChart() {
                       setShowRangeMenu(false);
                     }}
                     className={`w-full text-left px-3.5 py-2 text-sm transition ${
-                      opt.id === range ? 'text-[#00C8FF] bg-[#00C8FF]/10' : 'text-[#F1F5F9] hover:bg-white/5'
+                      opt.id === range ? 'text-[#00C8FF] bg-[#00C8FF]/10' : 'text-text-primary hover:bg-glass'
                     }`}
                   >
                     {opt.label}
@@ -95,10 +95,10 @@ export function UserGrowthChart() {
       </div>
 
       {isLoading ? (
-        <div className="h-64 rounded-xl bg-[#0A111A] animate-pulse" />
+        <div className="h-64 rounded-xl bg-bg animate-pulse" />
       ) : isError ? (
-        <div className="h-64 flex flex-col items-center justify-center gap-2 rounded-xl bg-[#0A111A] text-center px-4">
-          <p className="text-sm text-[#94A3B8]">Unable to load dashboard data</p>
+        <div className="h-64 flex flex-col items-center justify-center gap-2 rounded-xl bg-bg text-center px-4">
+          <p className="text-sm text-text-secondary">Unable to load dashboard data</p>
           <button
             onClick={() => refetch()}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#00C8FF] hover:bg-[#00C8FF]/10 rounded-lg transition"
@@ -108,8 +108,8 @@ export function UserGrowthChart() {
           </button>
         </div>
       ) : !chartData ? (
-        <div className="h-64 flex items-center justify-center rounded-xl bg-[#0A111A]">
-          <p className="text-sm text-[#64748B]">No new users in this period</p>
+        <div className="h-64 flex items-center justify-center rounded-xl bg-bg">
+          <p className="text-sm text-text-muted">No new users in this period</p>
         </div>
       ) : (
         <div className="h-64">
@@ -121,11 +121,11 @@ export function UserGrowthChart() {
               interaction: { mode: 'index', intersect: false },
               plugins: {
                 tooltip: {
-                  backgroundColor: '#111E2B',
-                  borderColor: '#1E3447',
+                  backgroundColor: 'rgb(var(--color-bg))',
+                  borderColor: 'rgb(var(--color-border))',
                   borderWidth: 1,
-                  titleColor: '#94A3B8',
-                  bodyColor: '#F1F5F9',
+                  titleColor: 'rgb(var(--color-text-muted))',
+                  bodyColor: 'rgb(var(--color-text-primary))',
                   padding: 10,
                   displayColors: false,
                   callbacks: {
@@ -136,13 +136,13 @@ export function UserGrowthChart() {
               scales: {
                 x: {
                   grid: { display: false },
-                  ticks: { color: '#64748B', font: { size: 11 }, maxRotation: 0 },
-                  border: { color: '#1E3447' },
+                  ticks: { color: 'rgb(var(--color-text-muted))', font: { size: 11 }, maxRotation: 0 },
+                  border: { color: 'rgb(var(--color-border))' },
                 },
                 y: {
                   beginAtZero: true,
-                  grid: { color: 'rgba(30,52,71,0.5)' },
-                  ticks: { color: '#64748B', font: { size: 11 }, precision: 0 },
+                  grid: { color: 'rgb(var(--color-border) / 0.5)' },
+                  ticks: { color: 'rgb(var(--color-text-muted))', font: { size: 11 }, precision: 0 },
                   border: { display: false },
                 },
               },

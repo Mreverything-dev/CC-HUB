@@ -102,7 +102,6 @@ class Settings(BaseSettings):
     MINIO_BUCKET: str = "ccs-hub"
     MINIO_SECURE: bool = False
     MINIO_PUBLIC_URL: Optional[str] = None  # For CDN/nginx proxy
-    MINIO_PUBLIC_URL: Optional[str] = "http://192.168.0.109:9000"
     # App
     DEBUG: str = "True"
     LOG_LEVEL: str = "INFO"

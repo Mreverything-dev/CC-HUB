@@ -21,12 +21,6 @@ import {
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { Avatar } from '../Avatar';
 
-/**
- * Everything the Admin control panel can navigate to - deliberately its own
- * type/set, NOT SidebarSection (the Student/Professor dashboards' nav) -
- * this is a genuinely different structure (moderation/monitoring surfaces
- * a student or professor never sees), not the same tabs re-skinned.
- */
 export type AdminSection =
   | 'overview'
   | 'users'
@@ -83,19 +77,16 @@ export function AdminSidebar({ activeSection, onNavigate, reportsCount = 0, isMo
 
   const sidebarContent = (
     <>
-      {/* Header - "ADMIN CONTROL" badge instead of the College subtitle
-          every other dashboard shows, so this is unmistakably a different
-          surface even before the nav items are read. */}
       <button
         type="button"
         onClick={() => onNavigate('overview')}
-        className="flex items-center gap-3 px-5 py-5 border-b border-[rgba(139,92,246,0.15)] text-left hover:bg-white/5 transition-colors duration-200"
+        className="flex items-center gap-3 px-5 py-5 border-b border-border text-left hover:bg-glass transition-colors duration-200"
       >
         <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#8B5CF6]/40 bg-[#8B5CF6]/10 shadow-[0_0_20px_rgba(139,92,246,0.18)]">
           <LogoIcon size="sm" background="dark" />
         </div>
         <div>
-          <h1 className="text-base font-bold tracking-tight text-[#F1F5F9] leading-tight">CCS HUB</h1>
+          <h1 className="text-base font-bold tracking-tight text-text-primary leading-tight">CCS HUB</h1>
           <p className="flex items-center gap-1 text-[10px] font-bold tracking-wider text-[#8B5CF6]">
             <ShieldCheckIcon className="h-3 w-3" />
             ADMIN CONTROL PANEL
@@ -114,7 +105,7 @@ export function AdminSidebar({ activeSection, onNavigate, reportsCount = 0, isMo
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 border ${
                 isActive
                   ? 'border-[#8B5CF6]/40 bg-[#8B5CF6]/10 text-[#8B5CF6] shadow-[0_0_12px_rgba(139,92,246,0.18)]'
-                  : 'border-transparent text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5'
+                  : 'border-transparent text-text-secondary hover:text-text-primary hover:bg-glass'
               }`}
             >
               <Icon className={`h-5 w-5 flex-shrink-0 ${isActive ? 'text-[#8B5CF6]' : ''}`} />
@@ -133,14 +124,14 @@ export function AdminSidebar({ activeSection, onNavigate, reportsCount = 0, isMo
         })}
       </nav>
 
-      <div className="border-t border-[rgba(139,92,246,0.15)] p-3 space-y-3">
+      <div className="border-t border-border p-3 space-y-3">
         <button
           onClick={() => navigate('/profile')}
-          className="w-full flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-white/5 transition-all duration-200"
+          className="w-full flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-glass transition-all duration-200"
         >
           <Avatar name={user?.username} size="sm" />
           <div className="flex-1 min-w-0 text-left">
-            <p className="text-sm font-medium text-[#F1F5F9] truncate">{user?.username || 'Admin'}</p>
+            <p className="text-sm font-medium text-text-primary truncate">{user?.username || 'Admin'}</p>
             <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-bold uppercase tracking-wide text-[#8B5CF6] bg-[#8B5CF6]/10 border border-[#8B5CF6]/30 rounded-full px-2 py-0.5">
               <ShieldCheckIcon className="h-2.5 w-2.5" />
               Admin
@@ -152,14 +143,14 @@ export function AdminSidebar({ activeSection, onNavigate, reportsCount = 0, isMo
           <button
             onClick={() => navigate('/profile')}
             title="Account"
-            className="p-2.5 rounded-xl text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5 transition-all duration-200"
+            className="p-2.5 rounded-xl text-text-secondary hover:text-text-primary hover:bg-glass transition-all duration-200"
           >
             <Cog6ToothIcon className="h-5 w-5" />
           </button>
           <button
             onClick={() => toast('Help center coming soon')}
             title="Help"
-            className="p-2.5 rounded-xl text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5 transition-all duration-200"
+            className="p-2.5 rounded-xl text-text-secondary hover:text-text-primary hover:bg-glass transition-all duration-200"
           >
             <QuestionMarkCircleIcon className="h-5 w-5" />
           </button>
@@ -177,7 +168,7 @@ export function AdminSidebar({ activeSection, onNavigate, reportsCount = 0, isMo
 
   return (
     <>
-      <aside className="hidden lg:flex lg:flex-col w-[280px] h-screen sticky top-0 border-r border-[rgba(139,92,246,0.15)] bg-[#0A0714]/95 backdrop-blur-xl">
+      <aside className="hidden lg:flex lg:flex-col w-[280px] h-screen sticky top-0 border-r border-border bg-bg/95 backdrop-blur-xl">
         {sidebarContent}
       </aside>
 
@@ -189,7 +180,7 @@ export function AdminSidebar({ activeSection, onNavigate, reportsCount = 0, isMo
       >
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCloseMobile} />
         <aside
-          className={`absolute inset-y-0 left-0 w-[280px] max-w-[85vw] flex flex-col border-r border-[rgba(139,92,246,0.15)] bg-[#0A0714] shadow-2xl transition-transform duration-300 ease-out ${
+          className={`absolute inset-y-0 left-0 w-[280px] max-w-[85vw] flex flex-col border-r border-border bg-bg shadow-2xl transition-transform duration-300 ease-out ${
             isMobileOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
         >
@@ -197,7 +188,7 @@ export function AdminSidebar({ activeSection, onNavigate, reportsCount = 0, isMo
             onClick={onCloseMobile}
             title="Close menu"
             aria-label="Close menu"
-            className="absolute top-4 right-3 p-2 rounded-xl text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5 transition-all duration-200"
+            className="absolute top-4 right-3 p-2 rounded-xl text-text-secondary hover:text-text-primary hover:bg-glass transition-all duration-200"
           >
             <XMarkIcon className="h-5 w-5" />
           </button>

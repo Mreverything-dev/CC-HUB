@@ -28,11 +28,11 @@ const SKELETON_ROWS = [0, 1, 2];
 
 function SkeletonRow() {
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-[#1E3447] bg-[#0D1722]/60 p-3.5 animate-pulse">
-      <div className="h-11 w-11 rounded-full bg-[#1E3447]" />
+    <div className="flex items-center gap-3 rounded-2xl border border-border bg-bg p-3.5 animate-pulse">
+      <div className="h-11 w-11 rounded-full bg-border" />
       <div className="flex-1 space-y-2">
-        <div className="h-3 w-32 rounded bg-[#1E3447]" />
-        <div className="h-2.5 w-20 rounded bg-[#1E3447]" />
+        <div className="h-3 w-32 rounded bg-border" />
+        <div className="h-2.5 w-20 rounded bg-border" />
       </div>
     </div>
   );
@@ -40,12 +40,9 @@ function SkeletonRow() {
 
 function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div className="rounded-2xl border border-[#1E3447] bg-[#0D1722] p-8 text-center">
+    <div className="rounded-2xl border border-border bg-bg p-8 text-center">
       <p className="text-sm text-[#EF4444]">{message}</p>
-      <button
-        onClick={onRetry}
-        className="mt-3 text-sm text-[#00C8FF] hover:underline font-medium"
-      >
+      <button onClick={onRetry} className="mt-3 text-sm text-[#00C8FF] hover:underline font-medium">
         Try again
       </button>
     </div>
@@ -54,9 +51,9 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
 
 function EmptyState({ title, subtitle, action }: { title: string; subtitle?: string; action?: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-[#1E3447] bg-[#0D1722] p-10 text-center">
-      <p className="text-sm text-[#F1F5F9] font-medium">{title}</p>
-      {subtitle && <p className="text-xs text-[#64748B] mt-1">{subtitle}</p>}
+    <div className="rounded-2xl border border-border bg-bg p-10 text-center">
+      <p className="text-sm text-text-primary font-medium">{title}</p>
+      {subtitle && <p className="text-xs text-text-muted mt-1">{subtitle}</p>}
       {action}
     </div>
   );
@@ -232,19 +229,19 @@ export default function FriendsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">
         <div>
-          <h1 className="text-xl font-bold text-[#F1F5F9]">Friends</h1>
-          <p className="text-sm text-[#94A3B8] mt-0.5">Connect, collaborate, and stay updated with your friends.</p>
+          <h1 className="text-xl font-bold text-text-primary">Friends</h1>
+          <p className="text-sm text-text-secondary mt-0.5">Connect, collaborate, and stay updated with your friends.</p>
         </div>
 
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <div className="relative flex-1 sm:w-56">
-            <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#64748B]" />
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-muted" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search friends..."
-              className="w-full rounded-xl border border-[#1E3447] bg-[#0D1722] py-2 pl-9 pr-3 text-sm text-[#F1F5F9] placeholder-[#64748B] focus:outline-none focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition"
+                            className="w-full rounded-xl border border-border bg-bg py-2 pl-9 pr-3 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition"
             />
           </div>
           <button
@@ -258,13 +255,13 @@ export default function FriendsPage() {
             <button
               onClick={() => setFilterOpen((v) => !v)}
               title="Filter / Sort"
-              className="p-2.5 rounded-xl border border-[#1E3447] bg-[#0D1722] text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5 transition"
+              className="p-2.5 rounded-xl border border-border bg-bg text-text-secondary hover:text-text-primary hover:bg-glass transition"
             >
               <FunnelIcon className="h-5 w-5" />
             </button>
             {filterOpen && (
-              <div className="absolute right-0 top-full mt-1 w-48 rounded-xl border border-[#1E3447] bg-[#111E2B] shadow-xl z-20 overflow-hidden">
-                <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-[#64748B]">
+              <div className="absolute right-0 top-full mt-1 w-48 rounded-xl border border-border bg-bg shadow-xl z-20 overflow-hidden">
+                <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-text-muted">
                   Sort All Friends
                 </p>
                 {([
@@ -279,7 +276,7 @@ export default function FriendsPage() {
                       setFilterOpen(false);
                     }}
                     className={`w-full text-left px-3 py-2 text-xs font-medium transition ${
-                      sortMode === mode ? 'text-[#00C8FF] bg-[#00C8FF]/10' : 'text-[#F1F5F9] hover:bg-white/5'
+                      sortMode === mode ? 'text-[#00C8FF] bg-[#00C8FF]/10' : 'text-text-primary hover:bg-glass'
                     }`}
                   >
                     {label}
@@ -299,9 +296,9 @@ export default function FriendsPage() {
           { label: 'Friend Requests', value: received.length },
           { label: 'Suggestions', value: visibleSuggestions.length },
         ].map((stat) => (
-          <div key={stat.label} className="rounded-2xl border border-[#1E3447] bg-[#0D1722] p-3.5 text-center">
-            <p className="text-lg font-bold text-[#F1F5F9]">{stat.value}</p>
-            <p className="text-[11px] text-[#94A3B8] mt-0.5">{stat.label}</p>
+          <div key={stat.label} className="rounded-2xl border border-border bg-bg p-3.5 text-center">
+            <p className="text-lg font-bold text-text-primary">{stat.value}</p>
+            <p className="text-[11px] text-text-secondary mt-0.5">{stat.label}</p>
           </div>
         ))}
       </div>
@@ -318,7 +315,7 @@ export default function FriendsPage() {
               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition border ${
                 isActive
                   ? 'border-[#00C8FF]/40 bg-[#00C8FF]/10 text-[#00C8FF]'
-                  : 'border-transparent text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5'
+                  : 'border-transparent text-text-secondary hover:text-text-primary hover:bg-glass'
               }`}
             >
               <Icon className="h-4 w-4" />
@@ -326,7 +323,7 @@ export default function FriendsPage() {
               {typeof tab.count === 'number' && tab.count > 0 && (
                 <span
                   className={`text-[10px] font-semibold rounded-full px-1.5 py-0.5 ${
-                    isActive ? 'bg-[#00C8FF]/20 text-[#00C8FF]' : 'bg-white/10 text-[#94A3B8]'
+                    isActive ? 'bg-[#00C8FF]/20 text-[#00C8FF]' : 'bg-glass text-text-secondary'
                   }`}
                 >
                   {tab.count}
@@ -380,11 +377,11 @@ export default function FriendsPage() {
       {activeTab === 'requests' && (
         <div className="space-y-6">
           <div>
-            <h3 className="text-sm font-semibold text-[#F1F5F9] mb-2.5">Received</h3>
+            <h3 className="text-sm font-semibold text-text-primary mb-2.5">Received</h3>
             {isLoading ? (
               <div className="space-y-2.5">{SKELETON_ROWS.map((i) => <SkeletonRow key={i} />)}</div>
             ) : received.length === 0 ? (
-              <p className="text-sm text-[#64748B]">No incoming requests.</p>
+              <p className="text-sm text-text-muted">No incoming requests.</p>
             ) : (
               <div className="space-y-2.5">
                 {received.map((req) => (
@@ -402,9 +399,9 @@ export default function FriendsPage() {
           </div>
 
           <div>
-            <h3 className="text-sm font-semibold text-[#F1F5F9] mb-2.5">Sent</h3>
+            <h3 className="text-sm font-semibold text-text-primary mb-2.5">Sent</h3>
             {sent.length === 0 ? (
-              <p className="text-sm text-[#64748B]">No outgoing requests.</p>
+              <p className="text-sm text-text-muted">No outgoing requests.</p>
             ) : (
               <div className="space-y-2.5">
                 {sent.map((req) => (

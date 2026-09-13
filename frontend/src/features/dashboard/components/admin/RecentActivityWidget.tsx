@@ -29,13 +29,6 @@ interface RecentActivityWidgetProps {
   isLoading?: boolean;
 }
 
-/**
- * Built entirely from real, already-fetched data (recent posts, announcements,
- * live/scheduled streams) merged and sorted by timestamp - there's no backend
- * activity/audit log, so event types with no accessible source (new user
- * registrations, report submissions) are intentionally left out rather than
- * invented.
- */
 export function RecentActivityWidget({
   posts,
   announcements,
@@ -92,23 +85,23 @@ export function RecentActivityWidget({
   }, [posts, announcements, liveStreams, upcomingStreams, navigate]);
 
   return (
-    <div className="rounded-2xl border border-[rgba(0,200,245,0.15)] bg-[rgba(10,20,30,0.75)] backdrop-blur-xl p-4 sm:p-5">
-      <h3 className="text-sm font-semibold text-[#F1F5F9] mb-3">Recent Activity</h3>
+    <div className="rounded-2xl border border-border bg-glass backdrop-blur-xl p-4 sm:p-5">
+      <h3 className="text-sm font-semibold text-text-primary mb-3">Recent Activity</h3>
 
       {isLoading ? (
         <div className="space-y-3">
           {[0, 1, 2, 3].map((i) => (
             <div key={i} className="flex items-center gap-3 animate-pulse">
-              <div className="h-9 w-9 rounded-full bg-[#1E3447] flex-shrink-0" />
+              <div className="h-9 w-9 rounded-full bg-border flex-shrink-0" />
               <div className="flex-1 space-y-1.5">
-                <div className="h-2.5 w-32 rounded bg-[#1E3447]" />
-                <div className="h-2 w-20 rounded bg-[#1E3447]" />
+                <div className="h-2.5 w-32 rounded bg-border" />
+                <div className="h-2 w-20 rounded bg-border" />
               </div>
             </div>
           ))}
         </div>
       ) : items.length === 0 ? (
-        <p className="text-sm text-[#64748B] py-6 text-center">No recent activity</p>
+        <p className="text-sm text-text-muted py-6 text-center">No recent activity</p>
       ) : (
         <div className="space-y-1 max-h-80 overflow-y-auto themed-scrollbar pr-1">
           {items.map((item) => (
@@ -116,7 +109,7 @@ export function RecentActivityWidget({
               key={item.id}
               onClick={item.onClick}
               disabled={!item.onClick}
-              className="w-full flex items-start gap-3 text-left px-1.5 py-2 rounded-xl hover:bg-white/5 transition disabled:cursor-default"
+              className="w-full flex items-start gap-3 text-left px-1.5 py-2 rounded-xl hover:bg-glass transition disabled:cursor-default"
             >
               <div
                 className="flex h-9 w-9 items-center justify-center rounded-full flex-shrink-0"
@@ -125,10 +118,10 @@ export function RecentActivityWidget({
                 <item.icon className="h-4 w-4" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm text-[#F1F5F9] font-medium truncate">{item.title}</p>
-                <p className="text-xs text-[#64748B] truncate">{item.subtitle}</p>
+                <p className="text-sm text-text-primary font-medium truncate">{item.title}</p>
+                <p className="text-xs text-text-muted truncate">{item.subtitle}</p>
               </div>
-              <span className="text-[11px] text-[#64748B] flex-shrink-0 mt-0.5">
+              <span className="text-[11px] text-text-muted flex-shrink-0 mt-0.5">
                 {formatRelativeTime(item.timestamp)}
               </span>
             </button>

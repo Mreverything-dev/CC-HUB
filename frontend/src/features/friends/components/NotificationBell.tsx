@@ -7,9 +7,6 @@ import { BellIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { ViolationDetailsModal } from '@/features/posts/components/ViolationDetailsModal';
 
 interface NotificationBellProps {
-  /** When provided (e.g. inside a Sidebar-based dashboard), friend-related
-   * notifications open the in-dashboard Friends section instead of
-   * navigating away to the standalone /friends page. */
   onNavigateFriends?: () => void;
 }
 
@@ -46,7 +43,7 @@ export default function NotificationBell({ onNavigateFriends }: NotificationBell
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 text-[#94A3B8] hover:text-[#00C8FF] transition rounded-xl hover:bg-white/5"
+        className="relative p-2 text-text-secondary hover:text-[#00C8FF] transition rounded-xl hover:bg-glass"
         title="Notifications"
       >
         <BellIcon className="h-5 w-5" />
@@ -61,15 +58,9 @@ export default function NotificationBell({ onNavigateFriends }: NotificationBell
         <>
           <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
 
-          {/* Anchored to the viewport (not the bell button) below sm: - the
-              bell sits well left of the screen's right edge on mobile (other
-              action buttons/avatar follow it), so a dropdown anchored via
-              `right-0` to the button itself, at a fixed 320px width, was
-              extending past the left edge of the screen and causing
-              horizontal overflow on narrow phones. */}
-          <div className="fixed inset-x-3 top-16 sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 w-auto sm:w-80 bg-[#0D1722] rounded-2xl shadow-2xl border border-[#1E3447] z-50 overflow-hidden">
-            <div className="px-4 py-3 border-b border-[#1E3447] flex items-center justify-between">
-              <h3 className="font-semibold text-[#F1F5F9]">Notifications</h3>
+          <div className="fixed inset-x-3 top-16 sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 w-auto sm:w-80 bg-bg rounded-2xl shadow-2xl border border-border z-50 overflow-hidden">
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+              <h3 className="font-semibold text-text-primary">Notifications</h3>
               {unreadNotifications > 0 && (
                 <button
                   onClick={() => markAllNotificationsRead()}
@@ -82,7 +73,7 @@ export default function NotificationBell({ onNavigateFriends }: NotificationBell
 
             <div className="max-h-96 overflow-y-auto themed-scrollbar">
               {notifications.length === 0 ? (
-                <p className="text-sm text-[#64748B] text-center py-8">No notifications yet.</p>
+                <p className="text-sm text-text-muted text-center py-8">No notifications yet.</p>
               ) : (
                 notifications.map((n) => {
                   const actorAvatar = n.data?.actor_avatar as string | null | undefined;
@@ -91,7 +82,7 @@ export default function NotificationBell({ onNavigateFriends }: NotificationBell
                     <button
                       key={n.id}
                       onClick={() => handleNotificationClick(n.id, n.is_read, n.type, n.data)}
-                      className={`w-full text-left px-4 py-3 border-b border-[#1E3447] hover:bg-white/5 transition ${
+                      className={`w-full text-left px-4 py-3 border-b border-border hover:bg-glass transition ${
                         !n.is_read ? 'bg-[#00C8FF]/[0.06]' : ''
                       }`}
                     >
@@ -101,7 +92,7 @@ export default function NotificationBell({ onNavigateFriends }: NotificationBell
                             className={`w-8 h-8 rounded-full flex items-center justify-center overflow-hidden ${
                               n.type === 'post_violation' || n.type === 'moderation_warning' || n.type === 'moderation_restriction'
                                 ? 'bg-[#EF4444]/15'
-                                : 'bg-[#1E3447]'
+                                : 'bg-border'
                             }`}
                           >
                             {n.type === 'post_violation' || n.type === 'moderation_warning' || n.type === 'moderation_restriction' ? (
@@ -109,21 +100,21 @@ export default function NotificationBell({ onNavigateFriends }: NotificationBell
                             ) : actorAvatar ? (
                               <img src={actorAvatar} alt={actorName || ''} className="w-full h-full object-cover" />
                             ) : (
-                              <span className="text-[#94A3B8] text-xs font-semibold">
+                              <span className="text-text-secondary text-xs font-semibold">
                                 {actorName?.charAt(0).toUpperCase() || 'C'}
                               </span>
                             )}
                           </div>
                           {!n.is_read && (
-                            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#00C8FF] border-2 border-[#0D1722]" />
+                            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#00C8FF] border-2 border-bg" />
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-[#F1F5F9]">{n.title}</p>
+                          <p className="text-sm font-medium text-text-primary">{n.title}</p>
                           {n.content && (
-                            <p className="text-sm text-[#94A3B8]">{n.content}</p>
+                            <p className="text-sm text-text-secondary">{n.content}</p>
                           )}
-                          <p className="text-xs text-[#64748B] mt-1">
+                          <p className="text-xs text-text-muted mt-1">
                             {formatRelativeTime(n.created_at)}
                           </p>
                         </div>

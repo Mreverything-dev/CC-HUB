@@ -34,17 +34,13 @@ import { ProfessorDetailsModal } from './ProfessorDetailsModal';
 import { CreateAnnouncement } from '@/features/announcements/components/CreateAnnouncement';
 
 interface SectionDashboardProps {
-  /** Pre-select a section instead of defaulting to the first one - used when
-   * entering from the professor's "My Teaching Assignments" hub via its
-   * per-section "Manage" button. Omit for the default (student) behavior of
-   * defaulting to the first section in the list. */
   initialSectionId?: string;
 }
 
 const STUDENTS_PAGE_SIZE = 10;
 
 const inputClassName =
-  'w-full px-3.5 py-2.5 rounded-xl border border-[#1E3447] bg-[#0A111A] text-sm text-[#F1F5F9] placeholder-[#64748B] focus:outline-none focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition';
+  'w-full px-3.5 py-2.5 rounded-xl border border-border bg-bg text-sm text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition';
 
 function CrownIcon({ className }: { className?: string }) {
   return (
@@ -94,18 +90,12 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
 
   const canCreateSection = user?.role === 'professor' || user?.role === 'admin';
 
-  // Default to the first section once the list loads.
   useEffect(() => {
     if (!selectedSectionId && sections.length > 0) {
       setSelectedSectionId(sections[0].id);
     }
   }, [sections, selectedSectionId]);
 
-  // Fetch full member details for the selected section. Surfaces a real
-  // error + retry instead of silently swallowing failures (e.g. a 403 from
-  // the backend's view-access check, or a network error) - previously the
-  // catch discarded the error entirely, so a failed fetch left the skeleton
-  // loading state on screen forever with no way to tell what happened.
   const loadSection = useCallback((sectionId: string) => {
     setSectionLoading(true);
     setSectionError(null);
@@ -130,8 +120,6 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
 
   const members = section?.members || [];
   const activeAssignments = (section?.teaching_assignments || []).filter((ta) => ta.status === 'active');
-  // Group by professor - a professor can teach multiple subjects in the
-  // same section, and must appear as exactly one card, not one per subject.
   const professorGroups = useMemo(() => {
     const map = new Map<string, TeachingAssignment[]>();
     for (const ta of activeAssignments) {
@@ -141,10 +129,6 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
     return Array.from(map.values());
   }, [activeAssignments]);
 
-  // Only one professor is shown at a time (main card + "Professor Details"
-  // sidebar, kept in sync) - defaults to the first one whenever the
-  // available set changes (new section selected, or the current pick is no
-  // longer in the list).
   useEffect(() => {
     if (professorGroups.length === 0) {
       if (selectedProfessorId !== null) setSelectedProfessorId(null);
@@ -162,18 +146,12 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
 
   const mayor = members.find((m) => m.is_mayor) || null;
   const officer = members.find((m) => m.is_officer && !m.is_mayor) || null;
-  // Alphabetical by last name (falling back to first name/username for a
-  // member who hasn't set a real name yet) - the roster convention used
-  // throughout this page, not just insertion/join order.
   const studentSortKey = (m: SectionMember) =>
     (m.user_last_name || m.user_first_name || m.user_username || '').toLowerCase();
   const regularStudents = members
     .filter((m) => !m.is_mayor)
     .slice()
     .sort((a, b) => studentSortKey(a).localeCompare(studentSortKey(b)));
-  // Total section membership (students + Mayor + Officer), not just the
-  // students shown in the grid below - the Mayor has their own dedicated
-  // card and is intentionally left out of that grid, but must still count.
   const totalStudentCount = section?.member_count ?? members.length;
 
   const isTeachingProfessor = activeAssignments.some((ta) => ta.professor_id === user?.id);
@@ -190,15 +168,6 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
     isTeachingProfessor ||
     members.some((m) => m.user_id === user?.id && (m.is_mayor || m.is_officer));
 
-  // A student who was just added to a section by a professor/admin/mayor
-  // starts out with no StudentProfile.first_name set at all - there's no
-  // separate "pending invitation" concept in this system (add_member always
-  // creates an already-active membership), so this reuses the already-
-  // fetched member row (this IS the page students land on when they open
-  // Sections - SectionDetailModal, which had this same gate, is only ever
-  // opened via the professor/admin/mayor-only "Manage Section" button, so a
-  // regular student never reached it) as the signal that they still need to
-  // set their real name before browsing the section normally.
   const currentMember = members.find((m) => m.user_id === user?.id);
   const needsRealName = user?.role === 'student' && !!currentMember && !currentMember.user_first_name;
 
@@ -223,10 +192,6 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
   const visibleStudents =
     showAllStudents || search.trim() ? filteredStudents : filteredStudents.slice(0, STUDENTS_PAGE_SIZE);
 
-  // Announcements actually targeted at this section (not CCS-wide/public
-  // ones) - reuses the existing announcement list/permissions wholesale,
-  // just narrowed client-side to this section's own feed. Newest first,
-  // capped to what the compact sidebar widget can show.
   const sectionAnnouncements = useMemo(() => {
     if (!section) return [];
     return (announcements as Announcement[])
@@ -266,9 +231,6 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
         first_name: realFirstName.trim(),
         last_name: realLastName.trim(),
       });
-      // Nothing to separately "accept" - the student is already a member,
-      // so refreshing the section (now with their real name populated) is
-      // what reveals the normal section view below.
       await refreshSection();
       toast.success('Welcome! Your name has been saved.');
     } catch (err: any) {
@@ -278,10 +240,6 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
     }
   };
 
-  // Opens the section's own dedicated group conversation (never the generic
-  // chat list) - reuses the existing chat widget/API, gets-or-lazily-creates
-  // the group on the backend so this works even for sections created before
-  // this feature existed.
   const handleOpenSectionChat = async () => {
     if (!section || openingChat) return;
     setOpeningChat(true);
@@ -300,11 +258,11 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
   if (isLoading && sections.length === 0) {
     return (
       <div className="max-w-6xl mx-auto space-y-4">
-        <div className="h-20 rounded-2xl bg-[#0D1722] animate-pulse" />
-        <div className="h-32 rounded-2xl bg-[#0D1722] animate-pulse" />
+        <div className="h-20 rounded-2xl bg-border animate-pulse" />
+        <div className="h-32 rounded-2xl bg-border animate-pulse" />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="h-40 rounded-2xl bg-[#0D1722] animate-pulse" />
-          <div className="h-40 rounded-2xl bg-[#0D1722] animate-pulse" />
+          <div className="h-40 rounded-2xl bg-border animate-pulse" />
+          <div className="h-40 rounded-2xl bg-border animate-pulse" />
         </div>
       </div>
     );
@@ -313,14 +271,14 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
   if (sections.length === 0) {
     return (
       <div className="max-w-3xl mx-auto">
-        <h1 className="text-2xl font-bold text-[#F1F5F9]">Section</h1>
-        <p className="text-[#94A3B8] mt-1 text-sm">Manage and connect with your class community.</p>
+        <h1 className="text-2xl font-bold text-text-primary">Section</h1>
+        <p className="text-text-secondary mt-1 text-sm">Manage and connect with your class community.</p>
         <div className="mt-5">
           <TeachingAssignmentOnboardingBanner />
         </div>
-        <div className="mt-6 rounded-2xl border border-[#1E3447] bg-[#0D1722] py-16 text-center">
-          <UserGroupIcon className="h-12 w-12 mx-auto text-[#1E3447]" />
-          <p className="text-[#94A3B8] mt-3">
+        <div className="mt-6 rounded-2xl border border-border bg-bg py-16 text-center">
+          <UserGroupIcon className="h-12 w-12 mx-auto text-border" />
+          <p className="text-text-secondary mt-3">
             {canCreateSection ? 'No sections yet.' : 'You are not enrolled in any sections yet.'}
           </p>
           {canCreateSection && (
@@ -339,36 +297,35 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
 
   return (
     <div className="max-w-6xl mx-auto">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-5">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-[#F1F5F9]">Section</h1>
-          <p className="text-[#94A3B8] mt-1 text-sm">Manage and connect with your class community.</p>
+          <h1 className="text-2xl font-bold text-text-primary">Section</h1>
+          <p className="text-text-secondary mt-1 text-sm">Manage and connect with your class community.</p>
         </div>
 
         <div className="relative w-full sm:w-72 flex-shrink-0">
           <button
             onClick={() => setShowSectionSwitcher((v) => !v)}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl border border-[#1E3447] bg-[#0D1722] hover:border-[#00C8FF]/40 transition text-left"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl border border-border bg-bg hover:border-[#00C8FF]/40 transition text-left"
           >
             <div className="h-9 w-9 rounded-xl bg-[#00C8FF]/10 border border-[#00C8FF]/25 flex items-center justify-center flex-shrink-0">
               <UserGroupIcon className="h-5 w-5 text-[#00C8FF]" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-[#F1F5F9] truncate">{section?.name}</p>
-              <p className="text-xs text-[#64748B] truncate">
+              <p className="text-sm font-semibold text-text-primary truncate">{section?.name}</p>
+              <p className="text-xs text-text-muted truncate">
                 {section?.course} • Year {section?.year_level} • {section?.academic_year}
               </p>
             </div>
             {sections.length > 1 && (
-              <ChevronDownIcon className={`h-4 w-4 text-[#64748B] flex-shrink-0 transition-transform ${showSectionSwitcher ? 'rotate-180' : ''}`} />
+              <ChevronDownIcon className={`h-4 w-4 text-text-muted flex-shrink-0 transition-transform ${showSectionSwitcher ? 'rotate-180' : ''}`} />
             )}
           </button>
 
           {showSectionSwitcher && sections.length > 1 && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setShowSectionSwitcher(false)} />
-              <div className="absolute right-0 top-full mt-1.5 w-full rounded-xl border border-[#1E3447] bg-[#111E2B] shadow-xl z-20 overflow-hidden max-h-64 overflow-y-auto themed-scrollbar">
+              <div className="absolute right-0 top-full mt-1.5 w-full rounded-xl border border-border bg-bg shadow-xl z-20 overflow-hidden max-h-64 overflow-y-auto themed-scrollbar">
                 {sections.map((s) => (
                   <button
                     key={s.id}
@@ -379,7 +336,7 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
                       setSearch('');
                     }}
                     className={`w-full text-left px-4 py-2.5 text-sm transition ${
-                      s.id === selectedSectionId ? 'text-[#00C8FF] bg-[#00C8FF]/10' : 'text-[#F1F5F9] hover:bg-white/5'
+                      s.id === selectedSectionId ? 'text-[#00C8FF] bg-[#00C8FF]/10' : 'text-text-primary hover:bg-glass'
                     }`}
                   >
                     {s.name}
@@ -391,7 +348,7 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
                       setShowSectionSwitcher(false);
                       setShowCreateSection(true);
                     }}
-                    className="w-full flex items-center gap-1.5 text-left px-4 py-2.5 text-sm text-[#94A3B8] hover:text-[#00C8FF] hover:bg-white/5 transition border-t border-[#1E3447]"
+                    className="w-full flex items-center gap-1.5 text-left px-4 py-2.5 text-sm text-text-secondary hover:text-[#00C8FF] hover:bg-glass transition border-t border-border"
                   >
                     <PlusIcon className="h-3.5 w-3.5" />
                     New Section
@@ -409,7 +366,7 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
         <div className="rounded-2xl border border-[#EF4444]/30 bg-[#EF4444]/10 p-6 flex items-start gap-3">
           <ExclamationTriangleIcon className="h-5 w-5 text-[#EF4444] flex-shrink-0 mt-0.5" />
           <div className="flex-1">
-            <p className="text-sm text-[#F1F5F9]">{sectionError}</p>
+            <p className="text-sm text-text-primary">{sectionError}</p>
             <button
               onClick={() => selectedSectionId && loadSection(selectedSectionId)}
               className="text-xs font-medium text-[#EF4444] hover:underline mt-1.5"
@@ -420,27 +377,22 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
         </div>
       ) : sectionLoading || !section ? (
         <div className="space-y-4">
-          <div className="h-32 rounded-2xl bg-[#0D1722] animate-pulse" />
+          <div className="h-32 rounded-2xl bg-border animate-pulse" />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="h-40 rounded-2xl bg-[#0D1722] animate-pulse" />
-            <div className="h-40 rounded-2xl bg-[#0D1722] animate-pulse" />
+            <div className="h-40 rounded-2xl bg-border animate-pulse" />
+            <div className="h-40 rounded-2xl bg-border animate-pulse" />
           </div>
         </div>
       ) : needsRealName ? (
-        /* First time a newly-added student opens this section - blocks the
-           normal view until they set their real name (via the existing
-           profile API). There's no separate "accept invitation" step to
-           perform since add_member already made them a full member -
-           saving the name and refreshing is what reveals the section. */
-        <div className="rounded-2xl border border-[#1E3447] bg-[#0D1722] p-6 sm:p-10 text-center">
+        <div className="rounded-2xl border border-border bg-bg p-6 sm:p-10 text-center">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-[#00C8FF]/25 bg-[#00C8FF]/10">
             <SparklesIcon className="h-7 w-7 text-[#00C8FF]" />
           </div>
-          <h3 className="text-lg font-bold text-[#F1F5F9] mt-4">You're in {section.name}!</h3>
-          <p className="text-sm text-[#94A3B8] mt-1">What's your real name?</p>
+          <h3 className="text-lg font-bold text-text-primary mt-4">You're in {section.name}!</h3>
+          <p className="text-sm text-text-secondary mt-1">What's your real name?</p>
           <form onSubmit={handleSaveRealName} className="mt-5 max-w-sm mx-auto text-left space-y-3">
             <div>
-              <label className="block text-xs font-medium text-[#94A3B8] mb-1.5">First Name</label>
+              <label className="block text-xs font-medium text-text-secondary mb-1.5">First Name</label>
               <input
                 type="text"
                 value={realFirstName}
@@ -451,7 +403,7 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-[#94A3B8] mb-1.5">Last Name</label>
+              <label className="block text-xs font-medium text-text-secondary mb-1.5">Last Name</label>
               <input
                 type="text"
                 value={realLastName}
@@ -472,11 +424,10 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
         </div>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-          {/* Main content */}
           <div className="xl:col-span-2 space-y-5 min-w-0">
             {/* Professor */}
-            <div className="rounded-2xl border border-[#00C8FF]/20 bg-[#0D1722] shadow-[0_0_30px_rgba(0,200,255,0.05)] p-5">
-              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[#64748B] mb-3">
+            <div className="rounded-2xl border border-[#00C8FF]/20 bg-bg shadow-[0_0_30px_rgba(0,200,255,0.05)] p-5">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-text-muted mb-3">
                 <AcademicCapIcon className="h-4 w-4" />
                 Professor
               </div>
@@ -494,19 +445,19 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
                           type="button"
                           onClick={() => setShowProfessorDetails(true)}
                           title="View professor details"
-                          className="group flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-4 text-left rounded-xl -m-1.5 p-1.5 hover:bg-white/5 active:bg-white/10 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00C8FF]/60"
+                          className="group flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-4 text-left rounded-xl -m-1.5 p-1.5 hover:bg-glass active:bg-glass transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00C8FF]/60"
                         >
                           <Avatar src={first.professor_avatar} name={fullName} size="lg" />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <p className="text-base font-semibold text-[#F1F5F9] truncate group-hover:text-[#00C8FF] transition-colors">
+                              <p className="text-base font-semibold text-text-primary truncate group-hover:text-[#00C8FF] transition-colors">
                                 Prof. {fullName}
                               </p>
                               <RoleBadge role="professor" />
                             </div>
-                            <p className="text-sm text-[#94A3B8] mt-0.5 truncate">Subject: {subjectLine}</p>
+                            <p className="text-sm text-text-secondary mt-0.5 truncate">Subject: {subjectLine}</p>
                             {first.schedule_days.length > 0 && first.schedule_start && first.schedule_end && (
-                              <p className="text-xs text-[#64748B] mt-0.5">
+                              <p className="text-xs text-text-muted mt-0.5">
                                 Schedule: {first.schedule_days.join(', ')} {formatScheduleTime(first.schedule_start)}-
                                 {formatScheduleTime(first.schedule_end)}
                               </p>
@@ -526,21 +477,19 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
                       </div>
 
                       {otherProfessorGroups.length > 0 && (
-                        <div className="relative mt-4 pt-4 border-t border-[#1E3447]">
+                        <div className="relative mt-4 pt-4 border-t border-border">
                           <button
                             onClick={() => setShowProfessorSwitcher((v) => !v)}
-                            className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-[#00C8FF] hover:bg-white/5 rounded-xl transition"
+                            className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-[#00C8FF] hover:bg-glass rounded-xl transition"
                           >
                             <span>View other professors ({otherProfessorGroups.length})</span>
-                            <ChevronDownIcon
-                              className={`h-4 w-4 flex-shrink-0 transition-transform ${showProfessorSwitcher ? 'rotate-180' : ''}`}
-                            />
+                            <ChevronDownIcon className={`h-4 w-4 flex-shrink-0 transition-transform ${showProfessorSwitcher ? 'rotate-180' : ''}`} />
                           </button>
 
                           {showProfessorSwitcher && (
                             <>
                               <div className="fixed inset-0 z-10" onClick={() => setShowProfessorSwitcher(false)} />
-                              <div className="relative z-20 mt-1.5 rounded-xl border border-[#1E3447] bg-[#111E2B] shadow-xl overflow-hidden max-h-64 overflow-y-auto themed-scrollbar">
+                              <div className="relative z-20 mt-1.5 rounded-xl border border-border bg-bg shadow-xl overflow-hidden max-h-64 overflow-y-auto themed-scrollbar">
                                 {otherProfessorGroups.map((group) => {
                                   const p = group[0];
                                   const name = p.professor_first_name
@@ -553,12 +502,12 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
                                         setSelectedProfessorId(p.professor_id);
                                         setShowProfessorSwitcher(false);
                                       }}
-                                      className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-white/5 transition"
+                                      className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-glass transition"
                                     >
                                       <Avatar src={p.professor_avatar} name={name} size="sm" />
                                       <div className="min-w-0 flex-1">
-                                        <p className="text-sm font-medium text-[#F1F5F9] truncate">Prof. {name}</p>
-                                        <p className="text-xs text-[#64748B] truncate">
+                                        <p className="text-sm font-medium text-text-primary truncate">Prof. {name}</p>
+                                        <p className="text-xs text-text-muted truncate">
                                           {group.map((ta) => ta.subject).join(' • ')}
                                         </p>
                                       </div>
@@ -574,14 +523,13 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
                   );
                 })()
               ) : (
-                <p className="text-sm text-[#64748B]">No professor assigned to this section.</p>
+                <p className="text-sm text-text-muted">No professor assigned to this section.</p>
               )}
             </div>
 
             {/* Mayor / Officer cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Mayor */}
-              <div className="rounded-2xl border border-[#F5B82E]/25 bg-[#0D1722] p-4">
+              <div className="rounded-2xl border border-[#F5B82E]/25 bg-bg p-4">
                 <div className="flex items-center gap-1.5 text-sm font-semibold text-[#F5B82E] mb-3">
                   <CrownIcon className="h-4 w-4" />
                   Mayor
@@ -591,7 +539,7 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
                     <div className="flex items-center gap-3">
                       <Avatar src={mayor.user_avatar} name={mayor.user_username || undefined} size="md" />
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-[#F1F5F9] truncate">
+                        <p className="text-sm font-semibold text-text-primary truncate">
                           {formatLastFirstName(mayor.user_first_name, mayor.user_last_name, mayor.user_username)}
                         </p>
                         <span className="inline-block mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#F5B82E] bg-[#F5B82E]/10 border border-[#F5B82E]/30 rounded-full px-2 py-0.5">
@@ -599,8 +547,8 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
                         </span>
                       </div>
                     </div>
-                    <p className="text-xs text-[#64748B] mt-2.5">{section.name}</p>
-                    <p className="text-xs text-[#94A3B8] flex items-center gap-1 mt-0.5">
+                    <p className="text-xs text-text-muted mt-2.5">{section.name}</p>
+                    <p className="text-xs text-text-secondary flex items-center gap-1 mt-0.5">
                       <ShieldIcon className="h-3 w-3 text-[#F5B82E]" />
                       Leading our section
                     </p>
@@ -616,12 +564,11 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
                     )}
                   </div>
                 ) : (
-                  <p className="text-sm text-[#64748B] py-3">No Mayor assigned</p>
+                  <p className="text-sm text-text-muted py-3">No Mayor assigned</p>
                 )}
               </div>
 
-              {/* Officer */}
-              <div className="rounded-2xl border border-[#3B9EFF]/25 bg-[#0D1722] p-4">
+              <div className="rounded-2xl border border-[#3B9EFF]/25 bg-bg p-4">
                 <div className="flex items-center gap-1.5 text-sm font-semibold text-[#3B9EFF] mb-3">
                   <ShieldIcon className="h-4 w-4" />
                   Officer
@@ -631,7 +578,7 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
                     <div className="flex items-center gap-3">
                       <Avatar src={officer.user_avatar} name={officer.user_username || undefined} size="md" />
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold text-[#F1F5F9] truncate">
+                        <p className="text-sm font-semibold text-text-primary truncate">
                           {formatLastFirstName(officer.user_first_name, officer.user_last_name, officer.user_username)}
                         </p>
                         <span className="inline-block mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#3B9EFF] bg-[#3B9EFF]/10 border border-[#3B9EFF]/30 rounded-full px-2 py-0.5">
@@ -639,8 +586,8 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
                         </span>
                       </div>
                     </div>
-                    <p className="text-xs text-[#64748B] mt-2.5">{section.name}</p>
-                    <p className="text-xs text-[#94A3B8] flex items-center gap-1 mt-0.5">
+                    <p className="text-xs text-text-muted mt-2.5">{section.name}</p>
+                    <p className="text-xs text-text-secondary flex items-center gap-1 mt-0.5">
                       <ShieldIcon className="h-3 w-3 text-[#3B9EFF]" />
                       Assisting our section
                     </p>
@@ -656,27 +603,27 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
                     )}
                   </div>
                 ) : (
-                  <p className="text-sm text-[#64748B] py-3">No Officer assigned</p>
+                  <p className="text-sm text-text-muted py-3">No Officer assigned</p>
                 )}
               </div>
             </div>
 
             {/* Students */}
-            <div className="rounded-2xl border border-[#1E3447] bg-[#0D1722] p-4 sm:p-5">
+            <div className="rounded-2xl border border-border bg-bg p-4 sm:p-5">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                 <div className="flex items-center gap-2">
                   <UsersIcon className="h-5 w-5 text-[#00C8FF]" />
-                  <h3 className="font-semibold text-[#F1F5F9]">Students ({totalStudentCount})</h3>
+                  <h3 className="font-semibold text-text-primary">Students ({totalStudentCount})</h3>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="relative flex-1 sm:w-56">
-                    <MagnifyingGlassIcon className="h-4 w-4 text-[#64748B] absolute left-3 top-1/2 -translate-y-1/2" />
+                    <MagnifyingGlassIcon className="h-4 w-4 text-text-muted absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
                       placeholder="Search students..."
-                      className="w-full pl-9 pr-3 py-2 rounded-xl border border-[#1E3447] bg-[#0A111A] text-sm text-[#F1F5F9] placeholder-[#64748B] focus:outline-none focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition"
+                      className="w-full pl-9 pr-3 py-2 rounded-xl border border-border bg-bg text-sm text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition"
                     />
                   </div>
                   {canManage && (
@@ -693,18 +640,15 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
               </div>
 
               {regularStudents.length === 0 ? (
-                <div className="text-center py-10 rounded-xl border border-[#1E3447] bg-[#0A111A]">
-                  <p className="text-[#94A3B8]">No students in this section yet.</p>
+                <div className="text-center py-10 rounded-xl border border-border bg-bg">
+                  <p className="text-text-secondary">No students in this section yet.</p>
                 </div>
               ) : filteredStudents.length === 0 ? (
-                <p className="text-sm text-[#64748B] text-center py-8">No students match your search.</p>
+                <p className="text-sm text-text-muted text-center py-8">No students match your search.</p>
               ) : (
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                     {visibleStudents.map((member: SectionMember) => {
-                      // Avatar initials/alt text use natural "First Last" order;
-                      // the visible label uses the roster's "Last, First"
-                      // convention (see formatLastFirstName).
                       const fullName = member.user_first_name
                         ? `${member.user_first_name} ${member.user_last_name || ''}`.trim()
                         : member.user_username || 'Student';
@@ -725,13 +669,13 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
                               navigate(`/profile/${member.user_id}`);
                             }
                           }}
-                          className="rounded-xl border border-[#1E3447] bg-[#0A111A] hover:border-[#00C8FF]/30 transition p-3 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00C8FF]/60"
+                          className="rounded-xl border border-border bg-bg hover:border-[#00C8FF]/30 transition p-3 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00C8FF]/60"
                         >
                           <div className="flex items-center gap-2.5">
                             <Avatar src={member.user_avatar} name={fullName} size="sm" />
                             <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium text-[#F1F5F9] truncate">{displayName}</p>
-                              <span className="text-[10px] font-medium text-[#94A3B8] bg-white/5 border border-[#1E3447] rounded-full px-1.5 py-0.5">
+                              <p className="text-sm font-medium text-text-primary truncate">{displayName}</p>
+                              <span className="text-[10px] font-medium text-text-secondary bg-glass border border-border rounded-full px-1.5 py-0.5">
                                 {member.is_officer ? 'Officer' : 'Student'}
                               </span>
                             </div>
@@ -743,7 +687,7 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
                                 }}
                                 disabled={messagingUserId === member.user_id}
                                 title="Message"
-                                className="p-1.5 text-[#64748B] hover:text-[#00C8FF] hover:bg-white/5 rounded-lg transition disabled:opacity-50 flex-shrink-0"
+                                className="p-1.5 text-text-muted hover:text-[#00C8FF] hover:bg-glass rounded-lg transition disabled:opacity-50 flex-shrink-0"
                               >
                                 <ChatBubbleLeftIcon className="h-4 w-4" />
                               </button>
@@ -757,7 +701,7 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
                   {!search.trim() && filteredStudents.length > STUDENTS_PAGE_SIZE && (
                     <button
                       onClick={() => setShowAllStudents((v) => !v)}
-                      className="w-full mt-3 py-2 text-sm font-medium text-[#00C8FF] hover:bg-white/5 rounded-xl transition"
+                      className="w-full mt-3 py-2 text-sm font-medium text-[#00C8FF] hover:bg-glass rounded-xl transition"
                     >
                       {showAllStudents ? 'Show Less' : `View All (${filteredStudents.length})`}
                     </button>
@@ -769,14 +713,9 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
 
           {/* Right sidebar */}
           <div className="space-y-5 xl:sticky xl:top-24 xl:self-start">
-            {/* Section Announcement - the existing Announcement system's data
-                and permissions, narrowed to just this section's own feed
-                (see sectionAnnouncements above). Each entry opens the real
-                announcement detail page; "View all" opens the dedicated
-                per-section announcement view. */}
-            <div className="rounded-2xl border border-[#1E3447] bg-[#0D1722] p-4">
+            <div className="rounded-2xl border border-border bg-bg p-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="flex items-center gap-2 font-semibold text-[#F1F5F9]">
+                <h3 className="flex items-center gap-2 font-semibold text-text-primary">
                   <MegaphoneIcon className="h-4 w-4 text-[#00C8FF]" />
                   Section Announcement
                 </h3>
@@ -790,8 +729,8 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
 
               {sectionAnnouncements.length === 0 ? (
                 <div className="text-center py-6">
-                  <MegaphoneIcon className="h-6 w-6 text-[#1E3447] mx-auto mb-2" />
-                  <p className="text-xs text-[#64748B]">No announcements for this section yet.</p>
+                  <MegaphoneIcon className="h-6 w-6 text-border mx-auto mb-2" />
+                  <p className="text-xs text-text-muted">No announcements for this section yet.</p>
                 </div>
               ) : (
                 <div className="space-y-1">
@@ -799,12 +738,12 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
                     <button
                       key={a.id}
                       onClick={() => navigate(`/announcements/${a.id}`)}
-                      className="w-full flex items-start gap-2.5 px-2 py-2 rounded-xl hover:bg-white/5 transition text-left"
+                      className="w-full flex items-start gap-2.5 px-2 py-2 rounded-xl hover:bg-glass transition text-left"
                     >
                       <Avatar src={a.created_by_avatar} name={a.created_by_username || undefined} size="sm" />
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-[#F1F5F9] truncate">{a.title}</p>
-                        <p className="text-xs text-[#64748B] mt-0.5 truncate">
+                        <p className="text-sm font-medium text-text-primary truncate">{a.title}</p>
+                        <p className="text-xs text-text-muted mt-0.5 truncate">
                           {a.created_by_username || 'Unknown'} &middot; {formatRelativeTime(a.created_at)}
                         </p>
                       </div>
@@ -814,48 +753,45 @@ export default function SectionDashboard({ initialSectionId }: SectionDashboardP
               )}
             </div>
 
-            {/* Quick Actions - compact icon buttons only, no descriptive
-                welcome copy. Same handlers/permissions as before, just a
-                denser presentation. */}
-            <div className="rounded-2xl border border-[#1E3447] bg-[#0D1722] p-4">
-              <h3 className="font-semibold text-[#F1F5F9] mb-3">Quick Actions</h3>
+            <div className="rounded-2xl border border-border bg-bg p-4">
+              <h3 className="font-semibold text-text-primary mb-3">Quick Actions</h3>
               <div className="grid grid-cols-2 gap-2.5">
                 {canPostAnnouncement && (
                   <button
                     onClick={() => setShowCreateAnnouncement(true)}
                     title="Create Announcement"
-                    className="flex flex-col items-center justify-center gap-1.5 px-2 py-3.5 rounded-xl border border-[#1E3447] bg-[#0A111A] hover:border-[#00C8FF]/40 hover:bg-white/5 transition text-center"
+                    className="flex flex-col items-center justify-center gap-1.5 px-2 py-3.5 rounded-xl border border-border bg-bg hover:border-[#00C8FF]/40 hover:bg-glass transition text-center"
                   >
                     <PlusIcon className="h-5 w-5 text-[#00C8FF]" />
-                    <span className="text-xs font-medium text-[#F1F5F9] leading-tight">Create Announcement</span>
+                    <span className="text-xs font-medium text-text-primary leading-tight">Create Announcement</span>
                   </button>
                 )}
                 <button
                   onClick={() => section && navigate(`/announcements?section=${section.id}`)}
                   disabled={!section}
                   title="View Announcements"
-                  className="flex flex-col items-center justify-center gap-1.5 px-2 py-3.5 rounded-xl border border-[#1E3447] bg-[#0A111A] hover:border-[#00C8FF]/40 hover:bg-white/5 transition text-center disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#0A111A]"
+                  className="flex flex-col items-center justify-center gap-1.5 px-2 py-3.5 rounded-xl border border-border bg-bg hover:border-[#00C8FF]/40 hover:bg-glass transition text-center disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-bg"
                 >
                   <SpeakerWaveIcon className="h-5 w-5 text-[#00C8FF]" />
-                  <span className="text-xs font-medium text-[#F1F5F9] leading-tight">View Announcements</span>
+                  <span className="text-xs font-medium text-text-primary leading-tight">View Announcements</span>
                 </button>
                 <button
                   onClick={handleOpenSectionChat}
                   disabled={!section || openingChat}
                   title="Section Chat"
-                  className="flex flex-col items-center justify-center gap-1.5 px-2 py-3.5 rounded-xl border border-[#1E3447] bg-[#0A111A] hover:border-[#00C8FF]/40 hover:bg-white/5 transition text-center disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#0A111A]"
+                  className="flex flex-col items-center justify-center gap-1.5 px-2 py-3.5 rounded-xl border border-border bg-bg hover:border-[#00C8FF]/40 hover:bg-glass transition text-center disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-bg"
                 >
                   <ChatBubbleLeftIcon className="h-5 w-5 text-[#00C8FF]" />
-                  <span className="text-xs font-medium text-[#F1F5F9] leading-tight">Section Chat</span>
+                  <span className="text-xs font-medium text-text-primary leading-tight">Section Chat</span>
                 </button>
                 {canManage && (
                   <button
                     onClick={() => setShowManageSection(true)}
                     title="Manage Section"
-                    className="flex flex-col items-center justify-center gap-1.5 px-2 py-3.5 rounded-xl border border-[#1E3447] bg-[#0A111A] hover:border-[#00C8FF]/40 hover:bg-white/5 transition text-center"
+                    className="flex flex-col items-center justify-center gap-1.5 px-2 py-3.5 rounded-xl border border-border bg-bg hover:border-[#00C8FF]/40 hover:bg-glass transition text-center"
                   >
                     <Cog6ToothIcon className="h-5 w-5 text-[#00C8FF]" />
-                    <span className="text-xs font-medium text-[#F1F5F9] leading-tight">Manage Section</span>
+                    <span className="text-xs font-medium text-text-primary leading-tight">Manage Section</span>
                   </button>
                 )}
               </div>

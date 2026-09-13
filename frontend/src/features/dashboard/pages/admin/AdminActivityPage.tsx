@@ -31,9 +31,9 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-[rgba(139,92,246,0.15)] bg-[rgba(10,20,30,0.75)] p-4">
+    <div className="rounded-2xl border border-border bg-glass p-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-[#F1F5F9]">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
           <Icon className="h-4 w-4 text-[#8B5CF6]" />
           {title}
         </h3>
@@ -43,10 +43,10 @@ function Panel({
       </div>
       {isLoading ? (
         <div className="space-y-2">
-          {[0, 1, 2].map((i) => <div key={i} className="h-10 rounded-xl bg-[#1E3447]/50 animate-pulse" />)}
+          {[0, 1, 2].map((i) => <div key={i} className="h-10 rounded-xl bg-border/50 animate-pulse" />)}
         </div>
       ) : isEmpty ? (
-        <p className="text-xs text-[#64748B] text-center py-6">{emptyLabel}</p>
+        <p className="text-xs text-text-muted text-center py-6">{emptyLabel}</p>
       ) : (
         <div className="space-y-1">{children}</div>
       )}
@@ -75,13 +75,13 @@ export default function AdminActivityPage({ onNavigate }: AdminActivityPageProps
     <div className="max-w-6xl mx-auto space-y-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-[#F1F5F9]">System Activity</h1>
-          <p className="text-[#94A3B8] mt-1 text-sm">What's happening across CCS HUB right now.</p>
+          <h1 className="text-2xl font-bold text-text-primary">System Activity</h1>
+          <p className="text-text-secondary mt-1 text-sm">What's happening across CCS HUB right now.</p>
         </div>
         <button
           onClick={refreshAll}
           title="Refresh"
-          className="p-2 rounded-xl border border-[#1E3447] bg-[rgba(10,20,30,0.75)] text-[#94A3B8] hover:text-[#8B5CF6] hover:border-[#8B5CF6]/30 transition flex-shrink-0"
+          className="p-2 rounded-xl border border-border bg-glass text-text-secondary hover:text-[#8B5CF6] hover:border-[#8B5CF6]/30 transition flex-shrink-0"
         >
           <ArrowPathIcon className="h-4 w-4" />
         </button>
@@ -97,11 +97,11 @@ export default function AdminActivityPage({ onNavigate }: AdminActivityPageProps
           onViewAll={() => onNavigate('livestreams')}
         >
           {liveSessions.map((s) => (
-            <div key={s.id} className="flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-white/5 transition">
+            <div key={s.id} className="flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-glass transition">
               <Avatar src={s.host_avatar_url} name={s.host_full_name || s.host_username} size="sm" />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-[#F1F5F9] truncate">{s.title}</p>
-                <p className="text-xs text-[#64748B]">{s.is_meethub ? 'Meethub' : 'Livestream'} &middot; {s.host_full_name || s.host_username} &middot; {s.viewer_count} viewer{s.viewer_count === 1 ? '' : 's'}</p>
+                <p className="text-sm font-medium text-text-primary truncate">{s.title}</p>
+                <p className="text-xs text-text-muted">{s.is_meethub ? 'Meethub' : 'Livestream'} &middot; {s.host_full_name || s.host_username} &middot; {s.viewer_count} viewer{s.viewer_count === 1 ? '' : 's'}</p>
               </div>
               <span className="flex-shrink-0 h-1.5 w-1.5 rounded-full bg-[#22C55E] animate-pulse" />
             </div>
@@ -117,11 +117,11 @@ export default function AdminActivityPage({ onNavigate }: AdminActivityPageProps
           onViewAll={() => onNavigate('users')}
         >
           {usersData?.items.map((u) => (
-            <div key={u.id} className="flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-white/5 transition">
+            <div key={u.id} className="flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-glass transition">
               <Avatar src={u.avatar_url} name={u.full_name || u.username} size="sm" />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-[#F1F5F9] truncate">{u.full_name || u.username}</p>
-                <p className="text-xs text-[#64748B]">Joined {formatRelativeTime(u.created_at)}</p>
+                <p className="text-sm font-medium text-text-primary truncate">{u.full_name || u.username}</p>
+                <p className="text-xs text-text-muted">Joined {formatRelativeTime(u.created_at)}</p>
               </div>
               <RoleBadge role={u.role} />
             </div>
@@ -137,11 +137,11 @@ export default function AdminActivityPage({ onNavigate }: AdminActivityPageProps
           onViewAll={() => onNavigate('posts')}
         >
           {postsData?.items.map((p) => (
-            <div key={p.id} className="flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-white/5 transition">
+            <div key={p.id} className="flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-glass transition">
               <Avatar src={p.author_avatar_url} name={p.author_full_name || p.author_username} size="sm" />
               <div className="min-w-0 flex-1">
-                <p className="text-sm text-[#F1F5F9] truncate">{p.content || '(media only)'}</p>
-                <p className="text-xs text-[#64748B]">{p.author_full_name || p.author_username} &middot; {formatRelativeTime(p.created_at)}</p>
+                <p className="text-sm text-text-primary truncate">{p.content || '(media only)'}</p>
+                <p className="text-xs text-text-muted">{p.author_full_name || p.author_username} &middot; {formatRelativeTime(p.created_at)}</p>
               </div>
             </div>
           ))}
@@ -156,11 +156,11 @@ export default function AdminActivityPage({ onNavigate }: AdminActivityPageProps
           onViewAll={() => onNavigate('announcements')}
         >
           {annData?.items.map((a) => (
-            <div key={a.id} className="flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-white/5 transition">
+            <div key={a.id} className="flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-glass transition">
               <Avatar src={a.author_avatar_url} name={a.author_full_name || a.author_username} size="sm" />
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-[#F1F5F9] truncate">{a.title}</p>
-                <p className="text-xs text-[#64748B]">{a.author_full_name || a.author_username} &middot; {formatRelativeTime(a.created_at)}</p>
+                <p className="text-sm font-medium text-text-primary truncate">{a.title}</p>
+                <p className="text-xs text-text-muted">{a.author_full_name || a.author_username} &middot; {formatRelativeTime(a.created_at)}</p>
               </div>
             </div>
           ))}

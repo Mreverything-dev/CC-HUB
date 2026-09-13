@@ -17,26 +17,23 @@ export function UserDetailsModal({ userId, onClose }: UserDetailsModalProps) {
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="w-full max-w-sm rounded-2xl border border-[#1E3447] bg-[#111E2B] shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#1E3447]">
-          <h3 className="font-semibold text-[#F1F5F9]">User Details</h3>
-          <button onClick={onClose} className="p-1.5 text-[#94A3B8] hover:text-[#F1F5F9] rounded-full hover:bg-white/5 transition">
+      <div className="w-full max-w-sm rounded-2xl border border-border bg-bg shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <h3 className="font-semibold text-text-primary">User Details</h3>
+          <button onClick={onClose} className="p-1.5 text-text-secondary hover:text-text-primary rounded-full hover:bg-glass transition">
             <XMarkIcon className="h-5 w-5" />
           </button>
         </div>
 
         {isLoading || !user ? (
-          <div className="p-8 text-center text-sm text-[#64748B]">Loading...</div>
+          <div className="p-8 text-center text-sm text-text-muted">Loading...</div>
         ) : (
           <div className="p-5 space-y-4">
             <div className="flex items-center gap-3">
               <Avatar src={user.avatar_url} name={user.full_name || user.username} size="lg" />
               <div className="min-w-0">
-                <p className="text-base font-semibold text-[#F1F5F9] truncate">{user.full_name || user.username}</p>
-                <p className="text-xs text-[#64748B]">@{user.username}</p>
+                <p className="text-base font-semibold text-text-primary truncate">{user.full_name || user.username}</p>
+                <p className="text-xs text-text-muted">@{user.username}</p>
               </div>
             </div>
 
@@ -49,32 +46,32 @@ export function UserDetailsModal({ userId, onClose }: UserDetailsModalProps) {
               >
                 {user.is_active ? 'Active' : 'Suspended'}
               </span>
-              <span className={`inline-flex items-center gap-1 text-xs ${user.is_online ? 'text-[#22C55E]' : 'text-[#64748B]'}`}>
-                <span className={`h-1.5 w-1.5 rounded-full ${user.is_online ? 'bg-[#22C55E]' : 'bg-[#64748B]'}`} />
+              <span className={`inline-flex items-center gap-1 text-xs ${user.is_online ? 'text-[#22C55E]' : 'text-text-muted'}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${user.is_online ? 'bg-[#22C55E]' : 'bg-text-muted'}`} />
                 {user.is_online ? 'Online' : 'Offline'}
               </span>
             </div>
 
-            <dl className="space-y-2.5 text-sm border-t border-[#1E3447] pt-4">
+            <dl className="space-y-2.5 text-sm border-t border-border pt-4">
               <div className="flex items-start gap-2.5">
-                <EnvelopeIcon className="h-4 w-4 text-[#64748B] mt-0.5 flex-shrink-0" />
+                <EnvelopeIcon className="h-4 w-4 text-text-muted mt-0.5 flex-shrink-0" />
                 <div>
-                  <dt className="text-[#64748B] text-xs">Email</dt>
-                  <dd className="text-[#F1F5F9] break-all">{user.email}</dd>
+                  <dt className="text-text-muted text-xs">Email</dt>
+                  <dd className="text-text-primary break-all">{user.email}</dd>
                 </div>
               </div>
               <div className="flex items-start gap-2.5">
-                <UserGroupIcon className="h-4 w-4 text-[#64748B] mt-0.5 flex-shrink-0" />
+                <UserGroupIcon className="h-4 w-4 text-text-muted mt-0.5 flex-shrink-0" />
                 <div>
-                  <dt className="text-[#64748B] text-xs">Section</dt>
-                  <dd className="text-[#F1F5F9]">{user.section_name || '—'}</dd>
+                  <dt className="text-text-muted text-xs">Section</dt>
+                  <dd className="text-text-primary">{user.section_name || '—'}</dd>
                 </div>
               </div>
               <div className="flex items-start gap-2.5">
-                <CalendarIcon className="h-4 w-4 text-[#64748B] mt-0.5 flex-shrink-0" />
+                <CalendarIcon className="h-4 w-4 text-text-muted mt-0.5 flex-shrink-0" />
                 <div>
-                  <dt className="text-[#64748B] text-xs">Joined</dt>
-                  <dd className="text-[#F1F5F9]">{formatAbsoluteTime(user.created_at)}</dd>
+                  <dt className="text-text-muted text-xs">Joined</dt>
+                  <dd className="text-text-primary">{formatAbsoluteTime(user.created_at)}</dd>
                 </div>
               </div>
             </dl>

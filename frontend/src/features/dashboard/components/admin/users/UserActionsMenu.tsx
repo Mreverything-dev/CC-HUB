@@ -1,5 +1,5 @@
 // frontend/src/features/dashboard/components/admin/users/UserActionsMenu.tsx
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   EllipsisVerticalIcon,
@@ -25,11 +25,6 @@ interface UserActionsMenuProps {
   onDeleteUser: (user: AdminUserListItem) => void;
 }
 
-/** A real, disabled `<button>` (not just muted styling) - it physically
- * cannot receive a click, so there is no path to an onClick handler, an API
- * call, or any state change for these four out-of-scope actions. The
- * "Soon" pill mirrors the exact convention the main Sidebar already uses
- * for its own comingSoon nav items. */
 function ComingSoonMenuItem({ icon: Icon, label, danger }: { icon: typeof PencilSquareIcon; label: string; danger?: boolean }) {
   return (
     <button
@@ -38,25 +33,18 @@ function ComingSoonMenuItem({ icon: Icon, label, danger }: { icon: typeof Pencil
       aria-disabled="true"
       title={`${label} is coming soon`}
       className={`flex items-center gap-2 w-full px-3.5 py-2 text-sm cursor-not-allowed ${
-        danger ? 'text-[#EF4444]/40' : 'text-[#5B6B80]'
+        danger ? 'text-[#EF4444]/40' : 'text-text-muted'
       }`}
     >
       <Icon className="h-4 w-4 flex-shrink-0" />
       <span className="flex-1 text-left">{label}</span>
-      <span className="text-[9px] font-semibold uppercase tracking-wide text-[#3D4A5C] border border-[#1E3447] rounded px-1.5 py-0.5 flex-shrink-0">
+      <span className="text-[9px] font-semibold uppercase tracking-wide text-text-muted border border-border rounded px-1.5 py-0.5 flex-shrink-0">
         Soon
       </span>
     </button>
   );
 }
 
-/**
- * "View Profile", "View Details", "Change Role", Suspend/Activate, Edit
- * User, Reset Password (set a new one directly), and Delete User are all
- * real and backend-verified. "Assign Section" remains out of scope - it
- * renders as a disabled ComingSoonMenuItem with no onClick at all, so
- * there is zero chance of triggering a request for it.
- */
 export function UserActionsMenu({
   user,
   onToggleStatus,
@@ -68,84 +56,111 @@ export function UserActionsMenu({
 }: UserActionsMenuProps) {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
+  // Compute the fixed-position coordinates whenever the menu opens so the
+  // dropdown is never clipped by the table's own overflow context.
+  useLayoutEffect(() => {
+    if (!isOpen || !triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const MENU_WIDTH = 192; // w-48 = 12rem = 192px
+    const MENU_MAX_HEIGHT = 400;
+
+    // Align the menu's right edge with the trigger's right edge
+    let left = rect.right - MENU_WIDTH;
+    if (left < 8) left = 8;
+
+    // If the menu would overflow the bottom of the viewport, open it upward
+    const spaceBelow = window.innerHeight - rect.bottom;
+    let top = rect.bottom + 4;
+    if (spaceBelow < MENU_MAX_HEIGHT && rect.top > MENU_MAX_HEIGHT) {
+      top = rect.top - MENU_MAX_HEIGHT - 4;
+    }
+    if (top < 8) top = 8;
+
+    setMenuPosition({ top, left });
+  }, [isOpen]);
+
+  // Close on outside click, scroll, or resize
   useEffect(() => {
     if (!isOpen) return;
     const handleOutsideClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setIsOpen(false);
+      if (
+        menuRef.current && !menuRef.current.contains(e.target as Node) &&
+        triggerRef.current && !triggerRef.current.contains(e.target as Node)
+      ) {
+        setIsOpen(false);
+      }
     };
+    const handleScrollOrResize = () => setIsOpen(false);
     document.addEventListener('mousedown', handleOutsideClick);
-    return () => document.removeEventListener('mousedown', handleOutsideClick);
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    window.addEventListener('resize', handleScrollOrResize);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+      window.removeEventListener('resize', handleScrollOrResize);
+    };
   }, [isOpen]);
 
   return (
-    <div className="relative" ref={menuRef}>
+    <>
       <button
+        ref={triggerRef}
         onClick={() => setIsOpen((v) => !v)}
         title="Actions"
         aria-haspopup="menu"
         aria-expanded={isOpen}
-        className="p-1.5 rounded-lg text-[#64748B] hover:text-[#F1F5F9] hover:bg-white/5 transition"
+        className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-glass transition"
       >
         <EllipsisVerticalIcon className="h-5 w-5" />
       </button>
+
       {isOpen && (
         <div
+          ref={menuRef}
           role="menu"
-          className="absolute right-0 mt-1 w-48 rounded-xl border border-[#1E3447] bg-[#111E2B] shadow-xl py-1 z-30"
+          className="fixed w-48 max-h-[400px] overflow-y-auto scrollbar-hide rounded-xl border border-border bg-bg shadow-2xl py-1 z-[9999]"
+          style={{ top: menuPosition.top, left: menuPosition.left }}
         >
           <button
             role="menuitem"
-            onClick={() => {
-              setIsOpen(false);
-              onViewDetails(user);
-            }}
-            className="flex items-center gap-2 w-full px-3.5 py-2 text-sm text-[#94A3B8] hover:bg-white/5 hover:text-[#F1F5F9] transition"
+            onClick={() => { setIsOpen(false); onViewDetails(user); }}
+            className="flex items-center gap-2 w-full px-3.5 py-2 text-sm text-text-secondary hover:bg-glass hover:text-text-primary transition"
           >
             <UserCircleIcon className="h-4 w-4" />
             View Details
           </button>
           <button
             role="menuitem"
-            onClick={() => {
-              setIsOpen(false);
-              navigate(`/profile/${user.id}`);
-            }}
-            className="flex items-center gap-2 w-full px-3.5 py-2 text-sm text-[#94A3B8] hover:bg-white/5 hover:text-[#F1F5F9] transition"
+            onClick={() => { setIsOpen(false); navigate(`/profile/${user.id}`); }}
+            className="flex items-center gap-2 w-full px-3.5 py-2 text-sm text-text-secondary hover:bg-glass hover:text-text-primary transition"
           >
             <IdentificationIcon className="h-4 w-4" />
             View Profile
           </button>
           <button
             role="menuitem"
-            onClick={() => {
-              setIsOpen(false);
-              onChangeRole(user);
-            }}
-            className="flex items-center gap-2 w-full px-3.5 py-2 text-sm text-[#94A3B8] hover:bg-white/5 hover:text-[#F1F5F9] transition"
+            onClick={() => { setIsOpen(false); onChangeRole(user); }}
+            className="flex items-center gap-2 w-full px-3.5 py-2 text-sm text-text-secondary hover:bg-glass hover:text-text-primary transition"
           >
             <ShieldCheckIcon className="h-4 w-4" />
             Change Role
           </button>
           <button
             role="menuitem"
-            onClick={() => {
-              setIsOpen(false);
-              onEditUser(user);
-            }}
-            className="flex items-center gap-2 w-full px-3.5 py-2 text-sm text-[#94A3B8] hover:bg-white/5 hover:text-[#F1F5F9] transition"
+            onClick={() => { setIsOpen(false); onEditUser(user); }}
+            className="flex items-center gap-2 w-full px-3.5 py-2 text-sm text-text-secondary hover:bg-glass hover:text-text-primary transition"
           >
             <PencilSquareIcon className="h-4 w-4" />
             Edit User
           </button>
-          <div className="my-1 border-t border-[#1E3447]" />
+          <div className="my-1 border-t border-border" />
           <button
             role="menuitem"
-            onClick={() => {
-              setIsOpen(false);
-              onToggleStatus(user);
-            }}
+            onClick={() => { setIsOpen(false); onToggleStatus(user); }}
             className={`flex items-center gap-2 w-full px-3.5 py-2 text-sm transition ${
               user.is_active
                 ? 'text-[#F59E0B] hover:bg-[#F59E0B]/10'
@@ -157,25 +172,17 @@ export function UserActionsMenu({
           </button>
           <button
             role="menuitem"
-            onClick={() => {
-              setIsOpen(false);
-              onSetPassword(user);
-            }}
-            className="flex items-center gap-2 w-full px-3.5 py-2 text-sm text-[#94A3B8] hover:bg-white/5 hover:text-[#F1F5F9] transition"
+            onClick={() => { setIsOpen(false); onSetPassword(user); }}
+            className="flex items-center gap-2 w-full px-3.5 py-2 text-sm text-text-secondary hover:bg-glass hover:text-text-primary transition"
           >
             <KeyIcon className="h-4 w-4" />
             Reset Password
           </button>
-          <div className="my-1 border-t border-[#1E3447]" />
-          {/* Out of scope for this task - see ComingSoonMenuItem's docstring
-              above. Disabled, no onClick, no API calls possible. */}
+          <div className="my-1 border-t border-border" />
           <ComingSoonMenuItem icon={UserGroupIcon} label="Assign Section" />
           <button
             role="menuitem"
-            onClick={() => {
-              setIsOpen(false);
-              onDeleteUser(user);
-            }}
+            onClick={() => { setIsOpen(false); onDeleteUser(user); }}
             className="flex items-center gap-2 w-full px-3.5 py-2 text-sm text-[#EF4444] hover:bg-[#EF4444]/10 transition"
           >
             <TrashIcon className="h-4 w-4" />
@@ -183,6 +190,6 @@ export function UserActionsMenu({
           </button>
         </div>
       )}
-    </div>
+    </>
   );
 }

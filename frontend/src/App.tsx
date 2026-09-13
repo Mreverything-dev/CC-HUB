@@ -29,13 +29,18 @@ import LivePage from '@/features/livestream/components/pages/LivePage';
 import { LiveStreamStage } from '@/features/livestream/components/LiveStreamStage';
 import { GoogleProvider } from './app/providers/GoogleProvider';
 import TermsPage from '@/features/legal/pages/TermsPage';
+import { LoadingScreen } from '@/components/ui/LoadingScreen/LoadingScreen';
+import { useLoadingStore } from '@/app/store/useLoadingStore';
 
 
 function App() {
+  const { isLoading, message } = useLoadingStore();
+
   return (
   <GoogleProvider>
     <QueryProvider>
       <SocketProvider>
+        {isLoading && <LoadingScreen message={message} />}
         <BrowserRouter>
           <Routes>
             {/* ============================================

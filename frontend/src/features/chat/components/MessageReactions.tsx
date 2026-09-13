@@ -1,5 +1,6 @@
 // frontend/src/features/chat/components/MessageReactions.tsx
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { FaceSmileIcon } from '@heroicons/react/24/outline';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { useChat } from '../hooks/useChat';
@@ -10,30 +11,49 @@ export const MESSAGE_REACTIONS = ['❤️', '👍', '😂', '😮', '😢', '�
 interface MessageReactionsProps {
   messageId: string;
   reactions: MessageReactionEntry[];
-  /** Which side the bubble sits on - pills/picker line up with it. */
   align?: 'left' | 'right';
 }
 
-export function MessageReactions({ messageId, reactions, align = 'left' }: MessageReactionsProps) {
+export function MessageReactions({ messageId, reactions }: MessageReactionsProps) {
   const { user } = useAuthStore();
   const { reactToMessage } = useChat();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerPos, setPickerPos] = useState<{ top: number; left: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
 
-  // Local optimistic state so a reaction feels instant instead of waiting on
-  // the socket round-trip back through message:reaction.
   const [localReactions, setLocalReactions] = useState<MessageReactionEntry[]>(reactions);
 
   useEffect(() => {
     setLocalReactions(reactions);
   }, [reactions]);
 
+  // Compute a fixed-position coordinate for the picker so it can render in a
+  // portal at document.body - unaffected by the chat container's overflow.
+  useEffect(() => {
+    if (!pickerOpen || !triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const PICKER_HEIGHT = 44;
+    const spaceAbove = rect.top;
+    const placeBelow = spaceAbove <= PICKER_HEIGHT + 8;
+    setPickerPos({
+      top: placeBelow ? rect.bottom + 8 : rect.top - 8,
+      left: rect.left + rect.width / 2,
+    });
+  }, [pickerOpen]);
+
+  // Close on outside click - must check both the trigger AND the portaled picker.
   useEffect(() => {
     if (!pickerOpen) return;
     const handleOutsideClick = (e: MouseEvent) => {
-      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
-        setPickerOpen(false);
+      const target = e.target as Node;
+      if (
+        triggerRef.current?.contains(target) ||
+        pickerRef.current?.contains(target)
+      ) {
+        return;
       }
+      setPickerOpen(false);
     };
     document.addEventListener('mousedown', handleOutsideClick);
     return () => document.removeEventListener('mousedown', handleOutsideClick);
@@ -43,7 +63,9 @@ export function MessageReactions({ messageId, reactions, align = 'left' }: Messa
 
   const counts = new Map<string, number>();
   localReactions.forEach((r) => counts.set(r.reaction, (counts.get(r.reaction) || 0) + 1));
-  const groups = Array.from(counts.entries());
+  const groups = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+  const totalCount = localReactions.length;
+  const topEmojis = groups.slice(0, 3).map(([emoji]) => emoji);
 
   const handleReact = (e: React.MouseEvent, reaction: string) => {
     e.stopPropagation();
@@ -66,59 +88,80 @@ export function MessageReactions({ messageId, reactions, align = 'left' }: Messa
     reactToMessage(messageId, reaction);
   };
 
-  return (
+  // The picker JSX - rendered via createPortal below.
+  const pickerJSX = pickerOpen && pickerPos ? (
     <div
-      className={`flex items-center gap-1 flex-wrap mt-1 ${align === 'right' ? 'justify-end' : 'justify-start'}`}
+      ref={pickerRef}
+      className="fixed z-[9999] flex items-center gap-1 px-2 py-1.5 rounded-full border border-border bg-bg shadow-xl"
+      style={{
+        top: pickerPos.top,
+        left: pickerPos.left,
+        transform: 'translate(-50%, -100%)',
+      }}
       onClick={(e) => e.stopPropagation()}
     >
-      {groups.map(([emoji, count]) => (
+      {MESSAGE_REACTIONS.map((emoji) => (
         <button
           key={emoji}
           onClick={(e) => handleReact(e, emoji)}
-          className={`flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-xs transition ${
-            myReaction === emoji
-              ? 'bg-[#00C8FF]/15 border-[#00C8FF]/50 text-[#00C8FF]'
-              : 'bg-[#101D2A] border-[#1E3447] text-[#94A3B8] hover:border-[#00C8FF]/30'
-          }`}
+          className="text-base hover:scale-125 transition-transform"
         >
-          <span>{emoji}</span>
-          <span>{count}</span>
+          {emoji}
         </button>
       ))}
+    </div>
+  ) : null;
 
-      <div className="relative" ref={pickerRef}>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setPickerOpen((v) => !v);
-          }}
-          title="React"
-          className={`flex items-center rounded-full border border-[#1E3447] bg-[#101D2A] text-[#64748B] hover:text-[#00C8FF] hover:border-[#00C8FF]/30 transition p-1 ${
-            groups.length === 0
-              ? 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'
-              : ''
-          }`}
-        >
-          <FaceSmileIcon className="h-3.5 w-3.5" />
-        </button>
-        {pickerOpen && (
-          <div
-            className={`absolute bottom-full mb-1 flex items-center gap-1 px-2 py-1.5 rounded-full border border-[#1E3447] bg-[#111E2B] shadow-lg z-20 ${
-              align === 'right' ? 'right-0' : 'left-0'
-            }`}
+  return (
+    <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
+      {groups.length > 0 ? (
+        <div className="relative">
+          <button
+            ref={triggerRef}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setPickerOpen((v) => !v);
+            }}
+            title={groups.map(([emoji, count]) => `${emoji} ${count}`).join(', ')}
+            className="flex items-center rounded-full px-1 py-0 shadow-sm transition bg-bg"
           >
-            {MESSAGE_REACTIONS.map((emoji) => (
-              <button
-                key={emoji}
-                onClick={(e) => handleReact(e, emoji)}
-                className="text-base hover:scale-125 transition-transform"
-              >
-                {emoji}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+            <span className="flex items-center -space-x-1">
+              {topEmojis.map((emoji, i) => (
+                <span
+                  key={`top-${emoji}-${i}`}
+                  className="flex items-center justify-center rounded-full bg-bg border border-bg shadow-sm h-[14px] w-[14px]"
+                  style={{ zIndex: topEmojis.length - i }}
+                >
+                  <span className="text-[10px] leading-none">{emoji}</span>
+                </span>
+              ))}
+            </span>
+            {totalCount > 1 && (
+              <span className="text-[9px] font-semibold text-text-secondary ml-0.5 leading-none">
+                {totalCount}
+              </span>
+            )}
+          </button>
+        </div>
+      ) : (
+        <div className="relative">
+          <button
+            ref={triggerRef}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setPickerOpen((v) => !v);
+            }}
+            title="React"
+            className="flex items-center justify-center rounded-full border border-border bg-bg shadow-sm text-text-muted hover:text-[#00C8FF] hover:border-[#00C8FF]/30 transition h-5 w-5"
+          >
+            <FaceSmileIcon className="h-3 w-3" />
+          </button>
+        </div>
+      )}
+
+      {pickerJSX && createPortal(pickerJSX, document.body)}
     </div>
   );
 }
