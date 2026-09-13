@@ -96,17 +96,13 @@ class Settings(BaseSettings):
         r"172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}):(3000|5173)$"
     )
     
-    # MinIO / object storage
-    # Prefer private/internal networking for MINIO_ENDPOINT. Never use the
-    # MinIO root credentials in production. The bucket is intentionally private.
     MINIO_ENDPOINT: str = "192.168.0.109:9000"
     MINIO_ACCESS_KEY: str = "minioadmin"
     MINIO_SECRET_KEY: str = "minioadmin"
     MINIO_BUCKET: str = "ccs-hub"
     MINIO_SECURE: bool = False
-    # Signed media URLs are intentionally short-lived. The API caps client requests.
-    MINIO_PRESIGNED_URL_EXPIRY_SECONDS: int = 300
-    MINIO_MAX_PRESIGNED_URL_EXPIRY_SECONDS: int = 600
+    MINIO_PUBLIC_URL: Optional[str] = None  # For CDN/nginx proxy
+    MINIO_PUBLIC_URL: Optional[str] = "http://192.168.0.109:9000"
     # App
     DEBUG: str = "True"
     LOG_LEVEL: str = "INFO"

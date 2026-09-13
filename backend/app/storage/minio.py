@@ -5,6 +5,7 @@ from fastapi import UploadFile, HTTPException, status
 from app.core.config import settings
 import uuid
 from datetime import timedelta
+import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -27,26 +28,30 @@ class MinioService:
             secure=settings.MINIO_SECURE
         )
         self.bucket = settings.MINIO_BUCKET
+        self.public_url = settings.MINIO_PUBLIC_URL or f"http://{settings.MINIO_ENDPOINT}"
         self._ensure_bucket()
 
     def _ensure_bucket(self):
-        """Ensure bucket exists and remove any anonymous/public read policy."""
+        """Ensure bucket exists with public read policy"""
         try:
             if not self.client.bucket_exists(self.bucket):
                 self.client.make_bucket(self.bucket)
                 logger.info(f"✅ Bucket '{self.bucket}' created")
             
-            # IMPORTANT: never make application media publicly readable.
-            # Remove any existing anonymous policy from older deployments.
-            try:
-                self.client.delete_bucket_policy(self.bucket)
-                logger.info(f"🔒 Anonymous/public access disabled for bucket '{self.bucket}'")
-            except S3Error as policy_error:
-                # MinIO may return an error when there is no policy. That is safe:
-                # the desired state is simply that no anonymous policy exists.
-                logger.debug(
-                    f"No anonymous bucket policy to remove for '{self.bucket}': {policy_error}"
-                )
+            # Set bucket policy for public read
+            policy = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Principal": {"AWS": ["*"]},
+                        "Action": ["s3:GetObject"],
+                        "Resource": [f"arn:aws:s3:::{self.bucket}/*"]
+                    }
+                ]
+            }
+            self.client.set_bucket_policy(self.bucket, json.dumps(policy))
+            logger.info(f"✅ Bucket policy set for '{self.bucket}'")
         except S3Error as e:
             logger.error(f"❌ Failed to setup bucket: {e}")
         except Exception as e:
@@ -95,23 +100,10 @@ class MinioService:
                 content_type=content_type
             )
             
-            # 6. Generate a temporary signed URL. The bucket itself remains private.
-            url = self.get_presigned_url(
-                object_name,
-                settings.MINIO_PRESIGNED_URL_EXPIRY_SECONDS
-            )
-            if not url:
-                # Avoid returning an object that the application cannot immediately access.
-                try:
-                    self.client.remove_object(self.bucket, object_name)
-                except Exception:
-                    logger.exception("Failed to roll back upload after presigned URL generation failed")
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="File uploaded but a secure access URL could not be generated"
-                )
+            # 6. Generate Public URL
+            url = f"{self.public_url}/{self.bucket}/{object_name}"
             
-            logger.info(f"✅ Private file uploaded: {object_name} ({file_size} bytes)")
+            logger.info(f"✅ File uploaded: {object_name} ({file_size} bytes)")
             
             return {
                 "filename": filename,
@@ -158,11 +150,8 @@ class MinioService:
             logger.error(f"❌ Delete error: {e}")
             return False
 
-    def get_presigned_url(self, object_name: str, expiry: int = None) -> str:
-        """Generate a short-lived presigned URL for a private object."""
-        if expiry is None:
-            expiry = settings.MINIO_PRESIGNED_URL_EXPIRY_SECONDS
-        expiry = max(1, min(int(expiry), settings.MINIO_MAX_PRESIGNED_URL_EXPIRY_SECONDS))
+    def get_presigned_url(self, object_name: str, expiry: int = 3600) -> str:
+        """Generate presigned URL for temporary access"""
         try:
             url = self.client.presigned_get_object(
                 self.bucket,

@@ -5,7 +5,6 @@ from app.core.database import get_db
 from app.dependencies.auth import get_current_user, get_current_admin_user
 from app.models.user import User
 from app.storage.minio import minio_service
-from app.core.config import settings
 from typing import List
 
 router = APIRouter()
@@ -123,18 +122,11 @@ async def delete_media(
 @router.get("/presigned/{object_name:path}")
 async def get_presigned_url(
     object_name: str,
+    expiry: int = 3600,
     current_user: User = Depends(get_current_user)
 ):
-    """Get a short-lived presigned URL for a private file.
-
-    IMPORTANT: this endpoint is authentication-gated and the client cannot
-    choose an unlimited expiry. Object-level authorization should be added
-    here once media ownership/resource relationships are persisted.
-    """
-    url = minio_service.get_presigned_url(
-        object_name,
-        settings.MINIO_PRESIGNED_URL_EXPIRY_SECONDS
-    )
+    """Get a presigned URL for temporary access to a private file"""
+    url = minio_service.get_presigned_url(object_name, expiry)
     if not url:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
