@@ -1,7 +1,6 @@
 // frontend/src/features/dashboard/components/Sidebar.tsx
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import toast from 'react-hot-toast';
 import { LogoIcon } from '@/components/ui/Logo/Logo';
 import {
   HomeIcon,
@@ -15,7 +14,6 @@ import {
   SignalIcon,
   UserGroupIcon,
   UserPlusIcon,
-  QuestionMarkCircleIcon,
   ArrowRightOnRectangleIcon,
   XMarkIcon,
   VideoCameraIcon,
@@ -57,13 +55,8 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 interface SidebarProps {
-  /** Pass null when the current page (e.g. Profile) isn't one of the in-dashboard sections. */
   activeSection: SidebarSection | null;
   onNavigate: (section: SidebarSection) => void;
-  /** Mobile drawer state - the desktop `aside` below is unaffected by these
-   * and stays permanently visible at `lg:` and up via its own `hidden
-   * lg:flex`. Omitted entirely by any caller that doesn't need the mobile
-   * drawer (none currently, but keeps this a non-breaking addition). */
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
 }
@@ -73,11 +66,6 @@ export function Sidebar({ activeSection, onNavigate, isMobileOpen = false, onClo
   const { user, logout } = useAuthStore();
   const [liveCount, setLiveCount] = useState(0);
 
-  // ✅ Read from the already-populated shared stores rather than calling
-  // useFriends()/useChat() again here - those hooks register their own
-  // socket.io listeners, and socketService.off() removes ALL listeners for
-  // an event name, so a second concurrent registration (Sidebar + Topbar's
-  // NotificationBell both mounted at once) would double-fire notifications.
   const notifications = useFriendStore((state) => state.notifications);
   const chatUnreadCount = useChatStore((state) => state.unreadCount);
 
@@ -127,22 +115,20 @@ export function Sidebar({ activeSection, onNavigate, isMobileOpen = false, onClo
     navigate('/login');
   };
 
-  // Shared between the always-visible desktop aside and the mobile drawer so
-  // the two never drift out of sync with each other.
   const sidebarContent = (
     <>
-      {/* Logo - clicking it goes to the Home/Feed section */}
+      {/* Logo */}
       <button
         type="button"
         onClick={() => onNavigate('feed')}
-        className="flex items-center gap-3 px-5 py-5 border-b border-[rgba(0,200,245,0.1)] text-left hover:bg-white/5 transition-colors duration-200"
+        className="group flex items-center gap-3 px-5 py-5 border-b border-border text-left hover:bg-glass transition-colors duration-200"
       >
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#00C8FF]/40 bg-[#00C8FF]/10 shadow-[0_0_20px_rgba(0,200,245,0.15)]">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-glass transition-transform duration-200 ease-out group-hover:scale-110">
           <LogoIcon size="sm" background="dark" />
         </div>
         <div>
-          <h1 className="text-base font-bold tracking-tight text-[#F1F5F9] leading-tight">CCS HUB</h1>
-          <p className="text-[10px] font-medium tracking-wider text-[#64748B]">
+          <h1 className="text-base font-bold tracking-tight text-text-primary leading-tight">CCS HUB</h1>
+          <p className="text-[10px] font-medium tracking-wider text-text-muted">
             COLLEGE OF COMPUTER STUDIES
           </p>
         </div>
@@ -160,26 +146,28 @@ export function Sidebar({ activeSection, onNavigate, isMobileOpen = false, onClo
               onClick={() => handleItemClick(item)}
               disabled={item.comingSoon}
               title={item.comingSoon ? 'Coming soon' : undefined}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 border ${
+              className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors duration-200 ease-out ${
                 isActive
-                  ? 'border-[#00C8FF]/40 bg-[#00C8FF]/10 text-[#00C8FF] shadow-[0_0_12px_rgba(0,200,245,0.18)]'
+                  ? 'bg-glass text-text-primary'
                   : item.comingSoon
-                  ? 'border-transparent text-[#3D4A5C] cursor-default'
-                  : 'border-transparent text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5'
+                  ? 'text-text-muted cursor-default'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-glass'
               }`}
             >
-              <Icon className={`h-5 w-5 flex-shrink-0 ${isActive ? 'text-[#00C8FF]' : ''}`} />
-              <span className="flex-1 text-left">{item.label}</span>
+              <Icon
+                className={`h-5 w-5 flex-shrink-0 transition-transform duration-200 ease-out group-hover:scale-110 ${
+                  isActive ? 'text-text-primary' : ''
+                }`}
+              />
+              <span className="relative flex-1 text-left transition-transform duration-200 ease-out group-hover:scale-105 origin-left">
+                {item.label}
+              </span>
               {item.comingSoon ? (
-                <span className="text-[9px] font-semibold uppercase tracking-wide text-[#3D4A5C] border border-[#1E3447] rounded px-1.5 py-0.5">
+                <span className="text-[9px] font-semibold uppercase tracking-wide text-text-muted border border-border rounded px-1.5 py-0.5">
                   Soon
                 </span>
               ) : count > 0 ? (
-                <span
-                  className={`text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center flex-shrink-0 ${
-                    isActive ? 'bg-[#00C8FF] text-[#060B12]' : 'bg-[#00C8FF]/20 text-[#00C8FF]'
-                  }`}
-                >
+                <span className="text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center flex-shrink-0 bg-glass text-text-secondary">
                   {count > 9 ? '9+' : count}
                 </span>
               ) : null}
@@ -188,24 +176,16 @@ export function Sidebar({ activeSection, onNavigate, isMobileOpen = false, onClo
         })}
       </nav>
 
-      {/* ✅ Bottom - Logout & Help icons only (no highlight box) */}
-      <div className="border-t border-[rgba(0,200,245,0.1)] p-4">
-        <div className="flex items-center justify-center gap-4">
-          <button
-            onClick={() => toast('Help center coming soon')}
-            title="Help"
-            className="p-2.5 rounded-xl text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5 transition-all duration-200"
-          >
-            <QuestionMarkCircleIcon className="h-5 w-5" />
-          </button>
-          <button
-            onClick={handleLogout}
-            title="Logout"
-            className="p-2.5 rounded-xl text-[#EF4444]/80 hover:text-[#EF4444] hover:bg-[#EF4444]/10 transition-all duration-200"
-          >
-            <ArrowRightOnRectangleIcon className="h-5 w-5" />
-          </button>
-        </div>
+      {/* Bottom - Sign out */}
+      <div className="border-t border-border p-3">
+        <button
+          onClick={handleLogout}
+          title="Sign out"
+          className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors duration-200 ease-out text-[#EF4444]/80 hover:text-[#EF4444] hover:bg-[#EF4444]/10"
+        >
+          <ArrowRightOnRectangleIcon className="h-5 w-5 flex-shrink-0" />
+          <span className="relative flex-1 text-left">Sign out</span>
+        </button>
       </div>
     </>
   );
@@ -213,7 +193,7 @@ export function Sidebar({ activeSection, onNavigate, isMobileOpen = false, onClo
   return (
     <>
       {/* Desktop */}
-      <aside className="hidden lg:flex lg:flex-col w-[280px] h-screen sticky top-0 border-r border-[rgba(0,200,245,0.1)] bg-[#070D13]/95 backdrop-blur-xl">
+      <aside className="hidden lg:flex lg:flex-col w-[280px] h-screen sticky top-0 border-r border-border bg-bg/95 backdrop-blur-xl">
         {sidebarContent}
       </aside>
 
@@ -226,7 +206,7 @@ export function Sidebar({ activeSection, onNavigate, isMobileOpen = false, onClo
       >
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCloseMobile} />
         <aside
-          className={`absolute inset-y-0 left-0 w-[280px] max-w-[85vw] flex flex-col border-r border-[rgba(0,200,245,0.1)] bg-[#070D13] shadow-2xl transition-transform duration-300 ease-out ${
+          className={`absolute inset-y-0 left-0 w-[280px] max-w-[85vw] flex flex-col border-r border-border bg-bg shadow-2xl transition-transform duration-300 ease-out ${
             isMobileOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
         >
@@ -234,7 +214,7 @@ export function Sidebar({ activeSection, onNavigate, isMobileOpen = false, onClo
             onClick={onCloseMobile}
             title="Close menu"
             aria-label="Close menu"
-            className="absolute top-4 right-3 p-2 rounded-xl text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5 transition-all duration-200"
+            className="absolute top-4 right-3 p-2 rounded-xl text-text-secondary hover:text-text-primary hover:bg-glass transition-all duration-200"
           >
             <XMarkIcon className="h-5 w-5" />
           </button>

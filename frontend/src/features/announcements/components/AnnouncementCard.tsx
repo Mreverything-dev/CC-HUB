@@ -87,23 +87,22 @@ export function AnnouncementCard({
       role="button"
       tabIndex={0}
       aria-label={`View announcement: ${announcement.title}`}
-      className="group rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl hover:border-[#00C8FF]/40 hover:shadow-[0_0_24px_rgba(0,200,255,0.06)] transition-all cursor-pointer p-4 sm:p-5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00C8FF]/60"
+      className="group rounded-2xl border border-border bg-glass backdrop-blur-xl hover:border-[#00C8FF]/40 hover:shadow-[0_0_24px_rgba(0,200,255,0.06)] transition-all cursor-pointer p-4 sm:p-5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00C8FF]/60"
     >
-      {/* Author row */}
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <Avatar src={announcement.created_by_avatar} name={authorName} size="md" />
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-sm font-semibold text-[#F1F5F9] truncate">{authorName}</p>
+              <p className="text-sm font-semibold text-text-primary truncate">{authorName}</p>
               <RoleBadge role={announcement.created_by_role} />
               {!announcement.is_published && (
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-[#94A3B8] bg-white/5 border border-[#1E3447] rounded-full px-2 py-0.5 flex-shrink-0">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-text-secondary bg-glass border border-border rounded-full px-2 py-0.5 flex-shrink-0">
                   Draft
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-[#64748B] mt-0.5 flex-wrap">
+            <div className="flex items-center gap-1.5 text-xs text-text-muted mt-0.5 flex-wrap">
               <span>{formatDate(announcement.created_at)}</span>
               <span>&middot;</span>
               <span className="flex items-center gap-1 min-w-0">
@@ -115,9 +114,7 @@ export function AnnouncementCard({
         </div>
 
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          <span
-            className={`text-[11px] font-medium px-2.5 py-1 rounded-full border ${badge.color} ${badge.bg} ${badge.border}`}
-          >
+          <span className={`text-[11px] font-medium px-2.5 py-1 rounded-full border ${badge.color} ${badge.bg} ${badge.border}`}>
             {badge.label}
           </span>
 
@@ -126,12 +123,12 @@ export function AnnouncementCard({
               <button
                 onClick={() => setMenuOpen((v) => !v)}
                 title="More options"
-                className="p-1 text-[#64748B] hover:text-[#F1F5F9] hover:bg-white/5 rounded-lg transition"
+                className="p-1 text-text-muted hover:text-text-primary hover:bg-glass rounded-lg transition"
               >
                 <EllipsisVerticalIcon className="h-4 w-4" />
               </button>
               {menuOpen && (
-                <div className="absolute right-0 top-full mt-1 w-40 rounded-xl border border-[#1E3447] bg-[#111E2B] shadow-xl z-20 overflow-hidden">
+                <div className="absolute right-0 top-full mt-1 w-40 rounded-xl border border-border bg-bg shadow-xl z-20 overflow-hidden">
                   <button
                     onClick={() => {
                       setMenuOpen(false);
@@ -172,31 +169,26 @@ export function AnnouncementCard({
         </div>
       </div>
 
-      {/* Title */}
       <div className="flex items-center gap-2 mb-1.5">
         <div className={`flex-shrink-0 h-7 w-7 rounded-lg flex items-center justify-center border ${meta.border} ${meta.bg}`}>
           <Icon className={`h-3.5 w-3.5 ${meta.color}`} />
         </div>
-        <h3 className="text-base font-semibold text-[#F1F5F9] group-hover:text-[#00C8FF] transition-colors truncate min-w-0">
+        <h3 className="text-base font-semibold text-text-primary group-hover:text-[#00C8FF] transition-colors truncate min-w-0">
           {announcement.title}
         </h3>
       </div>
 
-      <p className="text-sm text-[#94A3B8] line-clamp-2 [overflow-wrap:anywhere]">
+      <p className="text-sm text-text-secondary line-clamp-2 [overflow-wrap:anywhere]">
         {announcement.content}
       </p>
 
       {announcement.image_url && (
-        <div className="mt-3 rounded-xl overflow-hidden border border-[#1E3447]">
-          <img
-            src={announcement.image_url}
-            alt=""
-            className="w-full max-h-56 object-cover"
-          />
+        <div className="mt-3 rounded-xl overflow-hidden border border-border">
+          <img src={announcement.image_url} alt="" className="w-full max-h-56 object-cover" />
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-[#1E3447] flex-wrap">
+      <div className="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-border flex-wrap">
         <AnnouncementReactions announcementId={announcement.id} reactions={announcement.reactions} size="sm" />
 
         <div className="flex items-center gap-1 flex-shrink-0">
@@ -207,7 +199,7 @@ export function AnnouncementCard({
             className={`p-1.5 rounded-lg transition disabled:opacity-50 ${
               announcement.is_bookmarked
                 ? 'text-[#00C8FF] bg-[#00C8FF]/10'
-                : 'text-[#64748B] hover:text-[#00C8FF] hover:bg-white/5'
+                : 'text-text-muted hover:text-[#00C8FF] hover:bg-glass'
             }`}
           >
             {announcement.is_bookmarked ? (
@@ -221,7 +213,7 @@ export function AnnouncementCard({
       </div>
 
       {announcement.expires_at && (
-        <p className="text-xs text-[#64748B] mt-2">
+        <p className="text-xs text-text-muted mt-2">
           Expires {formatDate(announcement.expires_at)}
         </p>
       )}

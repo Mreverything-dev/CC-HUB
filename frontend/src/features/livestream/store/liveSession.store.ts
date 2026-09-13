@@ -2,17 +2,17 @@
 import { create } from 'zustand';
 
 interface LiveSessionState {
-  /** The one livestream currently being watched/hosted app-wide, or null.
-   * Mirrors chat.store.ts's isWidgetOpen pattern - driven from here so the
-   * player (mounted globally, outside the router) survives navigation
-   * instead of tearing down its WebRTC connection on every route change. */
+  /** The stream currently being viewed/hosted, or null if none. */
   streamId: string | null;
+  /** Whether the current user is hosting this stream. */
   isHost: boolean;
+  /** Whether the stage is minimized (PiP-style floating player). */
   isMinimized: boolean;
+
   startSession: (streamId: string, isHost: boolean) => void;
+  endSession: () => void;
   minimize: () => void;
   restore: () => void;
-  endSession: () => void;
 }
 
 export const useLiveSessionStore = create<LiveSessionState>((set) => ({
@@ -20,12 +20,13 @@ export const useLiveSessionStore = create<LiveSessionState>((set) => ({
   isHost: false,
   isMinimized: false,
 
-  // Always starts expanded, even if a previous session had been minimized -
-  // switching to a different stream (or reopening the same one) should
-  // never silently stay hidden as a mini player.
-  startSession: (streamId, isHost) => set({ streamId, isHost, isMinimized: false }),
+  startSession: (streamId, isHost) =>
+    set({ streamId, isHost, isMinimized: false }),
+
+  endSession: () =>
+    set({ streamId: null, isHost: false, isMinimized: false }),
 
   minimize: () => set({ isMinimized: true }),
+
   restore: () => set({ isMinimized: false }),
-  endSession: () => set({ streamId: null, isHost: false, isMinimized: false }),
 }));

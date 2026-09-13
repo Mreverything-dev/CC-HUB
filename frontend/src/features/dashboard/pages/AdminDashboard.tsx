@@ -54,38 +54,25 @@ function getCurrentWeekRangeLabel(): string {
 
 export default function AdminDashboard() {
   const { user } = useAuthStore();
-  // Admin's own nav model (AdminSection), deliberately separate from the
-  // Student/Professor SidebarSection type - this is a genuinely different
-  // set of surfaces, not the same tabs reused.
   const [activeSection, setActiveSection] = useState<AdminSection>('overview');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [showCreateAnnouncement, setShowCreateAnnouncement] = useState(false);
   const [showCreateSection, setShowCreateSection] = useState(false);
-  // Global search deep-links - reuse the exact same PostDetailModal the
-  // rest of the app already uses.
   const [searchOpenPostId, setSearchOpenPostId] = useState<string | null>(null);
   const { liveStreams, upcomingStreams, isLoading: streamsLoading } = useLiveStreamsFeed(true);
 
-  // Admin dashboard stats (real counts from the DB via /admin/dashboard-stats)
   const { stats, isLoading: statsLoading, isError: statsError, refetch: refetchStats, isFetching: statsRefetching } =
     useAdminStats();
 
-  // Recent posts, for the Overview's Recent Activity widget and a post
-  // opened via global search - deletePost/editPost are only used for that
-  // search-opened post.
   const { posts = [], isLoading: postsLoading, deletePost, editPost } = useFeed();
 
-  // Announcements (Overview widget + global search)
   const {
     announcements = [],
     isLoading: announcementsLoading,
     refetch: refetchAnnouncements,
   } = useAnnouncements();
 
-  // Sections (Overview widget, global search, and the admin-wide list
-  // AdminSectionsPage renders - see section_service.get_sections, which
-  // already returns every section for an admin caller)
   const { sections = [], isLoading: sectionsLoading } = useSections();
 
   const { data: reportsData } = useAdminReports({ page: 1, limit: 1 });
@@ -107,18 +94,7 @@ export default function AdminDashboard() {
   const weekRangeLabel = useMemo(getCurrentWeekRangeLabel, []);
 
   return (
-    <div className="min-h-screen bg-[#07050F] text-[#F1F5F9] flex">
-      {/* Subtle grid background - violet-tinted, distinct from the cyan
-          grid every Student/Professor page uses. */}
-      <div
-        className="pointer-events-none fixed inset-0 opacity-[0.12]"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgba(139,92,246,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(139,92,246,0.06) 1px, transparent 1px)',
-          backgroundSize: '44px 44px',
-        }}
-      />
-
+    <div className="min-h-screen bg-bg text-text-primary flex">
       <AdminSidebar
         activeSection={activeSection}
         onNavigate={setActiveSection}
@@ -142,13 +118,12 @@ export default function AdminDashboard() {
         <main className="relative flex-1 max-w-7xl w-full mx-auto px-4 py-6 lg:px-8">
           {activeSection === 'overview' && (
             <div className="space-y-6">
-              {/* Header */}
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h1 className="text-xl sm:text-2xl font-semibold text-[#F1F5F9]">
+                  <h1 className="text-xl sm:text-2xl font-semibold text-text-primary">
                     System Overview
                   </h1>
-                  <p className="text-sm text-[#94A3B8] mt-1">
+                  <p className="text-sm text-text-secondary mt-1">
                     Monitoring CCS HUB as <span className="text-[#8B5CF6] font-medium">{user?.username || 'Admin'}</span>.
                   </p>
                 </div>
@@ -156,7 +131,7 @@ export default function AdminDashboard() {
                   <button
                     title="Custom date range filtering is coming soon"
                     onClick={() => {}}
-                    className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-[#1E3447] bg-[rgba(10,20,30,0.75)] text-sm text-[#94A3B8] hover:text-[#F1F5F9] hover:border-[#8B5CF6]/30 transition"
+                    className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-border bg-glass text-sm text-text-secondary hover:text-text-primary hover:border-[#8B5CF6]/30 transition"
                   >
                     <CalendarIcon className="h-4 w-4" />
                     {weekRangeLabel}
@@ -165,17 +140,16 @@ export default function AdminDashboard() {
                     onClick={() => refetchStats()}
                     disabled={statsRefetching}
                     title="Refresh dashboard"
-                    className="p-2 rounded-xl border border-[#1E3447] bg-[rgba(10,20,30,0.75)] text-[#94A3B8] hover:text-[#8B5CF6] hover:border-[#8B5CF6]/30 transition disabled:opacity-50"
+                    className="p-2 rounded-xl border border-border bg-glass text-text-secondary hover:text-[#8B5CF6] hover:border-[#8B5CF6]/30 transition disabled:opacity-50"
                   >
                     <ArrowPathIcon className={`h-4 w-4 ${statsRefetching ? 'animate-spin' : ''}`} />
                   </button>
                 </div>
               </div>
 
-              {/* Statistics cards */}
               {statsError ? (
-                <div className="rounded-2xl border border-[rgba(0,200,245,0.15)] bg-[rgba(10,20,30,0.75)] p-8 text-center">
-                  <p className="text-sm text-[#94A3B8]">Unable to load dashboard data</p>
+                <div className="rounded-2xl border border-border bg-glass p-8 text-center">
+                  <p className="text-sm text-text-secondary">Unable to load dashboard data</p>
                   <button
                     onClick={() => refetchStats()}
                     className="mt-3 flex items-center gap-1.5 mx-auto px-3.5 py-1.5 text-sm font-medium text-[#00C8FF] hover:bg-[#00C8FF]/10 rounded-lg transition"
@@ -240,7 +214,6 @@ export default function AdminDashboard() {
                 </div>
               )}
 
-              {/* Chart + Recent Activity */}
               <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
                 <div className="xl:col-span-2">
                   <UserGrowthChart />
@@ -254,7 +227,6 @@ export default function AdminDashboard() {
                 />
               </div>
 
-              {/* Sections + Engagement + Live Streams */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <SectionsOverviewWidget
                   sections={sectionList}
@@ -265,7 +237,6 @@ export default function AdminDashboard() {
                 <LiveStreamsWidget liveStreams={liveStreams} upcomingStreams={upcomingStreams} isLoading={streamsLoading} />
               </div>
 
-              {/* Quick Actions */}
               <QuickActionsWidget
                 onCreateAnnouncement={() => setShowCreateAnnouncement(true)}
                 onCreateSection={() => setShowCreateSection(true)}
@@ -285,12 +256,10 @@ export default function AdminDashboard() {
         </main>
       </div>
 
-      {/* Create Announcement Modal */}
       {showCreateAnnouncement && (
         <CreateAnnouncement onClose={() => setShowCreateAnnouncement(false)} />
       )}
 
-      {/* Create Section Modal */}
       {showCreateSection && (
         <CreateSectionModal onClose={() => setShowCreateSection(false)} />
       )}

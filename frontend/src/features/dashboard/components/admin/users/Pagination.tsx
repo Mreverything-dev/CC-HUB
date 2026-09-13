@@ -7,8 +7,6 @@ interface PaginationProps {
   total: number;
   limit: number;
   onChange: (page: number) => void;
-  /** Plural noun for the summary line, e.g. "posts", "announcements" -
-   * defaults to "users" so every existing caller is unaffected. */
   itemLabel?: string;
 }
 
@@ -31,20 +29,20 @@ export function Pagination({ page, totalPages, total, limit, onChange, itemLabel
 
   return (
     <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-      <p className="text-xs text-[#64748B]">
+      <p className="text-xs text-text-muted">
         Showing {start} to {end} of {total} {itemLabel}
       </p>
       <div className="flex items-center gap-1">
         <button
           onClick={() => onChange(page - 1)}
           disabled={page <= 1}
-          className="p-1.5 rounded-lg border border-[#1E3447] text-[#94A3B8] hover:text-[#F1F5F9] hover:border-[#00C8FF]/30 transition disabled:opacity-40 disabled:cursor-not-allowed"
+          className="p-1.5 rounded-lg border border-border text-text-secondary hover:text-text-primary hover:border-[#00C8FF]/30 transition disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <ChevronLeftIcon className="h-4 w-4" />
         </button>
         {getPageNumbers(page, totalPages).map((p, i) =>
           p === '...' ? (
-            <span key={`ellipsis-${i}`} className="px-2 text-sm text-[#64748B]">
+            <span key={`ellipsis-${i}`} className="px-2 text-sm text-text-muted">
               …
             </span>
           ) : (
@@ -54,7 +52,7 @@ export function Pagination({ page, totalPages, total, limit, onChange, itemLabel
               className={`min-w-[2rem] px-2.5 py-1.5 rounded-lg text-sm font-medium transition ${
                 p === page
                   ? 'bg-[#00C8FF] text-[#060B12]'
-                  : 'text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5'
+                  : 'text-text-secondary hover:text-text-primary hover:bg-glass'
               }`}
             >
               {p}
@@ -64,7 +62,7 @@ export function Pagination({ page, totalPages, total, limit, onChange, itemLabel
         <button
           onClick={() => onChange(page + 1)}
           disabled={page >= totalPages}
-          className="p-1.5 rounded-lg border border-[#1E3447] text-[#94A3B8] hover:text-[#F1F5F9] hover:border-[#00C8FF]/30 transition disabled:opacity-40 disabled:cursor-not-allowed"
+          className="p-1.5 rounded-lg border border-border text-text-secondary hover:text-text-primary hover:border-[#00C8FF]/30 transition disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <ChevronRightIcon className="h-4 w-4" />
         </button>

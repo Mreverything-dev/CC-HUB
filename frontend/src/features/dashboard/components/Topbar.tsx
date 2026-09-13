@@ -17,6 +17,7 @@ import { Avatar } from './Avatar';
 import { RoleBadge } from './RoleBadge';
 import { GlobalSearchDropdown } from './GlobalSearchDropdown';
 import { useGlobalSearch } from '../hooks/useGlobalSearch';
+import { ThemeToggle } from '@/components/ui/ThemeToggle/ThemeToggle';
 import { Post } from '@/services/api/post.service';
 import { Announcement } from '@/types/announcement.types';
 import { Section } from '@/types/section.types';
@@ -24,28 +25,12 @@ import { Section } from '@/types/section.types';
 interface TopbarProps {
   avatarUrl: string | null;
   onOpenFriends?: () => void;
-  /** Opens the mobile Sidebar drawer. Omitted on any page that doesn't wire
-   * up the drawer, in which case the hamburger simply isn't rendered. */
   onOpenMenu?: () => void;
-  /** Data the parent dashboard already fetched (useFeed/useAnnouncements/
-   * useSections) - global search filters over these rather than issuing any
-   * new requests of its own for posts/announcements/sections. Omit any of
-   * them to simply exclude that bucket from results (e.g. a page that
-   * doesn't load posts). */
   searchPosts?: Post[];
   searchAnnouncements?: Announcement[];
   searchSections?: Section[];
-  /** Opens a specific post's detail (the dashboard mounts its own
-   * PostDetailModal, reusing its existing deletePost/editPost from useFeed). */
   onOpenPost?: (postId: string) => void;
-  /** Switches to the Sections view for one specific section (each dashboard
-   * already supports this via SectionDashboard's initialSectionId). */
   onOpenSection?: (sectionId: string) => void;
-  /** Called when the mobile-only compact brand mark is clicked (the full
-   * Sidebar - and its own clickable logo - is hidden below lg:). Each
-   * caller passes whatever it already uses to reach the Home/Feed section
-   * (e.g. `() => setActiveSection('feed')`). Omitted entirely, the mark is
-   * just non-interactive, same as before. */
   onNavigateHome?: () => void;
 }
 
@@ -63,6 +48,18 @@ export function Topbar({
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const { unreadCount, toggleWidget } = useChat();
+
+  // On mobile / tablet (< 1024px), the messages button takes the user to
+  // the full-page /chat route (Messenger-style) instead of toggling the
+  // small floating widget, which is too cramped for a phone screen.
+  const handleMessagesClick = () => {
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
+    if (isMobile) {
+      navigate('/chat');
+    } else {
+      toggleWidget();
+    }
+  };
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -97,15 +94,13 @@ export function Topbar({
   };
 
   return (
-    <header className="sticky top-0 z-30 flex items-center gap-2 sm:gap-4 border-b border-[rgba(0,200,245,0.1)] bg-[#070D13]/90 backdrop-blur-xl px-3 py-3 sm:px-4 lg:px-8">
-      {/* Mobile-only: hamburger (opens the Sidebar drawer) + compact brand
-          mark, since the full Sidebar - and its logo - is hidden below lg:. */}
+    <header className="sticky top-0 z-30 flex items-center gap-2 sm:gap-4 border-b border-border bg-bg/95 backdrop-blur-xl px-3 py-3.5 sm:px-4 lg:px-8">
       {onOpenMenu && (
         <button
           onClick={onOpenMenu}
           title="Open menu"
           aria-label="Open menu"
-          className="lg:hidden flex-shrink-0 p-2 -ml-1 text-[#94A3B8] hover:text-[#00C8FF] hover:bg-white/5 rounded-xl transition"
+          className="lg:hidden flex-shrink-0 p-2 -ml-1 text-text-secondary hover:text-text-primary hover:bg-glass rounded-xl transition"
         >
           <Bars3Icon className="h-6 w-6" />
         </button>
@@ -115,20 +110,23 @@ export function Topbar({
           type="button"
           onClick={onNavigateHome}
           title="Go to Feed"
-          className="lg:hidden flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-[#00C8FF]/40 bg-[#00C8FF]/10 hover:bg-[#00C8FF]/20 transition-colors"
+          className="lg:hidden flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-border bg-glass hover:bg-glass-hover transition-colors"
         >
           <LogoIcon size="xs" background="dark" />
         </button>
       ) : (
-        <div className="lg:hidden flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-[#00C8FF]/40 bg-[#00C8FF]/10">
+        <div className="lg:hidden flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-border bg-glass">
           <LogoIcon size="xs" background="dark" />
         </div>
       )}
 
-      {/* Search - hidden below sm: to keep the hamburger/brand/actions from
-          overflowing on the narrowest phone widths. */}
-      <div className="relative flex-1 max-w-md hidden sm:block" ref={searchRef}>
-        <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#64748B]" />
+      <div
+        className={`relative flex-1 max-w-md hidden sm:block transition-all duration-300 ease-out ${
+          searchOpen ? 'scale-105' : 'scale-100'
+        }`}
+        ref={searchRef}
+      >
+        <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-muted" />
         <input
           type="text"
           value={searchQuery}
@@ -138,13 +136,13 @@ export function Topbar({
           }}
           onFocus={() => setSearchOpen(true)}
           placeholder="Search posts, people, sections..."
-          className="w-full rounded-xl border border-[#1E3447] bg-[rgba(15,28,40,0.75)] py-2 pl-9 pr-8 text-sm text-[#F1F5F9] placeholder-[#64748B] transition focus:border-[#00C8FF] focus:outline-none focus:ring-1 focus:ring-[#00C8FF] focus:shadow-[0_0_12px_rgba(0,200,245,0.25)]"
+          className="w-full rounded-xl border border-border bg-glass py-2 pl-9 pr-8 text-sm text-text-primary placeholder-text-muted transition focus:border-border focus:outline-none focus:ring-1 focus:ring-border"
         />
         {searchQuery && (
           <button
             onClick={() => setSearchQuery('')}
             title="Clear search"
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#F1F5F9] transition"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary transition"
           >
             <XCircleIcon className="h-4 w-4" />
           </button>
@@ -180,15 +178,17 @@ export function Topbar({
         <button
           onClick={() => (onOpenFriends ? onOpenFriends() : navigate('/friends'))}
           title="Friends"
-          className="p-2 text-[#94A3B8] hover:text-[#00C8FF] transition rounded-xl hover:bg-white/5"
+          className="p-2 text-text-secondary hover:text-text-primary transition rounded-xl hover:bg-glass"
         >
           <UserGroupIcon className="h-5 w-5" />
         </button>
 
+        <ThemeToggle />
+
         <button
-          onClick={toggleWidget}
+          onClick={handleMessagesClick}
           title="Messages"
-          className="relative p-2 text-[#94A3B8] hover:text-[#00C8FF] transition rounded-xl hover:bg-white/5"
+          className="relative p-2 text-text-secondary hover:text-text-primary transition rounded-xl hover:bg-glass"
         >
           <ChatBubbleLeftIcon className="h-5 w-5" />
           {unreadCount > 0 && (
@@ -200,18 +200,18 @@ export function Topbar({
 
         <NotificationBell onNavigateFriends={onOpenFriends} />
 
-        <div className="w-px h-6 bg-[#1E3447] mx-1" />
+        <div className="w-px h-6 bg-border mx-1" />
 
         <button
           onClick={() => navigate('/profile')}
-          className="flex items-center gap-2 pl-1 pr-2 py-1 rounded-xl hover:bg-white/5 transition"
+          className="flex items-center gap-2 pl-1 pr-2 py-1 rounded-xl hover:bg-glass transition"
         >
           <Avatar src={avatarUrl} name={user?.username} size="sm" />
           <div className="hidden md:block text-left">
-            <p className="text-sm font-medium text-[#F1F5F9] leading-tight">{user?.username || 'User'}</p>
+            <p className="text-sm font-medium text-text-primary leading-tight">{user?.username || 'User'}</p>
             <RoleBadge role={user?.role || 'student'} className="mt-0.5" />
           </div>
-          <ChevronDownIcon className="h-4 w-4 text-[#64748B] hidden md:block" />
+          <ChevronDownIcon className="h-4 w-4 text-text-muted hidden md:block" />
         </button>
       </div>
     </header>

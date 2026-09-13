@@ -5,10 +5,12 @@ import { LoginRequest, RegisterRequest, ForgotPasswordRequest, ResetPasswordRequ
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { useLoadingStore } from '@/app/store/useLoadingStore';
 
 export function useAuth() {
   const [isLoading, setIsLoading] = useState(false);
   const { login: setAuth, logout: clearAuth, user } = useAuthStore();
+  const { show: showGlobalLoading, hide: hideGlobalLoading } = useLoadingStore();
   const navigate = useNavigate();
 
   const redirectUser = (role: string) => {
@@ -31,11 +33,25 @@ export function useAuth() {
       setAuth(response.data.user, response.data.access_token, response.data.refresh_token);
       toast.success(`Welcome back, ${response.data.user.username}!`);
       
+      // ✅ Show global full-screen loading BEFORE navigating
+      showGlobalLoading('Signing you in...');
+      
+      // Small delay so the loading screen is actually visible
+      // before the dashboard takes over
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      
       redirectUser(response.data.user.role);
+      
+      // Keep the loading screen visible for a bit after navigation
+      // so the dashboard has time to mount without a flash of blank UI
+      setTimeout(() => {
+        hideGlobalLoading();
+      }, 5200);
       
       return response.data;
     } catch (error: any) {
       toast.error(error.response?.data?.detail || 'Login failed');
+      hideGlobalLoading(); // ✅ make sure we don't get stuck
       throw error;
     } finally {
       setIsLoading(false);

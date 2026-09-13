@@ -10,7 +10,7 @@ interface AddUserModalProps {
 }
 
 const inputClassName =
-  'w-full px-3 py-2.5 rounded-xl border border-[#1E3447] bg-[#162534] text-sm text-[#F1F5F9] placeholder-[#64748B] focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] focus:outline-none transition';
+  'w-full px-3 py-2.5 rounded-xl border border-border bg-glass text-sm text-text-primary placeholder-text-muted focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] focus:outline-none transition';
 
 const ROLE_OPTIONS: { value: AdminUserRole; label: string; icon: typeof UserIcon }[] = [
   { value: 'student', label: 'Student', icon: UserIcon },
@@ -39,12 +39,10 @@ export default function AddUserModal({ onClose }: AddUserModalProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
     if (password !== confirmPassword) {
       setError('Passwords do not match');
       return;
     }
-
     try {
       await createUserMutation.mutateAsync({
         full_name: fullName.trim() || undefined,
@@ -62,13 +60,10 @@ export default function AddUserModal({ onClose }: AddUserModalProps) {
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
-      <div className="w-full max-w-md rounded-2xl border border-[#1E3447] bg-[#111E2B] shadow-[0_0_40px_rgba(0,200,255,0.06)] p-4 sm:p-6 max-h-[90vh] overflow-y-auto themed-scrollbar">
+      <div className="w-full max-w-md rounded-2xl border border-border bg-bg shadow-2xl p-4 sm:p-6 max-h-[90vh] overflow-y-auto themed-scrollbar">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-[#F1F5F9]">Add User</h2>
-          <button
-            onClick={onClose}
-            className="p-1.5 text-[#64748B] hover:text-[#F1F5F9] hover:bg-white/5 rounded-full transition"
-          >
+          <h2 className="text-lg font-bold text-text-primary">Add User</h2>
+          <button onClick={onClose} className="p-1.5 text-text-muted hover:text-text-primary hover:bg-glass rounded-full transition">
             <XMarkIcon className="h-5 w-5" />
           </button>
         </div>
@@ -81,7 +76,7 @@ export default function AddUserModal({ onClose }: AddUserModalProps) {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-[#94A3B8] mb-1.5">Role</label>
+            <label className="block text-sm font-medium text-text-secondary mb-1.5">Role</label>
             <div className="grid grid-cols-3 gap-2">
               {ROLE_OPTIONS.map(({ value, label, icon: Icon }) => {
                 const isActive = role === value;
@@ -93,7 +88,7 @@ export default function AddUserModal({ onClose }: AddUserModalProps) {
                     className={`flex flex-col items-center gap-1.5 rounded-xl border py-2.5 text-xs font-medium transition ${
                       isActive
                         ? 'border-[#00C8FF]/50 bg-[#00C8FF]/10 text-[#00C8FF]'
-                        : 'border-[#1E3447] bg-[#0A111A] text-[#94A3B8] hover:border-[#00C8FF]/30'
+                        : 'border-border bg-bg text-text-secondary hover:border-[#00C8FF]/30'
                     }`}
                   >
                     <Icon className="h-4 w-4" />
@@ -105,80 +100,38 @@ export default function AddUserModal({ onClose }: AddUserModalProps) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[#94A3B8] mb-1.5">Full Name</label>
-            <input
-              type="text"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="e.g. Juan Dela Cruz"
-              className={inputClassName}
-            />
+            <label className="block text-sm font-medium text-text-secondary mb-1.5">Full Name</label>
+            <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="e.g. Juan Dela Cruz" className={inputClassName} />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-[#94A3B8] mb-1.5">Username *</label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-                className={inputClassName}
-              />
+              <label className="block text-sm font-medium text-text-secondary mb-1.5">Username *</label>
+              <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} required className={inputClassName} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-[#94A3B8] mb-1.5">Email *</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className={inputClassName}
-              />
+              <label className="block text-sm font-medium text-text-secondary mb-1.5">Email *</label>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className={inputClassName} />
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-[#94A3B8] mb-1.5">Password *</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
-                className={inputClassName}
-              />
+              <label className="block text-sm font-medium text-text-secondary mb-1.5">Password *</label>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} className={inputClassName} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-[#94A3B8] mb-1.5">Confirm Password *</label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                minLength={6}
-                className={inputClassName}
-              />
+              <label className="block text-sm font-medium text-text-secondary mb-1.5">Confirm Password *</label>
+              <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required minLength={6} className={inputClassName} />
             </div>
           </div>
-          <p className="text-xs text-[#64748B] -mt-2">
-            At least 6 characters, with an uppercase letter, a lowercase letter, and a number.
-          </p>
+          <p className="text-xs text-text-muted -mt-2">At least 6 characters, with an uppercase letter, a lowercase letter, and a number.</p>
 
-          <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-3 pt-4 border-t border-[#1E3447]">
-            <button
-              type="button"
-              onClick={onClose}
-              className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5 rounded-xl transition"
-            >
+          <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-3 pt-4 border-t border-border">
+            <button type="button" onClick={onClose} className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-glass rounded-xl transition">
               Cancel
             </button>
-            <button
-              type="submit"
-              disabled={isCreatingUser}
-              className="w-full sm:w-auto px-6 py-2 text-sm font-semibold bg-gradient-to-br from-[#00C8FF] to-[#0090CC] text-[#060B12] rounded-xl hover:opacity-90 transition disabled:opacity-50"
-            >
+            <button type="submit" disabled={isCreatingUser} className="w-full sm:w-auto px-6 py-2 text-sm font-semibold bg-gradient-to-br from-[#00C8FF] to-[#0090CC] text-[#060B12] rounded-xl hover:opacity-90 transition disabled:opacity-50">
               {isCreatingUser ? 'Creating...' : 'Create User'}
             </button>
           </div>

@@ -1,22 +1,27 @@
 // frontend/src/features/posts/components/ImageGrid.tsx
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 const MAX_VISIBLE = 5;
 
 interface ImageGridProps {
-  /** Post media URLs (images and/or videos, same array as media_urls). */
   images: string[];
   dark?: boolean;
-  /** Called with the item's real index in `images` - used by the caller to open its own lightbox/viewer. */
   onImageClick?: (index: number) => void;
+  /** Optional: called on a double tap anywhere on a tile. */
+  onDoubleTap?: (clientX: number, clientY: number) => void;
 }
 
 export function isVideoUrl(url: string): boolean {
   return /\.(mp4|webm|mov|avi|mkv)$/i.test(url) || url.includes('video');
 }
 
-export function ImageGrid({ images, dark = false, onImageClick }: ImageGridProps) {
+export function ImageGrid({ images, dark = false, onImageClick, onDoubleTap }: ImageGridProps) {
   const [brokenUrls, setBrokenUrls] = useState<Set<string>>(new Set());
+
+  // Track per-tile tap timing so a double tap on one tile doesn't get
+  // interpreted as two single taps.
+  const tapTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+  const lastTapRef = useRef<Map<number, number>>(new Map());
 
   if (!images || images.length === 0) return null;
 
@@ -24,12 +29,6 @@ export function ImageGrid({ images, dark = false, onImageClick }: ImageGridProps
   const isSingle = total === 1;
   const overflowCount = total - MAX_VISIBLE;
 
-  // Videos always display first - a stable sort so relative order within
-  // "all videos" and within "all images" is otherwise unchanged. This
-  // reorders which tile each item lands in, but `onImageClick` and every
-  // `alt`/`key` below still use the item's ORIGINAL index into `images`,
-  // so the caller's lightbox (which navigates the untouched media_urls
-  // array) keeps working exactly as before.
   const displayOrder = images
     .map((_, i) => i)
     .sort((a, b) => Number(isVideoUrl(images[b])) - Number(isVideoUrl(images[a])));
@@ -43,27 +42,45 @@ export function ImageGrid({ images, dark = false, onImageClick }: ImageGridProps
     const url = images[originalIndex];
     const broken = brokenUrls.has(url);
     const isVideoFile = isVideoUrl(url);
-    const mediaClass = isSingle
-      ? 'w-full h-auto max-h-[500px] object-contain'
-      : 'w-full h-full object-cover';
+    const mediaClass = 'w-full h-full object-cover';
 
     const handleTileClick = (e: React.MouseEvent) => {
       e.stopPropagation();
-      // Videos already autoplay muted with their own native controls for
-      // sound/pause/fullscreen, so a plain click doesn't also open the
-      // lightbox - except the overflow tile, where the "+X" overlay's
-      // whole point is "there's more to see", so it always opens the
-      // viewer regardless of what the last visible tile happens to be.
-      if (showOverlay || (!broken && !isVideoFile)) {
-        onImageClick?.(originalIndex);
+
+      const now = Date.now();
+      const last = lastTapRef.current.get(originalIndex) ?? 0;
+      const timeSinceLastTap = now - last;
+
+      if (timeSinceLastTap < 300) {
+        // Double tap -> cancel pending single-tap, fire onDoubleTap (heart burst)
+        const timer = tapTimersRef.current.get(originalIndex);
+        if (timer) {
+          clearTimeout(timer);
+          tapTimersRef.current.delete(originalIndex);
+        }
+        lastTapRef.current.set(originalIndex, 0);
+        onDoubleTap?.(e.clientX, e.clientY);
+      } else {
+        // Single tap -> schedule the lightbox open
+        lastTapRef.current.set(originalIndex, now);
+        const timer = setTimeout(() => {
+          tapTimersRef.current.delete(originalIndex);
+          // If this tile is the "+X" overflow tile, always open the viewer.
+          if (showOverlay || (!broken && !isVideoFile)) {
+            onImageClick?.(originalIndex);
+          }
+        }, 300);
+        tapTimersRef.current.set(originalIndex, timer);
       }
     };
 
     return (
       <div
         key={originalIndex}
-        className={`relative overflow-hidden rounded-xl ${tileBg} ${extraClass}`}
+        className={`relative overflow-hidden rounded-xl ${tileBg} ${extraClass} select-none`}
         onClick={handleTileClick}
+        draggable={false}
+        onDragStart={(e) => e.preventDefault()}
       >
         {broken ? (
           <div className={`flex h-full min-h-[120px] items-center justify-center p-4 text-center text-sm ${placeholderText}`}>
@@ -85,8 +102,9 @@ export function ImageGrid({ images, dark = false, onImageClick }: ImageGridProps
           <img
             src={url}
             alt={`Post media ${originalIndex + 1}`}
-            className={`${mediaClass} cursor-zoom-in`}
+            className={mediaClass}
             loading="lazy"
+            draggable={false}
             onError={() => setBrokenUrls((prev) => new Set(prev).add(url))}
           />
         )}
@@ -100,9 +118,15 @@ export function ImageGrid({ images, dark = false, onImageClick }: ImageGridProps
     );
   };
 
-  // Single item - full width, full aspect always visible, never cropped.
+  // Single item - square (1:1) aspect ratio, image fills
   if (isSingle) {
-    return <div className="mt-3">{renderTile(visibleOrder[0], 'w-full', false)}</div>;
+    return (
+      <div className="mt-3">
+        <div className="relative w-full aspect-square overflow-hidden rounded-xl">
+          {renderTile(visibleOrder[0], 'w-full h-full', false)}
+        </div>
+      </div>
+    );
   }
 
   if (total === 2) {
@@ -117,9 +141,6 @@ export function ImageGrid({ images, dark = false, onImageClick }: ImageGridProps
     return (
       <div className={`mt-3 flex gap-2 ${gridHeight}`}>
         {renderTile(visibleOrder[0], 'flex-1 h-full', false)}
-        {/* min-h-0 overrides the flex default of min-height:auto, which
-            otherwise sizes this column to its tallest image's intrinsic
-            height instead of shrinking to share the row's fixed height. */}
         <div className="flex flex-1 min-h-0 flex-col gap-2">
           {renderTile(visibleOrder[1], 'w-full flex-1', false)}
           {renderTile(visibleOrder[2], 'w-full flex-1', false)}
@@ -143,8 +164,7 @@ export function ImageGrid({ images, dark = false, onImageClick }: ImageGridProps
     );
   }
 
-  // 5 or more: 2 on top, 3 on bottom - the last (5th) tile carries the
-  // "+X" overlay whenever there are more than 5 items in total.
+  // 5 or more
   return (
     <div className={`mt-3 flex flex-col gap-2 ${gridHeight}`}>
       <div className="flex flex-1 min-h-0 gap-2">

@@ -27,20 +27,20 @@ export function QuickActionsWidget({ onCreateAnnouncement, onCreateSection }: Qu
   ];
 
   return (
-    <div className="rounded-2xl border border-[rgba(0,200,245,0.15)] bg-[rgba(10,20,30,0.75)] backdrop-blur-xl p-4 sm:p-5">
-      <h3 className="text-sm font-semibold text-[#F1F5F9] mb-3">Quick Actions</h3>
+    <div className="rounded-2xl border border-border bg-glass backdrop-blur-xl p-4 sm:p-5">
+      <h3 className="text-sm font-semibold text-text-primary mb-3">Quick Actions</h3>
       <div className="space-y-1">
         {actions.map((action) => (
           <button
             key={action.label}
             onClick={action.onClick}
-            className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-[#F1F5F9] hover:bg-white/5 rounded-xl transition"
+            className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-text-primary hover:bg-glass rounded-xl transition"
           >
             <span className="flex items-center gap-2.5">
               <action.icon className="h-4 w-4 text-[#00C8FF]" />
               {action.label}
             </span>
-            <ChevronRightIcon className="h-3.5 w-3.5 text-[#64748B]" />
+            <ChevronRightIcon className="h-3.5 w-3.5 text-text-muted" />
           </button>
         ))}
       </div>

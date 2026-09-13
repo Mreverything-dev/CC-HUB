@@ -1,5 +1,5 @@
 // frontend/src/features/chat/hooks/useChat.ts
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { chatApi } from '@/services/api/chat.service';
 import { useChatStore } from '../store/chat.store';
@@ -60,21 +60,43 @@ export function useChat() {
     enabled: isAuthenticated,
   });
 
-  // Get messages for a conversation
-  const getMessages = useCallback(async (conversationId: string) => {
+  // Get messages for a conversation.
+  // - Initial load: pass nothing (default 50 latest).
+  // - Backread: pass { before: <oldest.created_at>, append: true } to
+  //   fetch older messages and prepend them to the existing list.
+  const getMessages = useCallback(async (
+    conversationId: string,
+    options?: { limit?: number; before?: string; append?: boolean }
+  ) => {
     setLoading(true);
     try {
-      const response = await chatApi.getMessages(conversationId);
-      setMessages(response.data);
-      // Join the conversation room
-      socketService.joinConversation(conversationId);
-      // Mark messages as read
-      socketService.markRead(conversationId);
-      resetUnreadCount();
+      const response = await chatApi.getMessages(
+        conversationId,
+        options?.limit ?? 50,
+        options?.before
+      );
+
+      if (options?.append) {
+        // Backread: idagdag sa TAAS ng existing messages (dedupe by id)
+        const existing = useChatStore.getState().messages;
+        const existingIds = new Set(existing.map((m) => m.id));
+        const newOnes = response.data.filter((m) => !existingIds.has(m.id));
+        setMessages([...newOnes, ...existing]);
+      } else {
+        // Initial load: i-replace lahat
+        setMessages(response.data);
+        // Join the conversation room
+        socketService.joinConversation(conversationId);
+        // Mark messages as read
+        socketService.markRead(conversationId);
+        resetUnreadCount();
+      }
+
       return response.data;
     } catch (error) {
       console.error('Error fetching messages:', error);
       toast.error('Failed to load messages');
+      return [];
     } finally {
       setLoading(false);
     }
@@ -163,6 +185,37 @@ export function useChat() {
     socketService.markRead(conversationId);
     resetUnreadCount();
   }, [resetUnreadCount]);
+
+  // ✅ Listen for 'message:read' socket events so the current user's own
+  // sent messages get their ✓✓ (Seen) indicator without needing a page
+  // reload.
+  useEffect(() => {
+    if (!isConnected) return;
+
+    const handleMessagesRead = (data: any) => {
+      console.log('📖 [message:read] received:', data);
+
+      // Accept either { conversation_id } or { conversationId } - backend
+      // naming might differ.
+      const convId = data.conversation_id ?? data.conversationId;
+      const readerId = data.reader_id ?? data.readerId ?? data.user_id;
+
+      // Only care about the conversation we're currently viewing.
+      if (convId && convId !== currentConversation?.id) return;
+      // Ignore if WE are the one who read it.
+      const currentUserId = useAuthStore.getState().user?.id;
+      if (readerId && readerId === currentUserId) return;
+
+      // Mark every message from the current user in this conversation as read.
+      const updated = useChatStore.getState().messages.map((m) =>
+        m.sender_id === currentUserId && !m.is_read ? { ...m, is_read: true } : m
+      );
+      useChatStore.getState().setMessages(updated);
+    };
+
+    socketService.on('message:read', handleMessagesRead);
+    return () => socketService.off('message:read', handleMessagesRead);
+  }, [isConnected, currentConversation?.id]);
 
   return {
     conversations,
