@@ -278,7 +278,7 @@ export default function StudentDashboard() {
                         {[0, 1, 2].map((i) => (
                           <div
                             key={`skeleton-${i}`}
-                            className="rounded-2xl border border-border bg-glass p-6 animate-pulse"
+                            className="rounded-2xl bg-glass p-6 animate-pulse shadow-md shadow-black/5"
                           >
                             <div className="flex items-center gap-3 mb-4">
                               <div className="w-10 h-10 rounded-full bg-border" />
@@ -293,7 +293,7 @@ export default function StudentDashboard() {
                         ))}
                       </div>
                     ) : filteredPosts.length === 0 ? (
-                      <div className="rounded-2xl border border-border bg-glass backdrop-blur-xl p-10 text-center">
+                      <div className="rounded-2xl bg-glass backdrop-blur-xl p-10 text-center shadow-md shadow-black/5">
                         <p className="text-text-secondary">
                           {feedFilter === 'all'
                             ? 'No posts yet. Check back later!'

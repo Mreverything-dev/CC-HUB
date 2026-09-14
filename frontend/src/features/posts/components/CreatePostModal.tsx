@@ -15,7 +15,6 @@ import { useAuthStore } from '@/features/auth/store/auth.store';
 import { mediaService } from '@/services/api/media.service';
 import { RoleBadge } from '@/features/dashboard/components/RoleBadge';
 import { EmojiPicker } from './EmojiPicker';
-import { PostContentBody } from './PostContentBody';
 
 const ALLOWED_MEDIA_TYPES = [
   'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
@@ -75,12 +74,12 @@ export default function CreatePostModal({ onClose, onCreatePost, isLoading = fal
 
   const isBusy = isUploading || isLoading;
 
-  // Auto-resize textarea - minimum 1 line, maximum 260px
+  // Auto-resize textarea
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
-    const minHeight = 24; // ~1 line at text-sm
+    const minHeight = 24;
     el.style.height = `${Math.max(minHeight, Math.min(el.scrollHeight, 260))}px`;
   }, [content]);
 
@@ -146,6 +145,32 @@ export default function CreatePostModal({ onClose, onCreatePost, isLoading = fal
     if (e.dataTransfer.files?.length) addFiles(Array.from(e.dataTransfer.files));
   };
 
+  const wrapSelection = (prefix: string, suffix: string = prefix) => {
+    const el = textareaRef.current;
+    if (!el) return;
+
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const selected = content.slice(start, end);
+    const before = content.slice(0, start);
+    const after = content.slice(end);
+
+    const newText = `${before}${prefix}${selected || 'text'}${suffix}${after}`;
+    const newLength = newText.length;
+
+    if (newLength > MAX_CONTENT_LENGTH) return;
+
+    setContent(newText);
+
+    requestAnimationFrame(() => {
+      el.focus();
+      const innerStart = start + prefix.length;
+      const innerEnd = innerStart + (selected.length || 4);
+      el.setSelectionRange(innerStart, innerEnd);
+    });
+  };
+
+  // ✅ ITO YUNG NAWALA — idinagdag natin
   const handleEmojiSelect = (emoji: string) => {
     setContent((prev) => (prev.length >= MAX_CONTENT_LENGTH ? prev : `${prev}${emoji}`));
     textareaRef.current?.focus();
@@ -229,7 +254,7 @@ export default function CreatePostModal({ onClose, onCreatePost, isLoading = fal
           </button>
         </div>
 
-        {/* Body - just the preview card */}
+        {/* Body */}
         <div className="flex-1 overflow-y-auto themed-scrollbar px-5 py-4">
           <div className="rounded-xl border border-border bg-glass p-4">
             {/* Identity row */}
@@ -287,7 +312,7 @@ export default function CreatePostModal({ onClose, onCreatePost, isLoading = fal
               </div>
             </div>
 
-            {/* Editable textarea - inside the preview card, auto-resize */}
+            {/* Editable textarea */}
             <div
               onDragOver={(e) => {
                 e.preventDefault();
@@ -299,6 +324,64 @@ export default function CreatePostModal({ onClose, onCreatePost, isLoading = fal
                 isDragging ? 'border-[#00C8FF] bg-[#00C8FF]/5' : 'border-transparent'
               }`}
             >
+              {/* Formatting toolbar */}
+              <div className="flex items-center gap-0.5 mb-2 pb-2 border-b border-border/50">
+                <button
+                  type="button"
+                  onClick={() => wrapSelection('**')}
+                  title="Bold"
+                  className="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-glass-hover transition text-sm font-bold"
+                >
+                  B
+                </button>
+                <button
+                  type="button"
+                  onClick={() => wrapSelection('*')}
+                  title="Italic"
+                  className="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-glass-hover transition text-sm italic"
+                >
+                  I
+                </button>
+                <button
+                  type="button"
+                  onClick={() => wrapSelection('~~')}
+                  title="Strikethrough"
+                  className="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-glass-hover transition text-sm line-through"
+                >
+                  S
+                </button>
+                <button
+                  type="button"
+                  onClick={() => wrapSelection('`')}
+                  title="Inline code"
+                  className="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-glass-hover transition text-xs font-mono"
+                >
+                  {'</>'}
+                </button>
+
+                {/* Color picker */}
+                <div className="flex items-center gap-0.5 ml-1 pl-1 border-l border-border/50">
+                  {[
+                    { hex: 'EF4444', label: 'Red' },
+                    { hex: 'F59E0B', label: 'Orange' },
+                    { hex: '10B981', label: 'Green' },
+                    { hex: '00C8FF', label: 'Cyan' },
+                    { hex: '3B82F6', label: 'Blue' },
+                    { hex: '8B5CF6', label: 'Purple' },
+                    { hex: 'EC4899', label: 'Pink' },
+                  ].map((c) => (
+                    <button
+                      key={c.hex}
+                      type="button"
+                      onClick={() => wrapSelection(`[[color:#${c.hex}]]`, `[[/color]]`)}
+                      title={c.label}
+                      className="w-5 h-5 rounded-full border border-border hover:scale-110 transition"
+                      style={{ backgroundColor: `#${c.hex}` }}
+                    />
+                  ))}
+                </div>
+              </div>
+
               <textarea
                 ref={textareaRef}
                 value={content}
@@ -320,7 +403,7 @@ export default function CreatePostModal({ onClose, onCreatePost, isLoading = fal
               </div>
             )}
 
-            {/* Code snippet - committed preview */}
+            {/* Code snippet preview */}
             {codeSnippet && !showCodeEditor && (
               <div className="mt-2 rounded-xl border border-border bg-bg overflow-hidden">
                 <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-glass-hover">
@@ -385,7 +468,7 @@ export default function CreatePostModal({ onClose, onCreatePost, isLoading = fal
               </div>
             )}
 
-            {/* Code snippet editor (inline) */}
+            {/* Code snippet editor */}
             {showCodeEditor && (
               <div className="mt-2 rounded-xl border border-border bg-bg p-3 space-y-2.5">
                 <div className="flex items-center justify-between gap-2">
@@ -433,7 +516,7 @@ export default function CreatePostModal({ onClose, onCreatePost, isLoading = fal
               </div>
             )}
 
-            {/* Actions preview row */}
+            {/* Actions preview */}
             <div className="flex items-center gap-4 mt-3 pt-3 border-t border-border text-text-muted text-xs">
               <span>♡ Like</span>
               <span>◌ Comment</span>
@@ -441,7 +524,7 @@ export default function CreatePostModal({ onClose, onCreatePost, isLoading = fal
             </div>
           </div>
 
-          {/* Attachment buttons below the card */}
+          {/* Attachment buttons */}
           <div className="flex items-center gap-1.5 flex-wrap mt-3">
             <input
               ref={fileInputRef}

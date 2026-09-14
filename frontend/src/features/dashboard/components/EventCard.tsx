@@ -49,7 +49,7 @@ export function EventCardList({ events = SAMPLE_EVENTS }: EventCardListProps) {
   const showSkeleton = useMinimumLoading(isLoading, 3000);
 
   return (
-    <div className="rounded-2xl border border-border bg-glass backdrop-blur-xl p-4 sm:p-5 transition hover:border-[#00C8FF]/30">
+    <div className="rounded-2xl bg-glass backdrop-blur-xl p-4 sm:p-5 shadow-md shadow-black/5 transition hover:shadow-lg hover:shadow-black/10">
       <div className="flex items-center justify-between mb-3">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
           <SparklesIcon className="h-4 w-4 text-[#00C8FF]" />

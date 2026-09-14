@@ -1,5 +1,6 @@
 // frontend/src/features/profile/pages/ProfilePage.tsx
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { authApi } from '@/features/auth/api/auth.api';
@@ -18,6 +19,7 @@ import { Topbar } from '@/features/dashboard/components/Topbar';
 import { ChangePasswordSection } from '@/features/profile/components/ChangePasswordSection';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { formatDate } from '@/lib/formatters';
+import { extractGiphyGifUrl } from '@/lib/giphy';
 import toast from 'react-hot-toast';
 import {
   PencilIcon,
@@ -42,6 +44,7 @@ import {
   BuildingLibraryIcon,
   SparklesIcon,
   PhotoIcon,
+  FilmIcon,
 } from '@heroicons/react/24/outline';
 
 const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
@@ -109,6 +112,16 @@ export default function ProfilePage() {
   const [sectionName, setSectionName] = useState<string | null>(null);
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [sidebarAvatarUrl, setSidebarAvatarUrl] = useState<string | null>(null);
+
+  // GIF URL states
+  const [showGifUrlInput, setShowGifUrlInput] = useState(false);
+  const [gifUrl, setGifUrl] = useState('');
+  const [isSavingGif, setIsSavingGif] = useState(false);
+
+  // Avatar menu (Image / Video / GIF)
+  const [showAvatarMenu, setShowAvatarMenu] = useState(false);
+  const avatarMenuRef = useRef<HTMLDivElement>(null);
+
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
   const actionMenuRef = useRef<HTMLDivElement>(null);
@@ -120,6 +133,20 @@ export default function ProfilePage() {
       .then((res) => setSidebarAvatarUrl((res.data.profile as any)?.avatar_url || null))
       .catch(() => setSidebarAvatarUrl(null));
   }, []);
+
+  useEffect(() => {
+    if (!showAvatarMenu) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Ignore clicks inside the menu (which is portaled to document.body)
+      if (target.closest('[data-avatar-menu]')) return;
+      // Ignore clicks on the trigger button
+      if (avatarMenuRef.current && avatarMenuRef.current.contains(target)) return;
+      setShowAvatarMenu(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showAvatarMenu]);
 
   const dashboardPath =
     user?.role === 'admin' ? '/admin/dashboard' : user?.role === 'professor' ? '/professor/dashboard' : '/student/dashboard';
@@ -395,6 +422,45 @@ export default function ProfilePage() {
       toast.error(error.response?.data?.detail || 'Failed to upload avatar');
     } finally {
       setIsUploadingAvatar(false);
+    }
+  };
+
+  const handleSaveGifAvatar = async () => {
+    if (!profile || !gifUrl.trim()) return;
+
+    const directGifUrl = extractGiphyGifUrl(gifUrl.trim());
+    if (!directGifUrl) {
+      toast.error('Invalid Giphy URL. Example: https://giphy.com/gifs/IcGkqdUmYLFGE');
+      return;
+    }
+
+    setIsSavingGif(true);
+    try {
+      const hasProfile = !!profile.profile;
+
+      if (profile.role === 'student') {
+        hasProfile
+          ? await profileService.updateStudentProfile({ avatar_url: directGifUrl })
+          : await profileService.createStudentProfile({ user_id: profile.user_id, avatar_url: directGifUrl });
+      } else if (profile.role === 'professor') {
+        hasProfile
+          ? await profileService.updateProfessorProfile({ avatar_url: directGifUrl })
+          : await profileService.createProfessorProfile({ user_id: profile.user_id, avatar_url: directGifUrl });
+      } else if (profile.role === 'admin') {
+        hasProfile
+          ? await profileService.updateAdminProfile({ avatar_url: directGifUrl })
+          : await profileService.createAdminProfile({ user_id: profile.user_id, avatar_url: directGifUrl });
+      }
+
+      toast.success('Avatar updated with GIF!');
+      setShowGifUrlInput(false);
+      setGifUrl('');
+      await fetchProfile();
+    } catch (error: any) {
+      console.error('Error saving GIF avatar:', error);
+      toast.error(error.response?.data?.detail || 'Failed to save GIF avatar');
+    } finally {
+      setIsSavingGif(false);
     }
   };
 
@@ -748,19 +814,68 @@ export default function ProfilePage() {
                         onChange={handleAvatarChange}
                         className="hidden"
                       />
-                      <button
-                        type="button"
-                        onClick={() => avatarInputRef.current?.click()}
-                        disabled={isUploadingAvatar}
-                        title="Change avatar"
-                        className="absolute -bottom-0.5 -right-0.5 w-6 h-6 rounded-full bg-bg shadow-md border border-border flex items-center justify-center hover:bg-border transition disabled:opacity-50"
-                      >
-                        {isUploadingAvatar ? (
-                          <span className="animate-spin h-3 w-3 rounded-full border-2 border-border border-t-[#00C8FF]" />
-                        ) : (
-                          <CameraIcon className="h-3 w-3 text-text-secondary" />
+                      <div className="relative" ref={avatarMenuRef}>
+                        <button
+                          type="button"
+                          onClick={() => setShowAvatarMenu((v) => !v)}
+                          disabled={isUploadingAvatar}
+                          title="Change avatar"
+                          className="absolute -bottom-0.5 -right-0.5 w-6 h-6 rounded-full bg-bg shadow-md border border-border flex items-center justify-center hover:bg-border transition disabled:opacity-50"
+                        >
+                          {isUploadingAvatar ? (
+                            <span className="animate-spin h-3 w-3 rounded-full border-2 border-border border-t-[#00C8FF]" />
+                          ) : (
+                            <CameraIcon className="h-3 w-3 text-text-secondary" />
+                          )}
+                        </button>
+                        {showAvatarMenu && avatarMenuRef.current && createPortal(
+                          <div
+                            data-avatar-menu
+                            className="fixed w-48 rounded-xl border border-border bg-bg shadow-xl py-1 z-[100]"
+                            style={{
+                              top: avatarMenuRef.current.getBoundingClientRect().bottom + 8,
+                              left: avatarMenuRef.current.getBoundingClientRect().left,
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowAvatarMenu(false);
+                                avatarInputRef.current?.click();
+                              }}
+                              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-text-secondary hover:bg-glass hover:text-text-primary transition"
+                            >
+                              <PhotoIcon className="h-4 w-4" />
+                              Upload Image
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowAvatarMenu(false);
+                                toast('Video upload coming soon');
+                              }}
+                              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-text-secondary hover:bg-glass hover:text-text-primary transition opacity-50 cursor-not-allowed"
+                            >
+                              <FilmIcon className="h-4 w-4" />
+                              Upload Video
+                              <span className="ml-auto text-[9px] uppercase tracking-wide border border-border rounded px-1">Soon</span>
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowAvatarMenu(false);
+                                setShowGifUrlInput(true);
+                              }}
+                              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-text-secondary hover:bg-glass hover:text-text-primary transition"
+                            >
+                              <span className="text-[10px] font-bold border border-border rounded px-1">GIF</span>
+                              Use GIF URL
+                            </button>
+                          </div>,
+                          document.body
                         )}
-                      </button>
+                      </div>
                     </>
                   )}
                 </div>
@@ -1266,6 +1381,72 @@ export default function ProfilePage() {
             className="max-w-full max-h-[90vh] object-contain rounded-lg"
             onClick={(e) => e.stopPropagation()}
           />
+        </div>
+      )}
+
+      {/* GIF URL Modal */}
+      {showGifUrlInput && (
+        <div
+          className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => !isSavingGif && setShowGifUrlInput(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Set GIF avatar"
+        >
+          <div
+            className="bg-bg border border-border rounded-2xl shadow-2xl w-full max-w-md p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-semibold text-text-primary mb-1">
+              Use a Giphy GIF
+            </h3>
+            <p className="text-sm text-text-secondary mb-4">
+              Paste a Giphy link (e.g. https://giphy.com/gifs/IcGkqdUmYLFGE)
+            </p>
+
+            <input
+              type="text"
+              value={gifUrl}
+              onChange={(e) => setGifUrl(e.target.value)}
+              placeholder="https://giphy.com/gifs/..."
+              autoFocus
+              className="w-full px-3 py-2 rounded-xl border border-border bg-bg text-sm text-text-primary placeholder-text-muted focus:ring-2 focus:ring-[#00C8FF] focus:border-[#00C8FF] focus:outline-none transition"
+            />
+
+            {/* Preview */}
+            {gifUrl.trim() && extractGiphyGifUrl(gifUrl.trim()) && (
+              <div className="mt-3 flex justify-center">
+                <img
+                  src={extractGiphyGifUrl(gifUrl.trim())!}
+                  alt="GIF preview"
+                  className="h-24 w-24 rounded-full object-cover border-4 border-border"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              </div>
+            )}
+
+            <div className="flex items-center gap-3 mt-5">
+              <button
+                onClick={() => {
+                  setShowGifUrlInput(false);
+                  setGifUrl('');
+                }}
+                disabled={isSavingGif}
+                className="flex-1 px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-glass rounded-xl transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveGifAvatar}
+                disabled={isSavingGif || !gifUrl.trim()}
+                className="flex-1 px-4 py-2 text-sm font-semibold bg-gradient-to-br from-[#00C8FF] to-[#3B82F6] text-[#060B12] rounded-xl hover:opacity-90 transition disabled:opacity-50"
+              >
+                {isSavingGif ? 'Saving...' : 'Save GIF'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

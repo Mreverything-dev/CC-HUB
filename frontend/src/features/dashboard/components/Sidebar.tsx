@@ -22,6 +22,7 @@ import { useAuthStore } from '@/features/auth/store/auth.store';
 import { useFriendStore } from '@/features/friends/store/friend.store';
 import { useChatStore } from '@/features/chat/store/chat.store';
 import { livestreamService } from '@/services/api/livestream.service';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 export type SidebarSection = 'feed' | 'announcements' | 'sections' | 'classes' | 'users' | 'friends' | 'chat';
 
@@ -65,6 +66,7 @@ export function Sidebar({ activeSection, onNavigate, isMobileOpen = false, onClo
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const [liveCount, setLiveCount] = useState(0);
+  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
 
   const notifications = useFriendStore((state) => state.notifications);
   const chatUnreadCount = useChatStore((state) => state.unreadCount);
@@ -110,7 +112,12 @@ export function Sidebar({ activeSection, onNavigate, isMobileOpen = false, onClo
     onCloseMobile?.();
   };
 
-  const handleLogout = async () => {
+  const handleSignOutClick = () => {
+    setShowSignOutConfirm(true);
+  };
+
+  const handleConfirmSignOut = async () => {
+    setShowSignOutConfirm(false);
     await logout();
     navigate('/login');
   };
@@ -179,7 +186,7 @@ export function Sidebar({ activeSection, onNavigate, isMobileOpen = false, onClo
       {/* Bottom - Sign out */}
       <div className="border-t border-border p-3">
         <button
-          onClick={handleLogout}
+          onClick={handleSignOutClick}
           title="Sign out"
           className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors duration-200 ease-out text-[#EF4444]/80 hover:text-[#EF4444] hover:bg-[#EF4444]/10"
         >
@@ -193,7 +200,7 @@ export function Sidebar({ activeSection, onNavigate, isMobileOpen = false, onClo
   return (
     <>
       {/* Desktop */}
-      <aside className="hidden lg:flex lg:flex-col w-[280px] h-screen sticky top-0 border-r border-border bg-bg/95 backdrop-blur-xl">
+      <aside className="hidden lg:flex lg:flex-col w-[280px] h-screen sticky top-0 bg-bg/95 backdrop-blur-xl shadow-[4px_0_24px_rgba(0,0,0,0.06)] dark:shadow-[4px_0_24px_rgba(0,0,0,0.4)]">
         {sidebarContent}
       </aside>
 
@@ -206,7 +213,7 @@ export function Sidebar({ activeSection, onNavigate, isMobileOpen = false, onClo
       >
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCloseMobile} />
         <aside
-          className={`absolute inset-y-0 left-0 w-[280px] max-w-[85vw] flex flex-col border-r border-border bg-bg shadow-2xl transition-transform duration-300 ease-out ${
+          className={`absolute inset-y-0 left-0 w-[280px] max-w-[85vw] flex flex-col bg-bg shadow-2xl transition-transform duration-300 ease-out ${
             isMobileOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
         >
@@ -221,6 +228,19 @@ export function Sidebar({ activeSection, onNavigate, isMobileOpen = false, onClo
           {sidebarContent}
         </aside>
       </div>
+
+      {/* Sign out confirmation dialog */}
+      {showSignOutConfirm && (
+        <ConfirmDialog
+          title="Sign Out"
+          message="Are you sure you want to sign out of CCS HUB?"
+          confirmLabel="Sign Out"
+          loadingLabel="Signing out..."
+          danger
+          onConfirm={handleConfirmSignOut}
+          onCancel={() => setShowSignOutConfirm(false)}
+        />
+      )}
     </>
   );
 }

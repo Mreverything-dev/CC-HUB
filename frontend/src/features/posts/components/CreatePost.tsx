@@ -17,7 +17,7 @@ export function CreatePost({ onCreatePost, isLoading = false, avatarUrl }: Creat
 
   return (
     <>
-                  <div className="mb-6 rounded-2xl border border-border bg-glass backdrop-blur-xl p-4 sm:p-5 transition-all duration-200 hover:border-[#00C8FF]/30">
+<div className="mb-6 rounded-2xl bg-glass backdrop-blur-xl p-4 sm:p-5 shadow-md shadow-black/5 transition-all duration-200 hover:shadow-lg hover:shadow-black/10">
         <button
           type="button"
           onClick={() => setShowModal(true)}

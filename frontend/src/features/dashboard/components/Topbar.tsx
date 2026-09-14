@@ -94,7 +94,7 @@ export function Topbar({
   };
 
   return (
-    <header className="sticky top-0 z-30 flex items-center gap-2 sm:gap-4 border-b border-border bg-bg/95 backdrop-blur-xl px-3 py-3.5 sm:px-4 lg:px-8">
+    <header className="sticky top-0 z-30 flex items-center gap-2 sm:gap-4 bg-bg/95 backdrop-blur-xl px-3 py-3.5 sm:px-4 lg:px-8 shadow-[0_4px_24px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.4)]">
       {onOpenMenu && (
         <button
           onClick={onOpenMenu}

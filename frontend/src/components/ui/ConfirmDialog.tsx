@@ -8,10 +8,7 @@ interface ConfirmDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   isLoading?: boolean;
-  /** Text shown on the confirm button while isLoading is true - defaults to
-   * "Please wait..." so every existing caller keeps its current wording. */
   loadingLabel?: string;
-  /** Red/destructive styling by default - pass false for a neutral cyan confirmation. */
   danger?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -39,7 +36,7 @@ export function ConfirmDialog({
       onClick={() => !isLoading && onCancel()}
     >
       <div
-        className="w-full max-w-sm rounded-2xl border border-[#1E3447] bg-[#111E2B] shadow-[0_0_40px_rgba(0,200,255,0.06)] p-6"
+        className="w-full max-w-sm rounded-2xl border border-border bg-bg shadow-2xl p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div
@@ -51,14 +48,14 @@ export function ConfirmDialog({
         >
           <ExclamationTriangleIcon className={`h-6 w-6 ${danger ? 'text-[#EF4444]' : 'text-[#00C8FF]'}`} />
         </div>
-        <h3 className="text-base font-semibold text-[#F1F5F9] text-center">{title}</h3>
-        <div className="text-sm text-[#94A3B8] text-center mt-2">{message}</div>
+        <h3 className="text-base font-semibold text-text-primary text-center">{title}</h3>
+        <div className="text-sm text-text-secondary text-center mt-2">{message}</div>
 
         <div className="flex items-center gap-3 mt-6">
           <button
             onClick={onCancel}
             disabled={isLoading}
-            className="flex-1 px-4 py-2 text-sm font-medium text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-white/5 rounded-xl transition disabled:opacity-50"
+            className="flex-1 px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-glass rounded-xl transition disabled:opacity-50"
           >
             {cancelLabel}
           </button>
@@ -68,7 +65,7 @@ export function ConfirmDialog({
             className={`flex-1 px-4 py-2 text-sm font-semibold rounded-xl transition disabled:opacity-50 ${
               danger
                 ? 'bg-[#EF4444] text-white hover:bg-[#dc3737]'
-                : 'bg-[#00C8FF] text-[#060B12] hover:opacity-90'
+                : 'bg-gradient-to-br from-[#00C8FF] to-[#3B82F6] text-[#060B12] hover:opacity-90'
             }`}
           >
             {isLoading ? loadingLabel : confirmLabel}

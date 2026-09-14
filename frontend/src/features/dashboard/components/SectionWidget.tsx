@@ -11,7 +11,7 @@ interface SectionWidgetProps {
 
 export function SectionWidget({ section, isLoading, onGoToSection }: SectionWidgetProps) {
   return (
-    <div className="rounded-2xl border border-border bg-glass backdrop-blur-xl p-4 sm:p-5 transition hover:border-[#00C8FF]/30">
+    <div className="rounded-2xl bg-glass backdrop-blur-xl p-4 sm:p-5 shadow-md shadow-black/5 transition hover:shadow-lg hover:shadow-black/10">
       <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary mb-3">
         <UsersIcon className="h-4 w-4 text-[#00C8FF]" />
         Your Section

@@ -14,7 +14,7 @@ export function LiveStreamsWidget({ liveStreams, upcomingStreams, isLoading }: L
   const combined = [...liveStreams, ...upcomingStreams.slice(0, Math.max(0, 3 - liveStreams.length))];
 
   return (
-    <div className="rounded-2xl border border-border bg-glass backdrop-blur-xl p-4 sm:p-5">
+    <div className="rounded-2xl bg-glass backdrop-blur-xl p-4 sm:p-5 shadow-md shadow-black/5">
       <div className="flex items-center justify-between mb-3">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
           <VideoCameraIcon className="h-4 w-4 text-[#00C8FF]" />

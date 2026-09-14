@@ -218,7 +218,7 @@ export function ClassReminderCard({
                   {typingIndex === 1 && <TypingCursor />}
                 </p>
                 {nextUpcoming && (
-                  <div className="mt-3 inline-flex flex-col items-start gap-1.5 rounded-xl border border-border bg-glass px-3.5 py-3 max-w-full">
+                  <div className="mt-3 inline-flex flex-col items-start gap-1.5 rounded-xl border border-white/20 bg-black/40 backdrop-blur-sm px-3.5 py-3 max-w-full">
                     <p className="text-xs text-white/90 flex items-start gap-2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
                       <CalendarIcon className="h-3.5 w-3.5 text-[#00C8FF] flex-shrink-0 mt-0.5" />
                       <span className="min-w-0">

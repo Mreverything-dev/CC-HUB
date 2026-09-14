@@ -1,4 +1,6 @@
 // frontend/src/features/posts/components/PostContentBody.tsx
+import { MarkdownText } from './MarkdownText';
+
 const CODE_FENCE_RE = /```(\w+)?\n?([\s\S]*?)```/g;
 
 interface ContentSegment {
@@ -7,12 +9,6 @@ interface ContentSegment {
   language?: string;
 }
 
-/**
- * Splits post content on ```lang\n...\n``` fences (the format the Create
- * Post composer's Code Snippet feature appends to plain-text content - no
- * new backend field involved). Never uses dangerouslySetInnerHTML, so text
- * and code both render as inert, auto-escaped React text - safe by default.
- */
 function parseContent(content: string): ContentSegment[] {
   const segments: ContentSegment[] = [];
   let lastIndex = 0;
@@ -34,7 +30,6 @@ function parseContent(content: string): ContentSegment[] {
 
 interface PostContentBodyProps {
   content: string;
-  /** Compact feed-card view: text is line-clamped and code blocks are height-capped. */
   compact?: boolean;
   className?: string;
 }
@@ -43,11 +38,11 @@ export function PostContentBody({ content, compact = false, className = '' }: Po
   if (!content) return null;
   const segments = parseContent(content);
 
-  // Plain text with no code fence at all - render exactly as before.
+  // Plain text with no code fence - render with inline markdown
   if (segments.length === 1 && segments[0].type === 'text') {
     return (
-      <p className={`whitespace-pre-wrap [overflow-wrap:anywhere] ${compact ? 'line-clamp-3' : ''} ${className}`}>
-        {content}
+      <p className={`whitespace-pre-wrap [overflow-wrap:anywhere] text-text-primary ${compact ? 'line-clamp-3' : ''} ${className}`}>
+        <MarkdownText text={content} />
       </p>
     );
   }
@@ -60,22 +55,22 @@ export function PostContentBody({ content, compact = false, className = '' }: Po
           return (
             <div
               key={i}
-              className="rounded-xl border border-[#1E3447] bg-[#0A111A] overflow-hidden"
+              className="rounded-xl border border-border bg-glass overflow-hidden"
             >
-              <div className="flex items-center justify-between px-3 py-1.5 border-b border-[#1E3447] bg-[#111E2B]">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-[#64748B]">
+              <div className="flex items-center justify-between px-3 py-1.5 border-b border-border bg-glass-hover">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">
                   {seg.language}
                 </span>
               </div>
-              <pre className={`p-3 overflow-x-auto text-xs leading-relaxed text-[#94A3B8] font-mono ${compact ? 'max-h-28 overflow-y-hidden' : ''}`}>
+              <pre className={`p-3 overflow-x-auto text-xs leading-relaxed text-text-secondary font-mono ${compact ? 'max-h-28 overflow-y-hidden' : ''}`}>
                 <code>{seg.value}</code>
               </pre>
             </div>
           );
         }
         return (
-          <p key={i} className={`whitespace-pre-wrap break-words ${compact ? 'line-clamp-2' : ''}`}>
-            {seg.value.trim()}
+          <p key={i} className={`whitespace-pre-wrap break-words text-text-primary ${compact ? 'line-clamp-2' : ''}`}>
+            <MarkdownText text={seg.value.trim()} />
           </p>
         );
       })}
