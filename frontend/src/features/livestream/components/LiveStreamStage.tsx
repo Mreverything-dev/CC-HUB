@@ -44,14 +44,6 @@ import { HeartIcon as HeartSolidIcon } from '@heroicons/react/24/solid';
 
 const REACTIONS = ['❤️', '👍', '😂', '😮', '😢'];
 
-// Bottom placements sit at bottom-20 (not bottom-4) because the video
-// player has its own full-width control bar pinned to bottom-0 (play/pause,
-// mute, fullscreen) with an always-visible gradient background - a PiP box
-// at bottom-4 overlapped it directly. Top placements sit at top-16 (not
-// top-4) for the same reason on the other edge: top-4 is exactly where the
-// LIVE/duration/viewer badge row (left) and the host's mic/screen-share/
-// record controls (right) already live, so a camera box at top-4 would sit
-// directly on top of that chrome instead of beside it.
 const PIP_POSITION_CLASSES: Record<PipPosition, string> = {
   'top-left': 'top-16 left-4',
   'top-right': 'top-16 right-4',
@@ -65,14 +57,6 @@ const PIP_POSITION_LABELS: Record<PipPosition, string> = {
   'bottom-right': 'Bottom right',
 };
 
-/**
- * Global, route-independent livestream player + chat, mounted once at the
- * app root (see App.tsx, next to ChatWidget) and driven by liveSession.store
- * instead of being owned by a page route. This is what makes minimize work:
- * navigating the underlying Dashboard around never unmounts this component,
- * so the WebRTC connection and chat socket subscriptions never drop - only
- * the CSS layout (docked overlay vs. small floating player) changes.
- */
 export function LiveStreamStage() {
   const streamId = useLiveSessionStore((s) => s.streamId);
   const isHostSession = useLiveSessionStore((s) => s.isHost);
@@ -83,10 +67,6 @@ export function LiveStreamStage() {
 
   if (!streamId) return null;
 
-  // key={streamId} forces a full remount (fresh state, fresh signaling
-  // connection) when switching to watch a different stream, while the same
-  // id keeps this one instance alive - and its WebRTC connection intact -
-  // across minimize/restore and every Dashboard navigation in between.
   return (
     <LiveStreamStageInner
       key={streamId}
@@ -118,12 +98,7 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
   const [viewers, setViewers] = useState<StreamViewer[]>([]);
   const [showViewers, setShowViewers] = useState(false);
   const [isMicOn, setIsMicOn] = useState(true);
-  // HOST only: hides the camera PiP overlay while screen-sharing without
-  // touching the camera track/stream at all - purely a local UI toggle.
   const [isCameraPipHidden, setIsCameraPipHidden] = useState(false);
-  // HOST only: PiP position/size/mirror - defaults here, overwritten once
-  // (via the hook's onClaimedPipConfig) if the host configured these during
-  // Go Live setup, then freely adjustable live from here on.
   const [pipPosition, setPipPosition] = useState<PipPosition>('bottom-right');
   const [pipSize, setPipSize] = useState<PipSize>('small');
   const [isPipMirrored, setIsPipMirrored] = useState(false);
@@ -131,10 +106,6 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  // Auto-hide player controls (modern livestream-platform behavior) - a
-  // pure CSS opacity/pointer-events toggle on the control overlays, never
-  // touching the <video> element's mount lifecycle, so this can never cause
-  // a stream reconnect or remount (see PERFORMANCE note near showPlayer).
   const [controlsVisible, setControlsVisible] = useState(true);
   const hideControlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isHoveringControlsRef = useRef(false);
@@ -192,29 +163,14 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
     },
   });
 
-  // Keeps the actual composited broadcast (what viewers receive) in sync
-  // with these local UI controls - takes effect on the next drawn frame,
-  // no reconnection/renegotiation involved.
   useEffect(() => {
     setPipConfig({ position: pipPosition, size: pipSize, mirrored: isPipMirrored, hidden: isCameraPipHidden });
   }, [pipPosition, pipSize, isPipMirrored, isCameraPipHidden, setPipConfig]);
 
-  // Autoplay policy forced the incoming stream to start muted (see the
-  // hook's attachRemoteStream) - keep the mute button's UI in sync so it
-  // correctly shows "muted" and a single click (an in-place unmute on an
-  // already-playing element, always allowed) both silences the prompt and
-  // actually enables audio.
   useEffect(() => {
     if (needsUnmute) setIsMuted(true);
   }, [needsUnmute]);
 
-  // Live duration - based on the stream's actual `started_at` timestamp
-  // (never "time since this component rendered"), ticking once a second
-  // only while genuinely live, and torn down the instant that's no longer
-  // true. The effect only re-runs when one of these three values actually
-  // changes, so a single interval is created per live session - not one per
-  // render - and it's always cleared (by the returned cleanup) before a new
-  // one is ever created, both on unmount and when the stream ends.
   const [liveDurationSeconds, setLiveDurationSeconds] = useState(0);
   useEffect(() => {
     if (!isLive || hostOffline || !stream?.started_at) return;
@@ -229,14 +185,6 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
     if (stream?.host_id) navigate(`/profile/${stream.host_id}`);
   };
 
-  // HOST only, once per session: if the streamer never uploaded a
-  // thumbnail, capture a single frame from their own local preview the
-  // moment it actually has real video data, and persist it through the
-  // existing media upload + stream-update endpoints (no new backend). This
-  // is what lets the lobby/browse cards show real stream content instead of
-  // a generic placeholder for streams nobody thumbnailed by hand - it never
-  // touches a stream that already has a thumbnail, never re-captures once
-  // attempted, and never blocks or delays the actual video from playing.
   const thumbnailCaptureAttemptedRef = useRef(false);
   useEffect(() => {
     if (!isHost || !hasLocalMedia || thumbnailCaptureAttemptedRef.current) return;
@@ -250,7 +198,6 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
     let cancelled = false;
     const captureNow = () => {
       if (cancelled || thumbnailCaptureAttemptedRef.current) return;
-      // Wait for real, valid frame data - never capture a blank/half-decoded frame.
       if (video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) return;
       thumbnailCaptureAttemptedRef.current = true;
 
@@ -286,30 +233,12 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
     };
   }, [isHost, hasLocalMedia, stream?.thumbnail_url, streamId, videoElRef]);
 
-  // Note: no effect is needed here to re-attach the stream when switching
-  // between the docked and minimized layouts (which mounts a structurally
-  // different <video> element each time) - videoRef is a callback ref (see
-  // the hook), so it re-attaches automatically the instant ANY new <video>
-  // element mounts, regardless of what caused it to mount.
-
   const isSocketConnected = useChatStore((s) => s.isConnected);
 
   useEffect(() => {
     streamRef.current = stream;
   }, [stream]);
 
-  // Root-cause fix for "viewer must refresh to see the stream": a viewer who
-  // opened this page while the host hadn't started broadcasting yet fetched
-  // stream.status='scheduled' once on mount and nothing ever updated that
-  // local value afterward, so `signalingEnabled` (derived from it) stayed
-  // false forever and the viewer-join/WebRTC effects never ran. stream:started
-  // is already broadcast app-wide (no room filter - the viewer hasn't joined
-  // the stream's room yet at this point) when the host goes live, so listen
-  // for it here and flip local status to 'live', which flips signalingEnabled
-  // and lets useLiveStreamSignaling's own effects take it from there. Also
-  // listens for stream:ended as a redundant, room-independent way to reach
-  // the Ended state (the room-scoped stream:host_left the signaling hook
-  // already handles covers the common case where the viewer did join).
   useEffect(() => {
     if (!isSocketConnected) return;
     const socket = socketService.getSocket();
@@ -343,10 +272,6 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streamId]);
 
-  // Leave the stream (viewer only) whenever this stage instance goes away -
-  // explicit Leave Live click, switching to a different stream, or the whole
-  // session ending. Mirrors the original page-unmount cleanup, just relocated
-  // here since this component (not a route) now owns the watch session.
   useEffect(() => {
     return () => {
       if (hasJoinedRef.current && !streamRef.current?.is_host) {
@@ -441,9 +366,6 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
   };
 
   const handleLeaveLive = () => {
-    // The viewer-leave cleanup effect above fires as soon as this instance
-    // unmounts (which onEnd() triggers by clearing the session), so there's
-    // nothing else to do here - one call, no duplicated leave logic.
     onEnd();
   };
 
@@ -499,9 +421,6 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
     }
   };
 
-  // Keeps the fullscreen button's icon (and any other fullscreen-aware UI)
-  // in sync with the ACTUAL browser state, which can also change from
-  // outside this button (Escape key, browser/OS fullscreen shortcut).
   useEffect(() => {
     const handleFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', handleFullscreenChange);
@@ -523,11 +442,6 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
     }
   };
 
-  // Reveals the control overlays and (re)starts the auto-hide countdown -
-  // called on any mouse movement/click/tap over the player, and whenever
-  // playback state changes in a way that should keep controls visible a
-  // moment longer. Never hides while paused or while the pointer is
-  // resting directly over the controls themselves (isHoveringControlsRef).
   const revealControls = () => {
     setControlsVisible(true);
     if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
@@ -542,9 +456,6 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
     };
   }, []);
 
-  // Controls should stay visible while paused (nothing to auto-hide from -
-  // there's no motion to watch), and reappear/restart the countdown the
-  // moment the stream actually becomes visible.
   useEffect(() => {
     if (isPaused) {
       setControlsVisible(true);
@@ -601,7 +512,7 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
     if (msg.is_system) {
       return (
         <div key={msg.id} className="flex justify-center my-1">
-          <span className="text-[11px] text-[#64748B] italic px-3 py-1 rounded-full bg-[#0A111A]/60">
+          <span className="text-[11px] text-text-muted italic px-3 py-1 rounded-full bg-glass">
             {msg.message}
           </span>
         </div>
@@ -614,7 +525,7 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
 
     return (
       <div key={msg.id} className={`group flex items-start gap-2.5 relative ${isReply ? 'ml-10 mt-2' : ''}`}>
-        <div className="w-8 h-8 rounded-full bg-[#1E3447] flex items-center justify-center text-[#F1F5F9] text-xs font-bold overflow-hidden flex-shrink-0">
+        <div className="w-8 h-8 rounded-full bg-border flex items-center justify-center text-text-primary text-xs font-bold overflow-hidden flex-shrink-0">
           {msg.avatar ? (
             <img src={msg.avatar} alt={msg.username} className="w-full h-full object-cover" />
           ) : (
@@ -623,17 +534,17 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-1.5">
-            <span className="text-sm font-medium text-[#F1F5F9] truncate">{isOwn ? 'You' : msg.username}</span>
-            <span className="text-[10px] text-[#64748B] flex-shrink-0">{formatRelativeTime(msg.timestamp)}</span>
+            <span className="text-sm font-medium text-text-primary truncate">{isOwn ? 'You' : msg.username}</span>
+            <span className="text-[10px] text-text-muted flex-shrink-0">{formatRelativeTime(msg.timestamp)}</span>
           </div>
 
           {msg.is_deleted ? (
-            <p className="mt-0.5 inline-block px-2.5 py-1.5 rounded-xl bg-[#162534]/50 text-sm text-[#64748B] italic">
+            <p className="mt-0.5 inline-block px-2.5 py-1.5 rounded-xl bg-glass text-sm text-text-muted italic">
               This comment was deleted
             </p>
           ) : (
             <>
-              <p className="mt-0.5 inline-block px-2.5 py-1.5 rounded-xl bg-[#162534] text-sm text-[#E2E8F0] break-words">
+              <p className="mt-0.5 inline-block px-2.5 py-1.5 rounded-xl bg-glass text-sm text-text-primary break-words">
                 {msg.message}
               </p>
 
@@ -645,8 +556,8 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                       onClick={() => handleReact(msg.id, emoji)}
                       className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs border transition ${
                         myReaction === emoji
-                          ? 'bg-[#00C8FF]/15 border-[#00C8FF]/50 text-[#00C8FF]'
-                          : 'bg-[#0D1722] border-[#1E3447] text-[#94A3B8] hover:border-[#00C8FF]/30'
+                          ? 'bg-text-primary/10 border-text-primary/40 text-text-primary'
+                          : 'bg-bg border-border text-text-secondary hover:border-text-primary/30'
                       }`}
                     >
                       <span>{emoji}</span>
@@ -660,7 +571,7 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                 <div className="relative">
                   <button
                     onClick={() => setReactionPickerFor(reactionPickerFor === msg.id ? null : msg.id)}
-                    className="flex items-center gap-1 text-[10px] text-[#64748B] hover:text-[#00C8FF] opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
+                    className="flex items-center gap-1 text-[10px] text-text-muted hover:text-text-primary opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
                   >
                     <FaceSmileIcon className="h-3.5 w-3.5" />
                     React
@@ -668,7 +579,7 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                   {reactionPickerFor === msg.id && (
                     <>
                       <div className="fixed inset-0 z-10" onClick={() => setReactionPickerFor(null)} />
-                      <div className="absolute bottom-full left-0 mb-1 flex items-center gap-1 px-2 py-1.5 rounded-full border border-[#1E3447] bg-[#111E2B] shadow-lg z-20">
+                      <div className="absolute bottom-full left-0 mb-1 flex items-center gap-1 px-2 py-1.5 rounded-full border border-border bg-bg shadow-lg z-20">
                         {REACTIONS.map((emoji) => (
                           <button
                             key={emoji}
@@ -686,7 +597,7 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                 {!isReply && (
                   <button
                     onClick={() => handleReply(msg)}
-                    className="flex items-center gap-1 text-[10px] text-[#64748B] hover:text-[#00C8FF] opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
+                    className="flex items-center gap-1 text-[10px] text-text-muted hover:text-text-primary opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
                   >
                     <ArrowUturnLeftIcon className="h-3.5 w-3.5" />
                     Reply
@@ -697,14 +608,14 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                   <div className="relative ml-auto">
                     <button
                       onClick={() => setCommentMenuFor(commentMenuFor === msg.id ? null : msg.id)}
-                      className="text-[#64748B] hover:text-[#F1F5F9] opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
+                      className="text-text-muted hover:text-text-primary opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
                     >
                       <EllipsisVerticalIcon className="h-4 w-4" />
                     </button>
                     {commentMenuFor === msg.id && (
                       <>
                         <div className="fixed inset-0 z-10" onClick={() => setCommentMenuFor(null)} />
-                        <div className="absolute right-0 top-full mt-1 w-32 rounded-xl border border-[#1E3447] bg-[#111E2B] shadow-xl z-20 overflow-hidden">
+                        <div className="absolute right-0 top-full mt-1 w-32 rounded-xl border border-border bg-bg shadow-xl z-20 overflow-hidden">
                           <button
                             onClick={() => {
                               setDeleteTarget(msg.id);
@@ -735,17 +646,6 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
   const streamEnded = stream?.status === 'ended' || hostOffline;
   const showPlayer = isLive && !hostOffline;
 
-  // Waiting -> Connecting -> Live -> (Reconnecting) -> Ended. Ended is
-  // terminal; "waiting" (host hasn't started broadcasting yet) takes
-  // priority over a transient socket drop since there's nothing to
-  // reconnect a peer connection to yet in that state. "Live" means "there
-  // is actually something to show": for a viewer that's isConnected (a
-  // remote track has arrived); for a host that's hasLocalMedia (their own
-  // getUserMedia() has resolved) - NOT isHost alone, which flips true the
-  // instant the stream is marked live server-side, well before the camera/
-  // mic prompt even resolves. Using isHost alone here previously caused the
-  // thumbnail to be hidden (see videoPoster below) during that gap, leaving
-  // the host looking at a blank element until their camera actually attached.
   type StagePhase = 'waiting' | 'connecting' | 'live' | 'reconnecting' | 'ended';
   const phase: StagePhase = streamEnded
     ? 'ended'
@@ -758,20 +658,12 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
     : 'connecting';
   const PHASE_META: Record<StagePhase, { label: string; dotClass: string; textClass: string }> = {
     waiting: { label: 'Waiting for host', dotClass: 'bg-[#F59E0B]', textClass: 'text-[#F59E0B]' },
-    connecting: { label: 'Connecting…', dotClass: 'bg-[#00C8FF] animate-pulse', textClass: 'text-[#00C8FF]' },
+    connecting: { label: 'Connecting…', dotClass: 'bg-text-primary animate-pulse', textClass: 'text-text-primary' },
     live: { label: 'Live now', dotClass: 'bg-emerald-400', textClass: 'text-emerald-400' },
     reconnecting: { label: 'Reconnecting…', dotClass: 'bg-[#F59E0B] animate-pulse', textClass: 'text-[#F59E0B]' },
-    ended: { label: 'Ended', dotClass: 'bg-[#64748B]', textClass: 'text-[#94A3B8]' },
+    ended: { label: 'Ended', dotClass: 'bg-text-muted', textClass: 'text-text-secondary' },
   };
 
-  // Minimize/restore mount a structurally different <video> element (see
-  // videoRef's callback-ref reattach logic in the hook), and a brand new
-  // <video> node always shows its `poster` until IT personally renders a
-  // first frame - even though the underlying stream never stopped flowing.
-  // Once we've actually reached "live", there's nothing left to preview, so
-  // omitting poster here means a remount has nothing stale to flash back to
-  // (a split-second blank frame while the new element catches up, instead
-  // of the old thumbnail image reappearing).
   const videoPoster = phase === 'live' ? undefined : stream?.thumbnail_url || undefined;
 
   // ============================================
@@ -780,8 +672,8 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
   if (isMinimized) {
     return (
       <>
-      <div className="fixed bottom-6 left-6 z-50 w-72 sm:w-80 rounded-2xl border border-[#1E3447] bg-[#0D1722] shadow-[0_8px_40px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between px-3 py-2 border-b border-[#1E3447] bg-[#0A111A]/80 flex-shrink-0">
+      <div className="fixed bottom-6 left-6 z-50 w-72 sm:w-80 rounded-2xl border border-border bg-bg shadow-2xl overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-bg/80 flex-shrink-0">
           <div className="flex items-center gap-1.5 min-w-0">
             {phase === 'live' ? (
               <span className="flex-shrink-0 px-1.5 py-0.5 bg-[#EF4444] text-white text-[9px] font-bold rounded-full">
@@ -792,30 +684,30 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                 <span className={`h-1.5 w-1.5 rounded-full ${PHASE_META[phase].dotClass}`} />
               </span>
             )}
-            <span className="text-xs font-medium text-[#F1F5F9] truncate">{stream?.title || 'Live Stream'}</span>
+            <span className="text-xs font-medium text-text-primary truncate">{stream?.title || 'Live Stream'}</span>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
             <button
               onClick={onRestore}
               title="Restore"
-              className="p-1 text-[#94A3B8] hover:text-[#F1F5F9] rounded-md hover:bg-white/5 transition"
+              className="p-1 text-text-secondary hover:text-text-primary rounded-md hover:bg-glass transition"
             >
               <ArrowsPointingOutIcon className="h-3.5 w-3.5" />
             </button>
             <button
               onClick={isHost ? handleEndStream : handleLeaveLive}
               title={isHost ? 'End Live' : 'Leave Live'}
-              className="p-1 text-[#94A3B8] hover:text-[#EF4444] rounded-md hover:bg-white/5 transition"
+              className="p-1 text-text-secondary hover:text-[#EF4444] rounded-md hover:bg-glass transition"
             >
               <XMarkIcon className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>
 
-        <div className="relative aspect-video bg-[#060B12]">
+        <div className="relative aspect-video bg-bg">
           {isLoading ? (
             <div className="flex items-center justify-center h-full">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#00C8FF]" />
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-text-primary" />
             </div>
           ) : showPlayer ? (
             <video
@@ -828,11 +720,11 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
             />
           ) : (
             <div className="flex items-center justify-center h-full">
-              <VideoCameraIcon className="h-8 w-8 text-[#94A3B8] opacity-30" />
+              <VideoCameraIcon className="h-8 w-8 text-text-secondary opacity-30" />
             </div>
           )}
           {showPlayer && (
-            <span className="absolute bottom-1.5 right-1.5 flex items-center gap-1 px-1.5 py-0.5 bg-black/60 rounded-full text-[10px] text-[#F1F5F9]">
+            <span className="absolute bottom-1.5 right-1.5 flex items-center gap-1 px-1.5 py-0.5 bg-black/60 rounded-full text-[10px] text-white">
               <EyeIcon className="h-3 w-3" />
               {viewerCount}
             </span>
@@ -841,7 +733,7 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
             <button
               onClick={toggleMute}
               title="Tap to unmute"
-              className="absolute bottom-1.5 left-1.5 p-1 rounded-full bg-black/60 text-[#00C8FF] animate-pulse"
+              className="absolute bottom-1.5 left-1.5 p-1 rounded-full bg-black/60 text-text-primary animate-pulse"
             >
               <SpeakerXMarkIcon className="h-3 w-3" />
             </button>
@@ -849,10 +741,10 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
         </div>
 
         {isHost && showPlayer && (
-          <div className="flex items-center justify-center gap-2 px-2 py-1.5 border-t border-[#1E3447] flex-shrink-0">
+          <div className="flex items-center justify-center gap-2 px-2 py-1.5 border-t border-border flex-shrink-0">
             <button
               onClick={toggleMic}
-              className={`p-1.5 rounded-md transition ${isMicOn ? 'bg-[#00C8FF] text-[#060B12]' : 'bg-[#1E3447] text-[#94A3B8]'}`}
+              className={`p-1.5 rounded-md transition ${isMicOn ? 'bg-text-primary text-bg' : 'bg-border text-text-secondary'}`}
             >
               <MicrophoneIcon className="h-3.5 w-3.5" />
             </button>
@@ -886,23 +778,23 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
   // ============================================
   return (
     <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
-      <div className="w-full max-w-[90rem] h-full sm:h-[92vh] rounded-none sm:rounded-2xl border border-[#1E3447] bg-[#060B12] text-[#F1F5F9] shadow-2xl overflow-hidden flex flex-col">
+      <div className="w-full max-w-[90rem] h-full sm:h-[92vh] rounded-none sm:rounded-2xl border border-border bg-bg text-text-primary shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 px-4 sm:px-6 py-4 border-b border-[#1E3447] flex-shrink-0">
+        <div className="flex items-start justify-between gap-4 px-4 sm:px-6 py-4 border-b border-border flex-shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <button
               type="button"
               onClick={goToStreamerProfile}
               title={stream?.host_username ? `View ${stream.host_username}'s profile` : undefined}
-              className="flex-shrink-0 rounded-full transition hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00C8FF]/60"
+              className="flex-shrink-0 rounded-full transition hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-text-primary/60"
             >
               <Avatar src={stream?.host_avatar} name={stream?.host_username} size="md" />
             </button>
             <div className="min-w-0">
-              <h2 className="text-base sm:text-lg font-semibold text-[#F1F5F9] truncate">
+              <h2 className="text-base sm:text-lg font-semibold text-text-primary truncate">
                 {stream?.title || 'Live Stream'}
               </h2>
-              <p className="text-sm text-[#94A3B8] flex items-center gap-1.5 flex-wrap">
+              <p className="text-sm text-text-secondary flex items-center gap-1.5 flex-wrap">
                 <span className={`flex items-center gap-1 ${PHASE_META[phase].textClass}`}>
                   <span className={`h-1.5 w-1.5 rounded-full ${PHASE_META[phase].dotClass}`} />
                   {PHASE_META[phase].label}
@@ -910,7 +802,7 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                 {phase === 'live' && (
                   <>
                     <span>•</span>
-                    <span className="font-mono tabular-nums text-[#F1F5F9]">
+                    <span className="font-mono tabular-nums text-text-primary">
                       {formatDurationClock(liveDurationSeconds)}
                     </span>
                   </>
@@ -921,7 +813,7 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                     <button
                       type="button"
                       onClick={goToStreamerProfile}
-                      className="hover:text-[#00C8FF] hover:underline transition truncate"
+                      className="hover:text-text-primary hover:underline transition truncate"
                     >
                       {stream.host_username}
                     </button>
@@ -935,7 +827,7 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
             <button
               onClick={onMinimize}
               title="Minimize"
-              className="p-2 text-[#94A3B8] hover:text-[#F1F5F9] rounded-lg hover:bg-[#162534] transition"
+              className="p-2 text-text-secondary hover:text-text-primary rounded-lg hover:bg-glass transition"
             >
               <ArrowsPointingInIcon className="h-4 w-4" />
             </button>
@@ -951,7 +843,7 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
               <button
                 onClick={handleLeaveLive}
                 title="Leave Live"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-[#94A3B8] hover:text-[#EF4444] hover:bg-[#EF4444]/10 border border-[#1E3447] hover:border-[#EF4444]/30 transition"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-text-secondary hover:text-[#EF4444] hover:bg-[#EF4444]/10 border border-border hover:border-[#EF4444]/30 transition"
               >
                 <ArrowRightOnRectangleIcon className="h-3.5 w-3.5" />
                 Leave Live
@@ -961,27 +853,27 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
         </div>
 
         {/* Compact action row */}
-        <div className="flex items-center gap-1 px-4 sm:px-6 py-2 border-b border-[#1E3447] flex-shrink-0">
+        <div className="flex items-center gap-1 px-4 sm:px-6 py-2 border-b border-border flex-shrink-0">
           <button
             onClick={handleLike}
             className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg transition ${
-              isLiked ? 'bg-[#EF4444]/20 text-[#EF4444]' : 'text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#162534]'
+              isLiked ? 'bg-[#EF4444]/20 text-[#EF4444]' : 'text-text-secondary hover:text-text-primary hover:bg-glass'
             }`}
             title="Like"
           >
             {isLiked ? <HeartSolidIcon className="h-4 w-4" /> : <HeartIcon className="h-4 w-4" />}
             <span className="text-xs">{likeCount}</span>
           </button>
-          <button onClick={handleShare} title="Share" className="p-2 text-[#94A3B8] hover:text-[#F1F5F9] rounded-lg hover:bg-[#162534] transition">
+          <button onClick={handleShare} title="Share" className="p-2 text-text-secondary hover:text-text-primary rounded-lg hover:bg-glass transition">
             <ShareIcon className="h-4 w-4" />
           </button>
-          <button onClick={handleReport} title="Report" className="p-2 text-[#94A3B8] hover:text-[#EF4444] rounded-lg hover:bg-[#162534] transition">
+          <button onClick={handleReport} title="Report" className="p-2 text-text-secondary hover:text-[#EF4444] rounded-lg hover:bg-glass transition">
             <FlagIcon className="h-4 w-4" />
           </button>
           <button
             onClick={() => setIsChatOpen(!isChatOpen)}
             title={isChatOpen ? 'Hide chat' : 'Show chat'}
-            className={`p-2 rounded-lg transition ${isChatOpen ? 'text-[#00C8FF] bg-[#162534]' : 'text-[#94A3B8] hover:text-[#F1F5F9] hover:bg-[#162534]'}`}
+            className={`p-2 rounded-lg transition ${isChatOpen ? 'text-text-primary bg-glass' : 'text-text-secondary hover:text-text-primary hover:bg-glass'}`}
           >
             <ChatBubbleLeftIcon className="h-4 w-4" />
           </button>
@@ -989,15 +881,15 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
 
         {isLoading ? (
           <div className="flex-1 flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00C8FF]" />
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-text-primary" />
           </div>
         ) : !stream ? (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
-              <h3 className="text-lg font-bold text-[#F1F5F9]">Stream not found</h3>
+              <h3 className="text-lg font-bold text-text-primary">Stream not found</h3>
               <button
                 onClick={onEnd}
-                className="mt-4 px-4 py-2 bg-[#00C8FF] text-[#060B12] rounded-lg font-medium hover:bg-[#00C8FF]/80 transition"
+                className="mt-4 px-4 py-2 border border-border bg-glass text-text-primary rounded-lg font-medium hover:bg-glass-hover transition"
               >
                 Close
               </button>
@@ -1008,12 +900,12 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
             {/* Video player */}
             <div
               ref={playerRef}
-              className={`rounded-2xl border border-[#1E3447] bg-[#0D1722] overflow-hidden flex flex-col min-h-0 ${
+              className={`rounded-2xl border border-border bg-bg overflow-hidden flex flex-col min-h-0 ${
                 isChatOpen ? 'flex-[3] lg:flex-none lg:w-3/4' : 'flex-1 w-full'
               }`}
             >
               <div
-                className="relative flex-1 min-h-0 bg-[#060B12]"
+                className="relative flex-1 min-h-0 bg-bg"
                 onMouseMove={revealControls}
                 onClick={revealControls}
                 onTouchStart={revealControls}
@@ -1029,10 +921,10 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                       className="w-full h-full object-contain"
                     />
                     {!isHost && (phase === 'connecting' || phase === 'reconnecting') && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-[#060B12]/80">
+                      <div className="absolute inset-0 flex items-center justify-center bg-bg/80">
                         <div className="text-center">
-                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00C8FF] mx-auto mb-3" />
-                          <p className="text-[#94A3B8]">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-text-primary mx-auto mb-3" />
+                          <p className="text-text-secondary">
                             {phase === 'reconnecting'
                               ? 'Connection lost - reconnecting...'
                               : waitingForHost
@@ -1042,37 +934,20 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                         </div>
                       </div>
                     )}
-                    {/* The browser only allows autoplay when muted - this
-                        lets the viewer restore audio with one click, which
-                        (unlike starting playback unmuted) is always allowed
-                        on an element that's already playing. */}
                     {!isHost && needsUnmute && (
                       <button
                         onClick={toggleMute}
-                        className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2 rounded-full bg-[#060B12]/90 border border-[#00C8FF]/40 text-sm font-medium text-[#F1F5F9] hover:border-[#00C8FF] transition animate-pulse"
+                        className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2 rounded-full bg-bg/90 border border-text-primary/40 text-sm font-medium text-text-primary hover:border-text-primary transition animate-pulse"
                       >
-                        <SpeakerXMarkIcon className="h-4 w-4 text-[#00C8FF]" />
+                        <SpeakerXMarkIcon className="h-4 w-4 text-text-primary" />
                         Tap to unmute
                       </button>
                     )}
 
-                    {/* Camera PiP - actually composited into what viewers
-                        receive (see setPipConfig/useLiveStreamSignaling),
-                        not just a local monitoring view. Shown whenever
-                        screen-sharing with the camera still on; "hidden"
-                        only stops it being drawn/sent, never the camera
-                        track/stream itself. */}
                     {isHost && isScreenSharing && (
                       <div
-                        // Sized as a % of the player width matching
-                        // PIP_SIZE_RATIO in useLiveStreamSignaling (the same
-                        // ratio the canvas compositor uses against the
-                        // broadcast frame width), so this local preview is a
-                        // true WYSIWYG match for what viewers receive -
-                        // previously this used fixed Tailwind widths
-                        // unrelated to the composited size.
                         style={{ width: `${PIP_SIZE_RATIO[pipSize] * 100}%` }}
-                        className={`group/pip absolute ${PIP_POSITION_CLASSES[pipPosition]} aspect-video rounded-xl overflow-hidden border-2 border-[#1E3447] bg-[#0A111A] shadow-lg ${
+                        className={`group/pip absolute ${PIP_POSITION_CLASSES[pipPosition]} aspect-video rounded-xl overflow-hidden border-2 border-border bg-bg shadow-lg ${
                           isCameraPipHidden ? 'hidden' : ''
                         }`}
                       >
@@ -1093,7 +968,7 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                                 title={PIP_POSITION_LABELS[pos]}
                                 aria-label={PIP_POSITION_LABELS[pos]}
                                 className={`h-3 w-3 rounded-sm border transition ${
-                                  pipPosition === pos ? 'bg-[#00C8FF] border-[#00C8FF]' : 'bg-white/10 border-white/30 hover:bg-white/25'
+                                  pipPosition === pos ? 'bg-text-primary border-text-primary' : 'bg-white/10 border-white/30 hover:bg-white/25'
                                 }`}
                               />
                             ))}
@@ -1104,7 +979,7 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                               onClick={() => setIsPipMirrored((v) => !v)}
                               title="Mirror camera"
                               aria-label="Mirror camera"
-                              className={`p-1 rounded transition ${isPipMirrored ? 'bg-[#00C8FF] text-[#060B12]' : 'bg-white/10 text-white hover:bg-white/20'}`}
+                              className={`p-1 rounded transition ${isPipMirrored ? 'bg-text-primary text-bg' : 'bg-white/10 text-white hover:bg-white/20'}`}
                             >
                               <ArrowPathRoundedSquareIcon className="h-3 w-3" />
                             </button>
@@ -1125,7 +1000,7 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                       <button
                         type="button"
                         onClick={() => setIsCameraPipHidden(false)}
-                        className={`absolute ${PIP_POSITION_CLASSES[pipPosition]} flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#060B12]/85 backdrop-blur-sm text-[#94A3B8] hover:text-[#F1F5F9] text-[11px] font-medium transition`}
+                        className={`absolute ${PIP_POSITION_CLASSES[pipPosition]} flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-black/70 backdrop-blur-sm text-white/70 hover:text-white text-[11px] font-medium transition`}
                       >
                         <EyeSlashIcon className="h-3.5 w-3.5" />
                         Camera hidden
@@ -1135,19 +1010,19 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                 ) : (
                   <div
                     className={`relative flex items-center justify-center h-full bg-cover bg-center ${
-                      stream?.thumbnail_url ? '' : 'bg-gradient-to-br from-[#0D1722] via-[#0A111A] to-[#162534]'
+                      stream?.thumbnail_url ? '' : 'bg-gradient-to-br from-bg via-bg to-border'
                     }`}
                     style={stream?.thumbnail_url ? { backgroundImage: `url(${stream.thumbnail_url})` } : undefined}
                   >
-                    {stream?.thumbnail_url && <div className="absolute inset-0 bg-[#060B12]/50" />}
-                    <div className="relative text-center px-4 py-3 rounded-xl bg-[#060B12]/70 backdrop-blur-sm">
+                    {stream?.thumbnail_url && <div className="absolute inset-0 bg-bg/50" />}
+                    <div className="relative text-center px-4 py-3 rounded-xl bg-bg/70 backdrop-blur-sm">
                       {!streamEnded && (
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00C8FF] mx-auto mb-3" />
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-text-primary mx-auto mb-3" />
                       )}
                       <VideoCameraIcon
-                        className={`h-16 w-16 mx-auto mb-4 text-[#94A3B8] opacity-30 ${streamEnded ? '' : 'hidden'}`}
+                        className={`h-16 w-16 mx-auto mb-4 text-text-secondary opacity-30 ${streamEnded ? '' : 'hidden'}`}
                       />
-                      <p className="text-[#94A3B8]">
+                      <p className="text-text-secondary">
                         {streamEnded ? 'This livestream has ended' : 'Connecting to live stream...'}
                       </p>
                     </div>
@@ -1161,13 +1036,13 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                         LIVE
                       </span>
                       {phase === 'live' && (
-                        <span className="px-2.5 py-1 bg-[#060B12]/80 backdrop-blur-sm rounded-full text-xs font-mono tabular-nums text-[#F1F5F9]">
+                        <span className="px-2.5 py-1 bg-black/70 backdrop-blur-sm rounded-full text-xs font-mono tabular-nums text-white">
                           {formatDurationClock(liveDurationSeconds)}
                         </span>
                       )}
                       <button
                         onClick={toggleViewers}
-                        className="flex items-center gap-1.5 px-2.5 py-1 bg-[#060B12]/80 rounded-full text-xs text-[#F1F5F9] hover:bg-[#060B12] transition"
+                        className="flex items-center gap-1.5 px-2.5 py-1 bg-black/70 rounded-full text-xs text-white hover:bg-black/90 transition"
                         title="View viewers"
                       >
                         <EyeIcon className="h-3.5 w-3.5" />
@@ -1177,7 +1052,7 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
 
                     {isHost && (
                       <div
-                        className={`absolute top-4 right-4 flex items-center gap-2 bg-[#060B12]/80 rounded-lg p-1.5 transition-opacity duration-300 ${
+                        className={`absolute top-4 right-4 flex items-center gap-2 bg-black/70 rounded-lg p-1.5 transition-opacity duration-300 ${
                           controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
                         }`}
                         onMouseEnter={() => {
@@ -1192,14 +1067,14 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                         <button
                           onClick={toggleMic}
                           title={isMicOn ? 'Mute microphone' : 'Unmute microphone'}
-                          className={`p-1.5 rounded-md transition ${isMicOn ? 'bg-[#00C8FF] text-[#060B12]' : 'bg-[#1E3447] text-[#94A3B8]'}`}
+                          className={`p-1.5 rounded-md transition ${isMicOn ? 'bg-text-primary text-bg' : 'bg-border text-text-secondary'}`}
                         >
                           <MicrophoneIcon className="h-4 w-4" />
                         </button>
                         <button
                           onClick={toggleScreenShare}
                           title={isScreenSharing ? 'Stop screen share' : 'Share your screen'}
-                          className={`p-1.5 rounded-md transition ${isScreenSharing ? 'bg-[#00C8FF] text-[#060B12]' : 'bg-[#1E3447] text-[#94A3B8]'}`}
+                          className={`p-1.5 rounded-md transition ${isScreenSharing ? 'bg-text-primary text-bg' : 'bg-border text-text-secondary'}`}
                         >
                           <ComputerDesktopIcon className="h-4 w-4" />
                         </button>
@@ -1207,7 +1082,7 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                           <button
                             onClick={() => setIsCameraPipHidden((v) => !v)}
                             title={isCameraPipHidden ? 'Show camera' : 'Hide camera'}
-                            className={`p-1.5 rounded-md transition ${isCameraPipHidden ? 'bg-[#1E3447] text-[#94A3B8]' : 'bg-[#00C8FF] text-[#060B12]'}`}
+                            className={`p-1.5 rounded-md transition ${isCameraPipHidden ? 'bg-border text-text-secondary' : 'bg-text-primary text-bg'}`}
                           >
                             {isCameraPipHidden ? <EyeSlashIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
                           </button>
@@ -1215,7 +1090,7 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                         <button
                           onClick={toggleRecording}
                           title={isRecording ? 'Stop recording' : 'Record this stream'}
-                          className={`p-1.5 rounded-md transition ${isRecording ? 'bg-[#EF4444] text-white' : 'bg-[#1E3447] text-[#94A3B8]'}`}
+                          className={`p-1.5 rounded-md transition ${isRecording ? 'bg-[#EF4444] text-white' : 'bg-border text-text-secondary'}`}
                         >
                           {isRecording ? <StopIcon className="h-4 w-4" /> : <span className="block h-3 w-3 rounded-full bg-[#EF4444]" />}
                         </button>
@@ -1236,7 +1111,7 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                         title={isRecording ? 'Stop recording' : 'Record this stream'}
                         className={`absolute top-4 right-4 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-opacity duration-300 ${
                           controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
-                        } ${isRecording ? 'bg-[#EF4444] text-white' : 'bg-[#060B12]/80 text-[#94A3B8] hover:text-[#F1F5F9]'}`}
+                        } ${isRecording ? 'bg-[#EF4444] text-white' : 'bg-black/70 text-white/70 hover:text-white'}`}
                       >
                         {isRecording ? <StopIcon className="h-3.5 w-3.5" /> : <span className="block h-2.5 w-2.5 rounded-full bg-[#EF4444]" />}
                         {isRecording ? 'Stop' : 'Record'}
@@ -1244,14 +1119,14 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                     )}
 
                     {isScreenSharing && (
-                      <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1 bg-[#00C8FF]/15 border border-[#00C8FF]/40 rounded-full text-xs font-medium text-[#00C8FF]">
+                      <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1 bg-text-primary/15 border border-text-primary/40 rounded-full text-xs font-medium text-text-primary">
                         <ComputerDesktopIcon className="h-3.5 w-3.5" />
                         Sharing screen
                       </div>
                     )}
 
                     <div
-                      className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-[#060B12]/95 to-transparent px-3 sm:px-4 pt-10 pb-3 transition-opacity duration-300 ${
+                      className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/95 to-transparent px-3 sm:px-4 pt-10 pb-3 transition-opacity duration-300 ${
                         controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
                       }`}
                       onMouseEnter={() => {
@@ -1267,18 +1142,14 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                         <button
                           onClick={togglePlayPause}
                           title={isPaused ? 'Play' : 'Pause'}
-                          className="p-1.5 sm:p-1 text-[#F1F5F9] hover:text-[#00C8FF] transition flex-shrink-0"
+                          className="p-1.5 sm:p-1 text-white hover:text-text-primary transition flex-shrink-0"
                         >
                           {isPaused ? <PlayIcon className="h-5 w-5" /> : <PauseIcon className="h-5 w-5" />}
                         </button>
 
-                        {/* A true live broadcast has no seekable history, so
-                            this is a status indicator, not a fake/misleading
-                            scrub bar - it fills the space a progress bar
-                            would, without implying you can seek. */}
                         <div className="flex-1 flex items-center gap-1.5 min-w-0">
                           <span className="h-1.5 w-1.5 rounded-full bg-[#EF4444] animate-pulse flex-shrink-0" />
-                          <span className="text-xs font-bold uppercase tracking-wide text-[#F1F5F9]">Live</span>
+                          <span className="text-xs font-bold uppercase tracking-wide text-white">Live</span>
                         </div>
 
                         <div
@@ -1297,13 +1168,13 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                               value={isMuted ? 0 : volume}
                               onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
                               title="Volume"
-                              className="w-16 sm:w-20 accent-[#00C8FF]"
+                              className="w-16 sm:w-20 accent-text-primary"
                             />
                           </div>
                           <button
                             onClick={toggleMute}
                             title={isMuted ? 'Unmute' : 'Mute'}
-                            className="p-1.5 sm:p-1 text-[#F1F5F9] hover:text-[#00C8FF] transition"
+                            className="p-1.5 sm:p-1 text-white hover:text-text-primary transition"
                           >
                             {isMuted ? <SpeakerXMarkIcon className="h-5 w-5" /> : <SpeakerWaveIcon className="h-5 w-5" />}
                           </button>
@@ -1312,7 +1183,7 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                         <button
                           onClick={toggleFullscreen}
                           title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-                          className="p-1.5 sm:p-1 text-[#F1F5F9] hover:text-[#00C8FF] transition flex-shrink-0"
+                          className="p-1.5 sm:p-1 text-white hover:text-text-primary transition flex-shrink-0"
                         >
                           {isFullscreen ? <ArrowsPointingInIcon className="h-5 w-5" /> : <ArrowsPointingOutIcon className="h-5 w-5" />}
                         </button>
@@ -1325,15 +1196,15 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
 
             {/* Chat panel */}
             {isChatOpen && (
-            <div className="lg:w-1/4 rounded-2xl border border-[#1E3447] bg-[#0D1722] flex flex-col flex-[2] min-h-0 lg:flex-none lg:h-full">
-              <div className="flex items-center gap-2 px-4 py-3 border-b border-[#1E3447] flex-shrink-0">
-                <ChatBubbleLeftIcon className="h-4 w-4 text-[#00C8FF]" />
-                <span className="text-sm font-semibold text-[#F1F5F9]">Live Chat</span>
+            <div className="lg:w-1/4 rounded-2xl border border-border bg-bg flex flex-col flex-[2] min-h-0 lg:flex-none lg:h-full">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-border flex-shrink-0">
+                <ChatBubbleLeftIcon className="h-4 w-4 text-text-primary" />
+                <span className="text-sm font-semibold text-text-primary">Live Chat</span>
               </div>
 
               <div className="flex-1 overflow-y-auto p-3 space-y-3 themed-scrollbar">
                 {chatMessages.length === 0 ? (
-                  <div className="text-center text-[#94A3B8] text-sm py-8">No messages yet. Start the conversation!</div>
+                  <div className="text-center text-text-secondary text-sm py-8">No messages yet. Start the conversation!</div>
                 ) : (
                   chatMessages
                     .filter((msg) => !msg.parent_comment_id)
@@ -1350,13 +1221,13 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
               </div>
 
               {showPlayer && (
-                <form onSubmit={sendMessage} className="p-3 border-t border-[#1E3447] flex-shrink-0">
+                <form onSubmit={sendMessage} className="p-3 border-t border-border flex-shrink-0">
                   {replyingTo && (
-                    <div className="flex items-center justify-between mb-2 px-3 py-1.5 rounded-lg bg-[#162534] text-xs">
-                      <span className="text-[#94A3B8]">
-                        Replying to <span className="text-[#00C8FF] font-medium">@{replyingTo.username}</span>
+                    <div className="flex items-center justify-between mb-2 px-3 py-1.5 rounded-lg bg-glass text-xs">
+                      <span className="text-text-secondary">
+                        Replying to <span className="text-text-primary font-medium">@{replyingTo.username}</span>
                       </span>
-                      <button type="button" onClick={() => setReplyingTo(null)} className="text-[#64748B] hover:text-[#F1F5F9] transition">
+                      <button type="button" onClick={() => setReplyingTo(null)} className="text-text-muted hover:text-text-primary transition">
                         <XMarkIcon className="h-3.5 w-3.5" />
                       </button>
                     </div>
@@ -1367,13 +1238,13 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                       value={newMessage}
                       onChange={(e) => setNewMessage(e.target.value)}
                       placeholder={replyingTo ? `Reply to @${replyingTo.username}...` : 'Say something...'}
-                      className="flex-1 px-4 py-2 bg-[#060B12] border border-[#1E3447] rounded-full text-sm text-[#F1F5F9] placeholder-[#64748B] focus:outline-none focus:ring-1 focus:ring-[#00C8FF]"
+                      className="flex-1 px-4 py-2 bg-bg border border-border rounded-full text-sm text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-border"
                     />
                     <button
                       type="submit"
                       disabled={!newMessage.trim()}
                       title="Send"
-                      className="flex-shrink-0 h-9 w-9 flex items-center justify-center bg-[#00C8FF] text-[#060B12] rounded-full hover:opacity-90 transition disabled:opacity-40"
+                      className="flex-shrink-0 h-9 w-9 flex items-center justify-center bg-text-primary text-bg rounded-full hover:opacity-90 transition disabled:opacity-40"
                     >
                       <PaperAirplaneIcon className="h-4 w-4" />
                     </button>
@@ -1389,19 +1260,19 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
       {/* Viewers Modal */}
       {showViewers && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-[60]">
-          <div className="bg-[#0D1722] rounded-2xl max-w-md w-full max-h-[80vh] border border-[#1E3447]">
-            <div className="flex items-center justify-between p-4 border-b border-[#1E3447]">
-              <h3 className="text-lg font-bold text-[#F1F5F9] flex items-center gap-2">
-                <UsersIcon className="h-5 w-5 text-[#00C8FF]" />
+          <div className="bg-bg rounded-2xl max-w-md w-full max-h-[80vh] border border-border">
+            <div className="flex items-center justify-between p-4 border-b border-border">
+              <h3 className="text-lg font-bold text-text-primary flex items-center gap-2">
+                <UsersIcon className="h-5 w-5 text-text-primary" />
                 Viewers ({viewerCount})
               </h3>
-              <button onClick={() => setShowViewers(false)} className="text-[#94A3B8] hover:text-[#F1F5F9]">
+              <button onClick={() => setShowViewers(false)} className="text-text-secondary hover:text-text-primary">
                 <XMarkIcon className="h-6 w-6" />
               </button>
             </div>
             <div className="p-4 overflow-y-auto max-h-[60vh] space-y-2">
               {viewers.length === 0 ? (
-                <p className="text-center text-[#94A3B8] py-8">No viewers yet</p>
+                <p className="text-center text-text-secondary py-8">No viewers yet</p>
               ) : (
                 viewers.map((viewer) => (
                   <button
@@ -1411,12 +1282,12 @@ function LiveStreamStageInner({ streamId, isHost, isMinimized, onMinimize, onRes
                       setShowViewers(false);
                       navigate(`/profile/${viewer.user_id}`);
                     }}
-                    className="w-full flex items-center gap-3 p-2 hover:bg-[#162534] rounded-lg transition text-left"
+                    className="w-full flex items-center gap-3 p-2 hover:bg-glass rounded-lg transition text-left"
                   >
                     <Avatar src={viewer.avatar} name={viewer.username} size="sm" />
                     <div className="min-w-0">
-                      <p className="text-sm font-medium text-[#F1F5F9] truncate">{viewer.username}</p>
-                      <p className="text-xs text-[#94A3B8]">Joined {formatTime(viewer.joined_at)}</p>
+                      <p className="text-sm font-medium text-text-primary truncate">{viewer.username}</p>
+                      <p className="text-xs text-text-secondary">Joined {formatTime(viewer.joined_at)}</p>
                     </div>
                   </button>
                 ))

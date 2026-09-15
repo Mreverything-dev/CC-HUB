@@ -27,6 +27,8 @@ import ChatPanel from '@/features/chat/components/ChatPanel';
 import { TeachingAssignment } from '@/types/section.types';
 import { useMinimumLoading } from '@/features/dashboard/hooks/useMinimumLoading';
 import { useFriendStore } from '@/features/friends/store/friend.store';
+import { extractYouTubeId } from '@/lib/youtube';
+import { SparklesIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 
 function professorLabel(ta: { professor_first_name?: string | null; professor_last_name?: string | null; professor_username?: string | null }): string {
   const name = ta.professor_first_name ? `${ta.professor_first_name} ${ta.professor_last_name || ''}`.trim() : ta.professor_username;
@@ -88,6 +90,7 @@ export default function StudentDashboard() {
 
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const [showMobileWidgets, setShowMobileWidgets] = useState(false);
   const [searchOpenPostId, setSearchOpenPostId] = useState<string | null>(null);
   const [searchSectionId, setSearchSectionId] = useState<string | null>(null);
 
@@ -161,9 +164,14 @@ export default function StudentDashboard() {
     }
 
     if (feedFilter === 'videos') {
-      return postList.filter((p) =>
-        Array.isArray(p.media_urls) && p.media_urls.some((url) => VIDEO_EXT_RE.test(url))
-      );
+      return postList.filter((p) => {
+        // Video files (mp4, webm, etc.)
+        const hasVideoFile =
+          Array.isArray(p.media_urls) && p.media_urls.some((url) => VIDEO_EXT_RE.test(url));
+        // YouTube links in the post content
+        const hasYouTubeLink = extractYouTubeId(p.content) !== null;
+        return hasVideoFile || hasYouTubeLink;
+      });
     }
 
     if (feedFilter === 'professor') {
@@ -237,7 +245,46 @@ export default function StudentDashboard() {
             <div className="flex flex-col xl:flex-row gap-6 items-start w-full">
               {/* Center - Feed */}
               <div className="w-full xl:flex-1 min-w-0">
-                <div className="max-w-2xl mx-auto space-y-5">
+                <div className="max-w-lg mx-auto space-y-5">
+                  {/* Mobile widgets toggle — visible lang sa < xl */}
+                  <button
+                    type="button"
+                    onClick={() => setShowMobileWidgets((v) => !v)}
+                    className="xl:hidden flex items-center justify-between w-full px-4 py-3 rounded-2xl bg-glass backdrop-blur-xl shadow-md shadow-black/5 text-sm font-medium text-text-primary hover:bg-glass-hover transition"
+                  >
+                    <span className="flex items-center gap-2">
+                      <SparklesIcon className="h-4 w-4 text-text-muted" />
+                      Show widgets
+                    </span>
+                    <ChevronDownIcon
+                      className={`h-4 w-4 text-text-muted transition-transform duration-200 ${
+                        showMobileWidgets ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+
+                  {/* Mobile widgets — lalabas pag pinindot */}
+                  {showMobileWidgets && (
+                    <div
+                      className="xl:hidden space-y-4"
+                      style={{ animation: 'commentFadeIn 0.25s ease-out forwards' }}
+                    >
+                      <AnnouncementWidget
+                        announcements={announcementList}
+                        isLoading={showAnnouncementsSkeleton}
+                        onViewAll={() => handleSectionChange('announcements')}
+                      />
+                      <SectionWidget
+                        section={mySection}
+                        isLoading={showSectionsSkeleton}
+                        onGoToSection={() => handleSectionChange('sections')}
+                      />
+                      <LiveStreamsWidget liveStreams={liveStreams} upcomingStreams={[]} isLoading={showLiveStreamsSkeleton} />
+                      <MeethubWidget />
+                      <EventCardList />
+                    </div>
+                  )}
+
                   <ClassReminderCard
                     scheduleLabel="Today's Schedule"
                     entries={todayEntries}
@@ -245,29 +292,22 @@ export default function StudentDashboard() {
                     coverPhoto={coverPhoto}
                   />
 
-                  {/* ✅ Feed filter tabs */}
+                  {/* Feed filter tabs */}
                   <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1">
                     {FEED_FILTERS.map((f) => (
                       <button
                         key={f.id}
                         type="button"
                         onClick={() => handleFilterChange(f.id)}
-                        className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition whitespace-nowrap ${
+                        className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition whitespace-nowrap ${
                           feedFilter === f.id
-                            ? 'bg-[#00C8FF] text-[#060B12]'
+                            ? 'bg-text-primary text-bg'
                             : 'bg-glass border border-border text-text-secondary hover:text-text-primary hover:bg-glass-hover'
                         }`}
                       >
                         {f.label}
                       </button>
                     ))}
-                    <button
-                      type="button"
-                      onClick={() => handleSectionChange('announcements')}
-                      className="flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition whitespace-nowrap bg-glass border border-border text-text-secondary hover:text-text-primary hover:bg-glass-hover"
-                    >
-                      Announcements
-                    </button>
                   </div>
 
                   <CreatePost onCreatePost={handleCreatePost} isLoading={isPosting} dark avatarUrl={avatarUrl} />
@@ -278,7 +318,7 @@ export default function StudentDashboard() {
                         {[0, 1, 2].map((i) => (
                           <div
                             key={`skeleton-${i}`}
-                            className="rounded-2xl border border-border bg-glass p-6 animate-pulse"
+                            className="rounded-2xl bg-glass p-6 animate-pulse shadow-md shadow-black/5"
                           >
                             <div className="flex items-center gap-3 mb-4">
                               <div className="w-10 h-10 rounded-full bg-border" />
@@ -293,7 +333,7 @@ export default function StudentDashboard() {
                         ))}
                       </div>
                     ) : filteredPosts.length === 0 ? (
-                      <div className="rounded-2xl border border-border bg-glass backdrop-blur-xl p-10 text-center">
+                      <div className="rounded-2xl bg-glass backdrop-blur-xl p-10 text-center shadow-md shadow-black/5">
                         <p className="text-text-secondary">
                           {feedFilter === 'all'
                             ? 'No posts yet. Check back later!'
@@ -322,7 +362,7 @@ export default function StudentDashboard() {
               </div>
 
               {/* Right sidebar */}
-              <div className="w-full xl:w-[360px] xl:flex-shrink-0 space-y-5 xl:sticky xl:top-24 xl:self-start xl:max-h-[calc(100vh-7rem)] xl:overflow-y-auto xl:pr-1 themed-scrollbar">
+              <div className="hidden xl:block w-full xl:w-[360px] xl:flex-shrink-0 space-y-5 xl:sticky xl:top-24 xl:self-start xl:max-h-[calc(100vh-7rem)] xl:overflow-y-auto xl:pr-1 themed-scrollbar">
                 <AnnouncementWidget
                   announcements={announcementList}
                   isLoading={showAnnouncementsSkeleton}

@@ -28,10 +28,6 @@ const liveDotClasses: Record<string, string> = {
 
 export function Avatar({ src, name, size = 'md', className = '', isLive = false }: AvatarProps) {
   const initial = name?.charAt(0).toUpperCase() || 'U';
-  // A broken/invalid URL (404, unreachable host, etc.) would otherwise leave
-  // the browser's own broken-image icon showing forever - falling back to
-  // the same initials shown for "no avatar at all" instead. Resets whenever
-  // the URL itself changes, so a fixed/different avatar gets a fresh try.
   const [imgFailed, setImgFailed] = useState(false);
   useEffect(() => setImgFailed(false), [src]);
   const showImage = !!src && !imgFailed;

@@ -7,11 +7,14 @@ import {
   XMarkIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  HeartIcon,
   ChatBubbleLeftIcon,
-  ShareIcon,
+  ArrowPathRoundedSquareIcon,
   BookmarkIcon,
   EllipsisVerticalIcon,
+  GlobeAltIcon,
+  UsersIcon,
+  AcademicCapIcon,
+  LockClosedIcon,
 } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -22,13 +25,14 @@ import toast from 'react-hot-toast';
 import PostDetailModal from './PostDetailModal';
 import { ReportPostDialog } from './ReportPostDialog';
 import { PostReactions } from './PostReactions';
-import { RoleBadge } from '@/features/dashboard/components/RoleBadge';
 import { Avatar } from '@/features/dashboard/components/Avatar';
-import { ArrowUpTrayIcon } from '@heroicons/react/24/outline';
+import { ProfileHoverCard } from '@/features/profile/components/ProfileHoverCard';
 import { ImageGrid, isVideoUrl } from './ImageGrid';
 import { extractYouTubeId, stripYouTubeUrl } from '@/lib/youtube';
 import { YouTubeEmbed } from '@/components/ui/YouTubeEmbed';
 import { extractGiphyGifUrl, stripGiphyUrl } from '@/lib/giphy';
+import { useSavedPosts } from '../hooks/useSavedPosts';
+import { BookmarkIcon as BookmarkIconSolid } from '@heroicons/react/24/solid';
 
 interface PostCardProps {
   id: string;
@@ -70,6 +74,7 @@ export function PostCard({
   user_role,
   avatar_url,
   content,
+  type,
   visibility,
   media_urls = [],
   likes_count,
@@ -79,6 +84,7 @@ export function PostCard({
   is_liked_by_current_user,
   is_shared_by_current_user,
   is_owned_by_current_user,
+  reactions_count,
   reaction_breakdown = {},
   my_reaction = null,
   is_shared = false,
@@ -90,9 +96,6 @@ export function PostCard({
   onDelete,
   onEdit,
 }: PostCardProps) {
-  const [isLiked, setIsLiked] = useState(is_liked_by_current_user);
-  const [likeCount, setLikeCount] = useState(likes_count);
-  const [shareCount, setShareCount] = useState(shares_count);
   const [isShared, setIsShared] = useState(is_shared_by_current_user);
   const [isSharing, setIsSharing] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -103,59 +106,39 @@ export function PostCard({
   const [showReportDialog, setShowReportDialog] = useState(false);
   const [isReporting, setIsReporting] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [savePulse, setSavePulse] = useState(false);
 
   const [showHeartBurst, setShowHeartBurst] = useState(false);
   const [heartPosition, setHeartPosition] = useState<{ x: number; y: number } | null>(null);
 
   const cardRef = useRef<HTMLDivElement>(null);
 
-  // Single/double tap tracking for the CARD (not media — ImageGrid handles media)
   const cardClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cardLastTapRef = useRef<number>(0);
 
   const { user } = useAuthStore();
   const navigate = useNavigate();
+  const { isSaved, toggleSave } = useSavedPosts();
 
   const goToAuthorProfile = (e: React.MouseEvent) => {
     e.stopPropagation();
     navigate(`/profile/${user_id}`);
   };
 
-  const visibilityLabels = {
-    public: '🌍 Public',
-    friends: '👥 Friends',
-    section: '📚 Section',
-    private: '🔒 Private',
+  const visibilityLabels: Record<string, string> = {
+    public: 'Public',
+    friends: 'Friends',
+    section: 'Section',
+    private: 'Private',
   };
 
-  const handleLike = async (forceLike?: boolean) => {
-    try {
-      if (onReact) {
-        const newReaction = my_reaction === '❤️' ? null : '❤️';
-        if (newReaction) {
-          onReact(id, newReaction);
-        }
-        return;
-      }
-
-      const shouldLike = forceLike ? true : !isLiked;
-      if (forceLike && isLiked) return;
-
-      await onLike(id);
-      setIsLiked(shouldLike);
-      setLikeCount((prev) => {
-        if (shouldLike && !isLiked) return prev + 1;
-        if (!shouldLike && isLiked) return prev - 1;
-        return prev;
-      });
-    } catch (error) {
-      console.error('Error toggling like:', error);
-    }
+  const visibilityIcons: Record<string, React.ComponentType<{ className?: string }>> = {
+    public: GlobeAltIcon,
+    friends: UsersIcon,
+    section: AcademicCapIcon,
+    private: LockClosedIcon,
   };
 
-  // Heart burst at a position (in viewport coordinates).
-  // We convert to card-relative coordinates so the heart renders in the
-  // correct position inside the card's stacking context.
   const triggerHeartBurst = (clientX: number, clientY: number) => {
     const cardEl = cardRef.current;
     if (!cardEl) return;
@@ -176,23 +159,20 @@ export function PostCard({
         onReact(id, '❤️');
       }
     } else {
-      handleLike(true);
+      onLike(id);
     }
   };
 
-  // Click anywhere on the card body (not media, not buttons)
   const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (isEditing) return;
 
-    // Ignore clicks on interactive elements (buttons, links, inputs)
     const target = e.target as HTMLElement;
-    if (target.closest('button, a, input, textarea, select')) return;
+    if (target.closest('button, a, input, textarea, select, video, iframe')) return;
 
     const now = Date.now();
     const timeSinceLastTap = now - cardLastTapRef.current;
 
     if (timeSinceLastTap < 300) {
-      // Double tap -> heart burst + react
       if (cardClickTimerRef.current) {
         clearTimeout(cardClickTimerRef.current);
         cardClickTimerRef.current = null;
@@ -200,7 +180,6 @@ export function PostCard({
       triggerHeartBurst(e.clientX, e.clientY);
       cardLastTapRef.current = 0;
     } else {
-      // Possible single tap -> open detail after 300ms
       cardLastTapRef.current = now;
       cardClickTimerRef.current = setTimeout(() => {
         setShowDetail(true);
@@ -217,20 +196,23 @@ export function PostCard({
 
   const handleShare = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isShared) {
-      toast('You already shared this post');
-      return;
-    }
     setIsSharing(true);
+    const minSpinTime = new Promise((resolve) => setTimeout(resolve, 600));
     try {
-      const response = await postService.sharePost(id);
-      setShareCount(response.data.shares_count);
-      setIsShared(true);
-      toast.success('Post shared!');
+      if (isShared) {
+        await postService.unsharePost(id);
+        setIsShared(false);
+        toast.success('Repost removed');
+      } else {
+        await postService.sharePost(id);
+        setIsShared(true);
+        toast.success('Reposted!');
+      }
     } catch (error) {
-      console.error('Error sharing post:', error);
-      toast.error('Failed to share post');
+      console.error('Error toggling repost:', error);
+      toast.error(isShared ? 'Failed to remove repost' : 'Failed to repost');
     } finally {
+      await minSpinTime;
       setIsSharing(false);
     }
   };
@@ -265,8 +247,6 @@ export function PostCard({
 
   const instanceKey = `post-${id}`;
 
-  // Detect a YouTube or Giphy link in the post's content. If one is found,
-  // we'll render an embed/gif and strip the raw URL from the displayed text.
   const youtubeId = extractYouTubeId(content);
   const giphyGifUrl = extractGiphyGifUrl(content);
   const displayContent = youtubeId
@@ -275,22 +255,23 @@ export function PostCard({
     ? stripGiphyUrl(content)
     : content;
 
+  const VisibilityIcon = visibilityIcons[visibility] || GlobeAltIcon;
+
   return (
     <div key={instanceKey}>
       {is_shared && (
         <div className="flex items-center gap-2 mb-2 text-sm text-text-secondary">
-          <ArrowUpTrayIcon className="h-4 w-4 flex-shrink-0" />
+          <ArrowPathRoundedSquareIcon className="h-4 w-4 flex-shrink-0" />
           <Avatar src={shared_by_avatar_url} name={shared_by_username || undefined} size="xs" />
           <span>
             <span className="font-medium text-text-primary">{shared_by_username}</span>{' '}
-            shared a post
+            reposted
             {shared_at && <span className="text-text-muted"> · {formatRelativeTime(shared_at)}</span>}
           </span>
         </div>
       )}
       <div
         ref={cardRef}
-        // select-none prevents blue text-selection on double-tap
         className="relative cursor-pointer select-none"
         onClick={handleCardClick}
       >
@@ -312,36 +293,42 @@ export function PostCard({
           </div>
         )}
 
-        <div className="rounded-2xl border border-border bg-glass backdrop-blur-xl p-4 sm:p-6 transition-all duration-200">
+        <div className="rounded-2xl bg-glass backdrop-blur-xl p-3 sm:p-4 shadow-md shadow-black/5 transition-all duration-200">
           {/* Header */}
           <div className="flex items-start justify-between mb-3 gap-2">
             <div className="flex items-center space-x-3 min-w-0 flex-1">
-              <div
-                onClick={goToAuthorProfile}
-                className="w-10 h-10 rounded-full flex items-center justify-center hover:opacity-80 transition cursor-pointer overflow-hidden flex-shrink-0 bg-gradient-to-br from-[#00C8FF] to-[#3B82F6]"
-              >
-                {avatar_url ? (
-                  <img src={avatar_url} alt={username} className="w-full h-full object-cover" />
-                ) : (
-                  <span className="font-semibold text-[#060B12]">
-                    {username?.charAt(0).toUpperCase() || 'U'}
-                  </span>
-                )}
-              </div>
+              <ProfileHoverCard userId={user_id}>
+                <div
+                  onClick={goToAuthorProfile}
+                  className="w-12 h-12 rounded-full flex items-center justify-center hover:opacity-80 transition cursor-pointer overflow-hidden flex-shrink-0 bg-gradient-to-br from-[#00C8FF] to-[#3B82F6]"
+                >
+                  {avatar_url ? (
+                    <img src={avatar_url} alt={username} className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="font-semibold text-[#060B12]">
+                      {username?.charAt(0).toUpperCase() || 'U'}
+                    </span>
+                  )}
+                </div>
+              </ProfileHoverCard>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center space-x-2">
-                  <p
-                    onClick={goToAuthorProfile}
-                    className="font-medium hover:underline cursor-pointer truncate text-text-primary"
-                  >
-                    {username}
-                  </p>
-                  <RoleBadge role={user_role} />
+                  <ProfileHoverCard userId={user_id}>
+                    <p
+                      onClick={goToAuthorProfile}
+                      className="font-medium hover:underline cursor-pointer truncate text-text-primary"
+                    >
+                      {username}
+                    </p>
+                  </ProfileHoverCard>
                 </div>
                 <div className="flex items-center space-x-2 text-xs truncate text-text-muted">
                   <span>{formatRelativeTime(created_at)}</span>
                   <span>•</span>
-                  <span>{visibilityLabels[visibility as keyof typeof visibilityLabels]}</span>
+                  <span className="flex items-center gap-1">
+                    <VisibilityIcon className="h-3.5 w-3.5" />
+                    {visibilityLabels[visibility] || 'Public'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -408,7 +395,7 @@ export function PostCard({
               <div className="flex space-x-2">
                 <button
                   onClick={handleEdit}
-                  className="px-3 py-1.5 text-sm font-semibold bg-gradient-to-br from-[#00C8FF] to-[#3B82F6] text-[#060B12] rounded-xl hover:opacity-90 transition"
+                  className="px-3 py-1.5 text-sm font-semibold bg-text-primary text-bg rounded-xl hover:opacity-90 transition"
                 >
                   Save
                 </button>
@@ -423,18 +410,21 @@ export function PostCard({
           ) : (
             <>
               {displayContent && (
-                <PostContentBody content={displayContent} compact className="text-text-secondary" />
-              )}
-              {displayContent.length > 150 && (
-                <p className="text-sm mt-1 text-[#00C8FF] hover:text-[#00E0FF]">
-                  Click to read more →
-                </p>
+                <PostContentBody
+                  content={displayContent}
+                  compact
+                  className="text-text-primary"
+                  textOnly={
+                    media_urls.length === 0 &&
+                    !youtubeId &&
+                    !giphyGifUrl
+                  }
+                />
               )}
             </>
           )}
 
-          {/* YouTube embed — shown when the post's content contains a
-              YouTube link. The raw URL is stripped from the text above. */}
+          {/* YouTube embed */}
           {!isEditing && youtubeId && (
             <div
               onClick={(e) => e.stopPropagation()}
@@ -445,8 +435,7 @@ export function PostCard({
             </div>
           )}
 
-          {/* Giphy GIF — shown when the post's content contains a Giphy link.
-              The raw URL is stripped from the text above. */}
+          {/* Giphy GIF */}
           {!isEditing && !youtubeId && giphyGifUrl && (
             <div
               onClick={(e) => e.stopPropagation()}
@@ -456,15 +445,13 @@ export function PostCard({
               <img
                 src={giphyGifUrl}
                 alt="GIF"
-                className="rounded-2xl max-w-full max-h-96 object-contain"
+                className="rounded-2xl max-w-full max-h-72 object-contain"
                 loading="lazy"
               />
             </div>
           )}
 
-          {/* Media Display - ImageGrid handles single/double tap itself.
-              single tap -> open lightbox
-              double tap -> heart burst (via onDoubleTap) */}
+          {/* Media Display */}
           {!isEditing && media_urls && media_urls.length > 0 && (
             <ImageGrid
               images={media_urls}
@@ -477,58 +464,134 @@ export function PostCard({
             />
           )}
 
+          {/* Reaction summary */}
+          {(reactions_count ?? 0) > 0 || comments_count > 0 ? (
+            <div
+              className="flex items-center justify-between mt-4 pt-3"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {(reactions_count ?? 0) > 0 && (
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center -space-x-2">
+                    {Object.entries(reaction_breakdown)
+                      .filter(([, count]) => count > 0)
+                      .sort(([, a], [, b]) => b - a)
+                      .slice(0, 3)
+                      .map(([emoji], i) => (
+                        <span
+                          key={`summary-${emoji}`}
+                          className="flex items-center justify-center h-7 w-7"
+                          style={{ zIndex: 3 - i }}
+                        >
+                          <span className="text-[18px]">{emoji}</span>
+                        </span>
+                      ))}
+                  </div>
+                  <span className="text-sm text-text-secondary font-medium">
+                    {reactions_count}
+                  </span>
+                </div>
+              )}
+
+              {comments_count > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowDetail(true)}
+                  className="text-sm text-text-secondary hover:text-text-primary hover:underline transition"
+                >
+                  {comments_count} {comments_count === 1 ? 'Comment' : 'Comments'}
+                </button>
+              )}
+            </div>
+          ) : null}
+
           {/* Actions */}
           <div
-            className="flex items-center justify-between mt-4 pt-4 border-t border-border"
+            className="flex items-center justify-between mt-3 pt-3 border-t border-border"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center space-x-1">
-              {onReact ? (
-                <PostReactions
-                  breakdown={reaction_breakdown}
-                  myReaction={my_reaction}
-                  onReact={(reaction) => onReact(id, reaction)}
-                  size="md"
-                />
-              ) : (
-                <button
-                  onClick={() => handleLike()}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl transition ${
-                    isLiked ? 'text-[#EF4444]' : 'text-text-secondary hover:text-[#EF4444] hover:bg-glass'
-                  }`}
-                >
-                  {isLiked ? <HeartIconSolid className="h-[18px] w-[18px]" /> : <HeartIcon className="h-[18px] w-[18px]" />}
-                  <span className="text-sm">{likeCount}</span>
-                </button>
-              )}
+              <PostReactions
+                breakdown={reaction_breakdown}
+                myReaction={my_reaction}
+                onReact={(reaction) => onReact?.(id, reaction)}
+                size="md"
+                label="Like"
+                alwaysShowLike
+              />
               <button
                 onClick={() => setShowDetail(true)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-text-secondary hover:text-text-primary hover:bg-glass transition"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-text-secondary hover:text-text-primary hover:bg-glass transition-all duration-200 hover:scale-110 active:scale-95"
               >
                 <ChatBubbleLeftIcon className="h-[18px] w-[18px]" />
-                <span className="text-sm">{comments_count}</span>
+                <span className="text-sm font-medium">Comment</span>
               </button>
-              <button
-                onClick={handleShare}
-                disabled={isSharing}
-                title={isShared ? 'You already shared this post' : 'Share'}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl transition disabled:opacity-50 ${
-                  isShared ? 'text-[#10B981]' : 'text-text-secondary hover:text-[#10B981] hover:bg-glass'
-                }`}
-              >
-                <ShareIcon className="h-[18px] w-[18px]" />
-                <span className="text-sm">{shareCount}</span>
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toast('Saving posts is coming soon');
-                }}
-                title="Save"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-text-secondary hover:text-[#00C8FF] hover:bg-glass transition"
-              >
-                <BookmarkIcon className="h-[18px] w-[18px]" />
-              </button>
+              {!is_owned_by_current_user && (
+                <button
+                  onClick={handleShare}
+                  disabled={isSharing}
+                  title={isShared ? 'You already reposted this' : 'Repost'}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl transition-all duration-200 disabled:opacity-50 hover:scale-110 active:scale-95 ${
+                    isShared ? 'text-[#10B981]' : 'text-text-secondary hover:text-[#10B981] hover:bg-glass'
+                  }`}
+                >
+                  <ArrowPathRoundedSquareIcon
+                    className={`h-[18px] w-[18px] ${isSharing ? 'animate-spin' : ''}`}
+                  />
+                  <span className="text-sm font-medium">{isShared ? 'Reposted' : 'Repost'}</span>
+                </button>
+              )}
+              {!is_owned_by_current_user && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleSave({
+                      id,
+                      user_id,
+                      username,
+                      user_role,
+                      avatar_url,
+                      content,
+                      type,
+                      visibility,
+                      media_urls,
+                      likes_count,
+                      comments_count,
+                      shares_count,
+                      created_at,
+                      is_liked_by_current_user,
+                      is_shared_by_current_user,
+                      is_owned_by_current_user,
+                      reactions_count,
+                      reaction_breakdown,
+                      my_reaction,
+                    });
+                    setSavePulse(true);
+                    setTimeout(() => setSavePulse(false), 400);
+                  }}
+                  title={isSaved(id) ? 'Unsave' : 'Save'}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95 ${
+                    isSaved(id)
+                      ? 'text-[#F5B82E]'
+                      : 'text-text-secondary hover:text-[#F5B82E] hover:bg-glass'
+                  }`}
+                >
+                  {isSaved(id) ? (
+                    <BookmarkIconSolid
+                      className={`h-[18px] w-[18px] transition-transform duration-300 ${
+                        savePulse ? 'scale-125' : 'scale-100'
+                      }`}
+                    />
+                  ) : (
+                    <BookmarkIcon
+                      className={`h-[18px] w-[18px] transition-transform duration-300 ${
+                        savePulse ? 'scale-125' : 'scale-100'
+                      }`}
+                    />
+                  )}
+                  <span className="text-sm font-medium">{isSaved(id) ? 'Saved' : 'Save'}</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -609,6 +672,14 @@ export function PostCard({
       {showDetail && (
         <PostDetailModal
           postId={id}
+          initialPost={{
+            reaction_breakdown,
+            my_reaction,
+            likes_count,
+            comments_count,
+            shares_count,
+            is_shared_by_current_user,
+          }}
           onClose={() => setShowDetail(false)}
           onDelete={handleDelete}
           onEdit={onEdit}

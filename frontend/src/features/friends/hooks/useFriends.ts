@@ -46,7 +46,10 @@ export function useFriends() {
   });
 
   // Get notifications
-  const { refetch: refetchNotifications } = useQuery({
+  const {
+    isLoading: isLoadingNotifications,
+    refetch: refetchNotifications,
+  } = useQuery({
     queryKey: ['notifications'],
     queryFn: async () => {
       const response = await friendApi.getNotifications();
@@ -249,6 +252,7 @@ export function useFriends() {
     blockedUsers,
     isLoading: isLoadingFriends,
     isFriendsError,
+    isLoadingNotifications,
     isLoadingSuggestions,
     isSuggestionsError,
     isLoadingBlocked,

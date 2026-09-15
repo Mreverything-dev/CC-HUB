@@ -7,7 +7,6 @@ interface ImageGridProps {
   images: string[];
   dark?: boolean;
   onImageClick?: (index: number) => void;
-  /** Optional: called on a double tap anywhere on a tile. */
   onDoubleTap?: (clientX: number, clientY: number) => void;
 }
 
@@ -18,8 +17,6 @@ export function isVideoUrl(url: string): boolean {
 export function ImageGrid({ images, dark = false, onImageClick, onDoubleTap }: ImageGridProps) {
   const [brokenUrls, setBrokenUrls] = useState<Set<string>>(new Set());
 
-  // Track per-tile tap timing so a double tap on one tile doesn't get
-  // interpreted as two single taps.
   const tapTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
   const lastTapRef = useRef<Map<number, number>>(new Map());
 
@@ -52,7 +49,6 @@ export function ImageGrid({ images, dark = false, onImageClick, onDoubleTap }: I
       const timeSinceLastTap = now - last;
 
       if (timeSinceLastTap < 300) {
-        // Double tap -> cancel pending single-tap, fire onDoubleTap (heart burst)
         const timer = tapTimersRef.current.get(originalIndex);
         if (timer) {
           clearTimeout(timer);
@@ -61,11 +57,9 @@ export function ImageGrid({ images, dark = false, onImageClick, onDoubleTap }: I
         lastTapRef.current.set(originalIndex, 0);
         onDoubleTap?.(e.clientX, e.clientY);
       } else {
-        // Single tap -> schedule the lightbox open
         lastTapRef.current.set(originalIndex, now);
         const timer = setTimeout(() => {
           tapTimersRef.current.delete(originalIndex);
-          // If this tile is the "+X" overflow tile, always open the viewer.
           if (showOverlay || (!broken && !isVideoFile)) {
             onImageClick?.(originalIndex);
           }
@@ -118,7 +112,6 @@ export function ImageGrid({ images, dark = false, onImageClick, onDoubleTap }: I
     );
   };
 
-  // Single item - square (1:1) aspect ratio, image fills
   if (isSingle) {
     return (
       <div className="mt-3">
@@ -164,7 +157,6 @@ export function ImageGrid({ images, dark = false, onImageClick, onDoubleTap }: I
     );
   }
 
-  // 5 or more
   return (
     <div className={`mt-3 flex flex-col gap-2 ${gridHeight}`}>
       <div className="flex flex-1 min-h-0 gap-2">

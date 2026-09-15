@@ -159,6 +159,7 @@ class PostService:
         # own relationship to the viewer plays no part in this at all.
         share_result = await self.db.execute(
             select(Share)
+            .where(Share.user_id != user_id)
             .order_by(desc(Share.created_at))
             .limit(offset + limit)
             .options(selectinload(Share.user))
@@ -574,6 +575,53 @@ class PostService:
             )
         except Exception as e:
             logger.error(f"❌ Failed to broadcast post share: {e}")
+
+        return {"shares_count": post.shares_count, "already_shared": False}
+
+    # ============================================
+    # UNSHARE POST (un-repost)
+    # ============================================
+
+    async def unshare_post(self, post_id: str, user_id: str) -> dict:
+        """Remove a user's share (un-repost) - the inverse of share_post.
+        Idempotent: if the user hasn't shared it, it's a no-op that just
+        reports the current count."""
+        result = await self.db.execute(
+            select(Post).where(Post.id == post_id)
+        )
+        post = result.scalar_one_or_none()
+        if not post:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Post not found"
+            )
+
+        existing_result = await self.db.execute(
+            select(Share).where(
+                Share.user_id == user_id,
+                Share.post_id == post_id
+            )
+        )
+        existing = existing_result.scalar_one_or_none()
+        if not existing:
+            # Not currently shared - nothing to remove
+            return {"shares_count": post.shares_count or 0, "already_shared": False}
+
+        await self.db.delete(existing)
+        post.shares_count = max(0, (post.shares_count or 0) - 1)
+        await self.db.commit()
+
+        logger.info(f"✅ Post {post_id} un-shared by user {user_id}")
+
+        try:
+            from app.websocket.manager import manager
+            await manager.send_to_room(
+                f"post_{post_id}",
+                "post:share_updated",
+                {"post_id": str(post_id), "shares_count": post.shares_count, "shared_by_user_id": str(user_id)},
+            )
+        except Exception as e:
+            logger.error(f"❌ Failed to broadcast post unshare: {e}")
 
         return {"shares_count": post.shares_count, "already_shared": False}
 

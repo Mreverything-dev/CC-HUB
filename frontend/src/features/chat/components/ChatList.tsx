@@ -102,7 +102,7 @@ export function ChatList({ onSelectConversation, selectedId }: ChatListProps) {
                       {conv.last_message?.content || 'No messages yet'}
                     </p>
                     {unread > 0 && (
-                      <span className="bg-[#00C8FF] text-[#060B12] text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center flex-shrink-0">
+                      <span className="bg-[#EF4444] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center flex-shrink-0">
                         {unread}
                       </span>
                     )}

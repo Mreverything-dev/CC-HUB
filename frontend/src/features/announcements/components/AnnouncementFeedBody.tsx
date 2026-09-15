@@ -1,7 +1,6 @@
 // frontend/src/features/announcements/components/AnnouncementFeedBody.tsx
 import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { PlusIcon, MegaphoneIcon, ExclamationTriangleIcon, XCircleIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, MegaphoneIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { useAnnouncements } from '../hooks/useAnnouncements';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { useSections } from '@/features/sections/hooks/useSections';
@@ -19,10 +18,6 @@ function matchesSidebarFilter(a: Announcement, search: string, filter: Announcem
   return matchesAnnouncementFilters(a, search, category);
 }
 
-function matchesSection(a: Announcement, sectionId: string | null): boolean {
-  if (!sectionId) return true;
-  return a.target_sections?.includes(sectionId) ?? false;
-}
 
 export default function AnnouncementFeedBody() {
   const { announcements, isLoading, error, deleteAnnouncement, togglePublish } = useAnnouncements();
@@ -34,15 +29,6 @@ export default function AnnouncementFeedBody() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<AnnouncementSidebarFilter>('all');
-  const [searchParams, setSearchParams] = useSearchParams();
-
-  const sectionFilterId = searchParams.get('section');
-  const sectionFilterName = sectionFilterId ? sections.find((s) => s.id === sectionFilterId)?.name : null;
-  const clearSectionFilter = () => {
-    const next = new URLSearchParams(searchParams);
-    next.delete('section');
-    setSearchParams(next, { replace: true });
-  };
 
   const isOfficer =
     user?.role === 'student' &&
@@ -52,11 +38,8 @@ export default function AnnouncementFeedBody() {
   const announcementList = Array.isArray(announcements) ? announcements : [];
 
   const filteredAnnouncements = useMemo(
-    () =>
-      announcementList.filter(
-        (a) => matchesSidebarFilter(a, search, filter) && matchesSection(a, sectionFilterId)
-      ),
-    [announcementList, search, filter, sectionFilterId]
+    () => announcementList.filter((a) => matchesSidebarFilter(a, search, filter)),
+    [announcementList, search, filter]
   );
 
   return (
@@ -72,7 +55,7 @@ export default function AnnouncementFeedBody() {
         {canCreate && (
           <button
             onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold bg-gradient-to-br from-[#00C8FF] to-[#0090CC] text-[#060B12] rounded-xl hover:opacity-90 transition flex-shrink-0"
+            className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border border-border bg-glass text-text-primary rounded-xl hover:bg-glass-hover transition flex-shrink-0"
           >
             <PlusIcon className="h-4 w-4" />
             New Announcement
@@ -87,20 +70,6 @@ export default function AnnouncementFeedBody() {
           category={filter === 'important' ? 'all' : filter}
           onCategoryChange={(v) => setFilter(v)}
         />
-        {sectionFilterId && (
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="flex items-center gap-1.5 text-xs font-medium text-[#00C8FF] bg-[#00C8FF]/10 border border-[#00C8FF]/30 rounded-full pl-3 pr-1.5 py-1">
-              Filtered by section: {sectionFilterName || sectionFilterId}
-              <button
-                onClick={clearSectionFilter}
-                title="Clear section filter"
-                className="p-0.5 rounded-full hover:bg-[#00C8FF]/20 transition"
-              >
-                <XCircleIcon className="h-3.5 w-3.5" />
-              </button>
-            </span>
-          </div>
-        )}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-5">
@@ -126,7 +95,7 @@ export default function AnnouncementFeedBody() {
               {canCreate && announcementList.length === 0 && (
                 <button
                   onClick={() => setShowCreateModal(true)}
-                  className="mt-4 text-sm text-[#00C8FF] hover:underline font-medium"
+                  className="mt-4 text-sm text-text-primary hover:underline font-medium"
                 >
                   Create the first announcement
                 </button>

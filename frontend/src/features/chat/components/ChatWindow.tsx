@@ -15,6 +15,7 @@ import { mediaService } from '@/services/api/media.service';
 import { chatApi } from '@/services/api/chat.service';
 import { MessageReactions } from './MessageReactions';
 import { EmojiPicker } from '@/features/posts/components/EmojiPicker';
+import { GifPickerModal } from '@/features/posts/components/GifPickerModal';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { extractYouTubeId } from '@/lib/youtube';
 import { YouTubeEmbed } from '@/components/ui/YouTubeEmbed';
@@ -24,6 +25,7 @@ import {
   PaperAirplaneIcon,
   PhotoIcon,
   XMarkIcon,
+  MinusIcon,
   DocumentIcon,
   ArrowDownTrayIcon,
   ArrowLeftIcon,
@@ -60,10 +62,11 @@ function attachmentTypeOf(file: File): 'image' | 'video' | 'file' {
 interface ChatWindowProps {
   conversationId: string;
   onBack?: () => void;
+  onMinimize?: () => void;
   onClose?: () => void;
 }
 
-export function ChatWindow({ conversationId, onBack, onClose }: ChatWindowProps) {
+export function ChatWindow({ conversationId, onBack, onMinimize, onClose }: ChatWindowProps) {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const {
@@ -85,6 +88,8 @@ export function ChatWindow({ conversationId, onBack, onClose }: ChatWindowProps)
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [attachmentPreview, setAttachmentPreview] = useState<string | null>(null);
   const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
+  const [showGifPicker, setShowGifPicker] = useState(false);
+  const gifButtonRef = useRef<HTMLButtonElement>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
@@ -354,6 +359,10 @@ export function ChatWindow({ conversationId, onBack, onClose }: ChatWindowProps)
     setNewMessage((prev) => prev + emoji);
   };
 
+  const handleGifSelect = (gifUrl: string) => {
+    sendMessage(conversationId, gifUrl);
+  };
+
   const handleDeleteChat = async () => {
     if (!currentConversation) return;
     setIsDeletingChat(true);
@@ -522,6 +531,15 @@ export function ChatWindow({ conversationId, onBack, onClose }: ChatWindowProps)
               </div>
             )}
           </div>
+          {onMinimize && (
+            <button
+              onClick={onMinimize}
+              title="Minimize"
+              className="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-glass-hover transition"
+            >
+              <MinusIcon className="h-4 w-4" />
+            </button>
+          )}
           {onClose && (
             <button
               onClick={onClose}
@@ -568,7 +586,8 @@ export function ChatWindow({ conversationId, onBack, onClose }: ChatWindowProps)
               message.type === 'text' ? extractYouTubeId(message.content) : null;
             const giphyGifUrl =
               message.type === 'text' && !youtubeId
-                ? extractGiphyGifUrl(message.content)
+                ? (extractGiphyGifUrl(message.content) ??
+                   (message.content.match(/https?:\/\/media\d?\.giphy\.com\/\S+\.gif/gi)?.[0] ?? null))
                 : null;
 
             // Text to show in a bubble. For YouTube/Giphy messages we strip
@@ -780,6 +799,25 @@ export function ChatWindow({ conversationId, onBack, onClose }: ChatWindowProps)
           >
             <PhotoIcon className="h-5 w-5" />
           </button>
+          <div className="relative flex-shrink-0">
+            <button
+              ref={gifButtonRef}
+              type="button"
+              onClick={() => setShowGifPicker((v) => !v)}
+              disabled={isUploadingAttachment}
+              title="Send a GIF"
+              className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-glass transition disabled:opacity-50"
+            >
+              <span className="text-[10px] font-bold border border-current rounded px-1">GIF</span>
+            </button>
+            {showGifPicker && (
+              <GifPickerModal
+                anchorRef={gifButtonRef}
+                onClose={() => setShowGifPicker(false)}
+                onSelect={handleGifSelect}
+              />
+            )}
+          </div>
           <EmojiPicker onSelect={handleEmojiSelect} align="left" />
           <input
             type="text"
@@ -898,6 +936,7 @@ export function ChatWindow({ conversationId, onBack, onClose }: ChatWindowProps)
           onCancel={() => setUnsendTarget(null)}
         />
       )}
+
     </div>
   );
 }

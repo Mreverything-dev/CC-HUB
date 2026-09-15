@@ -125,10 +125,14 @@ export const postService = {
       `/posts/${postId}/react`,
       { reaction }
     ),
-
+    
   // Record a share (one per user)
   sharePost: (postId: string) =>
     api.post<{ shares_count: number; already_shared: boolean }>(`/posts/${postId}/share`),
+
+  // Remove a share (un-repost) - the inverse of sharePost
+  unsharePost: (postId: string) =>
+    api.delete<{ shares_count: number; already_shared: boolean }>(`/posts/${postId}/share`),
 
   // Posts a user has shared - for the profile "Shares" tab
   getUserShares: (userId: string, page: number = 1, limit: number = 20) =>

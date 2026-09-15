@@ -10,24 +10,25 @@ import { Announcement } from '@/types/announcement.types';
 import { CATEGORY_META } from '../constants';
 import { Avatar } from '@/features/dashboard/components/Avatar';
 import { RoleBadge } from '@/features/dashboard/components/RoleBadge';
-import { AnnouncementReactions } from './AnnouncementReactions';
+import { PostReactions } from '@/features/posts/components/PostReactions';
 import { AnnouncementShareMenu } from './AnnouncementShareMenu';
 import { formatDate } from '@/lib/formatters';
 
 export default function AnnouncementDetailPage() {
   const { announcementId } = useParams();
   const navigate = useNavigate();
-  const { toggleBookmark } = useAnnouncements();
+  const { toggleBookmark, reactToAnnouncement } = useAnnouncements();
   const { user } = useAuthStore();
 
   const dashboardPath =
     user?.role === 'admin' ? '/admin/dashboard' : user?.role === 'professor' ? '/professor/dashboard' : '/student/dashboard';
-  const goBack = () => navigate(dashboardPath);
+  const goBack = () => navigate(-1);
 
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<{ status: number; message: string } | null>(null);
   const [isBookmarking, setIsBookmarking] = useState(false);
+  const [localReactions, setLocalReactions] = useState<Announcement['reactions']>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,7 +38,10 @@ export default function AnnouncementDetailPage() {
     announcementApi
       .getAnnouncement(announcementId!)
       .then((res) => {
-        if (!cancelled) setAnnouncement(res.data);
+        if (!cancelled) {
+          setAnnouncement(res.data);
+          setLocalReactions(res.data.reactions);
+        }
       })
       .catch((err) => {
         if (cancelled) return;
@@ -74,24 +78,24 @@ export default function AnnouncementDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-[#060B12]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00C8FF]" />
+      <div className="flex items-center justify-center min-h-screen bg-bg">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-text-primary" />
       </div>
     );
   }
 
   if (error || !announcement) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-[#060B12] px-4">
+      <div className="flex items-center justify-center min-h-screen bg-bg px-4">
         <div className="text-center max-w-sm">
           <ExclamationTriangleIcon className="h-12 w-12 mx-auto text-[#EF4444] mb-3" />
-          <h2 className="text-lg font-semibold text-[#F1F5F9]">
+          <h2 className="text-lg font-semibold text-text-primary">
             {error?.status === 403 ? 'Access denied' : 'Announcement unavailable'}
           </h2>
-          <p className="text-sm text-[#94A3B8] mt-1">{error?.message}</p>
+          <p className="text-sm text-text-secondary mt-1">{error?.message}</p>
           <button
             onClick={goBack}
-            className="mt-5 px-4 py-2 text-sm font-semibold bg-gradient-to-br from-[#00C8FF] to-[#0090CC] text-[#060B12] rounded-xl hover:opacity-90 transition"
+            className="mt-5 px-4 py-2 text-sm font-semibold border border-border bg-glass text-text-primary rounded-xl hover:bg-glass-hover transition"
           >
             Back to Announcements
           </button>
@@ -107,116 +111,173 @@ export default function AnnouncementDetailPage() {
     announcement.created_by_username ||
     (announcement.created_by_role === 'admin' ? 'Admin' : 'Professor');
 
-  return (
-    <div className="min-h-screen bg-[#060B12] text-[#F1F5F9]">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
-        <button
-  onClick={() => navigate(-1)}
-  className="flex items-center gap-2 text-sm text-[#94A3B8] hover:text-[#F1F5F9] transition mb-5"
->
-  <ArrowLeftIcon className="h-4 w-4" />
-  Back
-</button>
+  // Convert reactions array to breakdown + myReaction (PostReactions format)
+  const reactionBreakdown = localReactions.reduce<Record<string, number>>((acc, r) => {
+    if (r.reaction) acc[r.reaction] = (acc[r.reaction] || 0) + 1;
+    return acc;
+  }, {});
+  const myReaction = localReactions.find((r) => r.user_id === user?.id)?.reaction ?? null;
+  const reactionsCount = localReactions.length;
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main content */}
-          <div className="lg:col-span-2 rounded-2xl border border-[#1E3447] bg-[#0D1722] p-6">
-            <div className="flex items-center gap-2 flex-wrap mb-4">
-              <div className={`flex-shrink-0 h-9 w-9 rounded-xl flex items-center justify-center border ${meta.border} ${meta.bg}`}>
-                <Icon className={`h-[18px] w-[18px] ${meta.color}`} />
+  return (
+    <div className="min-h-screen bg-bg text-text-primary">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
+        <button
+          onClick={goBack}
+          className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition mb-5"
+        >
+          <ArrowLeftIcon className="h-4 w-4" />
+          Back
+        </button>
+
+        <div className="rounded-2xl border border-border bg-glass backdrop-blur-xl p-5 sm:p-6">
+          {/* Category badge */}
+          <div className="flex items-center gap-2 flex-wrap mb-4">
+            <div className={`flex-shrink-0 h-9 w-9 rounded-xl flex items-center justify-center border ${meta.border} ${meta.bg}`}>
+              <Icon className={`h-[18px] w-[18px] ${meta.color}`} />
+            </div>
+            <span
+              className={`text-[11px] font-medium px-2.5 py-1 rounded-full border ${
+                isImportant
+                  ? 'text-red-400 bg-red-500/10 border-red-500/30'
+                  : 'text-text-secondary bg-glass border-border'
+              }`}
+            >
+              {isImportant ? 'Important' : meta.label}
+            </span>
+            {!announcement.is_published && (
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-text-secondary bg-glass border border-border rounded-full px-2 py-0.5">
+                Draft
+              </span>
+            )}
+          </div>
+
+          {/* Title */}
+          <h1 className="text-2xl font-bold text-text-primary break-words">{announcement.title}</h1>
+
+          {/* Author */}
+          <div className="flex items-center gap-3 mt-4">
+            <Avatar src={announcement.created_by_avatar} name={authorName} size="md" />
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium text-text-primary">{authorName}</p>
+                <RoleBadge role={announcement.created_by_role} />
               </div>
-              <span
-                className={`text-[11px] font-medium px-2.5 py-1 rounded-full border ${
-                  isImportant
-                    ? 'text-red-400 bg-red-500/10 border-red-500/30'
-                    : `${meta.color} ${meta.bg} ${meta.border}`
+              <p className="text-xs text-text-muted mt-0.5">{formatDate(announcement.published_at || announcement.created_at)}</p>
+            </div>
+          </div>
+
+          {/* Content */}
+          <p className="mt-6 text-sm text-text-primary whitespace-pre-wrap break-words leading-relaxed">
+            {announcement.content}
+          </p>
+
+          {/* Image */}
+          {announcement.image_url && (
+            <div className="mt-4 rounded-xl overflow-hidden border border-border">
+              <img src={announcement.image_url} alt="" className="w-full max-h-[480px] object-cover" />
+            </div>
+          )}
+
+          {/* Reaction summary — katulad ng AnnouncementCard */}
+          {reactionsCount > 0 && (
+            <div className="flex items-center gap-2 mt-4 pt-4">
+              <div className="flex items-center -space-x-1.5">
+                {Object.entries(reactionBreakdown)
+                  .sort(([, a], [, b]) => b - a)
+                  .slice(0, 3)
+                  .map(([emoji], i) => (
+                    <span
+                      key={`summary-${emoji}`}
+                      className="flex items-center justify-center h-7 w-7"
+                      style={{ zIndex: 3 - i }}
+                    >
+                      <span className="text-[18px]">{emoji}</span>
+                    </span>
+                  ))}
+              </div>
+              <span className="text-sm text-text-secondary font-medium">{reactionsCount}</span>
+            </div>
+          )}
+
+          {/* Actions: Reactions + Bookmark + Share */}
+          <div className="flex items-center justify-between gap-3 mt-4 pt-4 border-t border-border flex-wrap">
+            <PostReactions
+              breakdown={reactionBreakdown}
+              myReaction={myReaction}
+              onReact={(reaction) => {
+                if (!user) return;
+
+                // Optimistic update
+                setLocalReactions((prev) => {
+                  const existingIdx = prev.findIndex((r) => r.user_id === user.id);
+                  if (existingIdx !== -1) {
+                    if (prev[existingIdx].reaction === reaction) {
+                      return prev.filter((r) => r.user_id !== user.id);
+                    }
+                    const updated = [...prev];
+                    updated[existingIdx] = { ...updated[existingIdx], reaction };
+                    return updated;
+                  }
+                  return [...prev, { user_id: user.id, reaction }];
+                });
+
+                reactToAnnouncement({ id: announcement.id, reaction });
+              }}
+              size="md"
+              label="Like"
+              alwaysShowLike
+            />
+
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <button
+                onClick={handleBookmark}
+                disabled={isBookmarking}
+                title={announcement.is_bookmarked ? 'Remove from saved' : 'Save'}
+                className={`p-2 rounded-lg transition disabled:opacity-50 ${
+                  announcement.is_bookmarked
+                    ? 'text-text-primary bg-text-primary/10'
+                    : 'text-text-muted hover:text-text-primary hover:bg-glass'
                 }`}
               >
-                {isImportant ? 'Important' : meta.label}
-              </span>
-              {!announcement.is_published && (
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-[#94A3B8] bg-white/5 border border-[#1E3447] rounded-full px-2 py-0.5">
-                  Draft
-                </span>
-              )}
+                {announcement.is_bookmarked ? (
+                  <BookmarkSolidIcon className="h-4 w-4" />
+                ) : (
+                  <BookmarkIcon className="h-4 w-4" />
+                )}
+              </button>
+              <AnnouncementShareMenu announcementId={announcement.id} title={announcement.title} />
             </div>
+          </div>
+        </div>
 
-            <h1 className="text-2xl font-bold text-[#F1F5F9] break-words">{announcement.title}</h1>
-
-            <div className="flex items-center gap-3 mt-4">
-              <Avatar src={announcement.created_by_avatar} name={authorName} size="md" />
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-[#F1F5F9]">{authorName}</p>
-                  <RoleBadge role={announcement.created_by_role} />
-                </div>
-                <p className="text-xs text-[#64748B] mt-0.5">{formatDate(announcement.published_at || announcement.created_at)}</p>
-              </div>
+        {/* Details — nasa ilalim na, hindi sidebar */}
+        <div className="mt-4 rounded-2xl border border-border bg-glass backdrop-blur-xl p-5">
+          <h3 className="text-sm font-semibold text-text-primary mb-3">Details</h3>
+          <dl className="space-y-3 text-sm">
+            <div className="flex items-center justify-between">
+              <dt className="text-text-muted">Audience</dt>
+              <dd className="text-text-primary text-right">{announcement.audience}</dd>
             </div>
-
-            <p className="mt-6 text-sm text-[#E2E8F0] whitespace-pre-wrap break-words leading-relaxed">
-              {announcement.content}
-            </p>
-
-            {announcement.image_url && (
-              <div className="mt-4 rounded-xl overflow-hidden border border-[#1E3447]">
-                <img src={announcement.image_url} alt="" className="w-full max-h-[480px] object-cover" />
+            <div className="flex items-center justify-between">
+              <dt className="text-text-muted">Type</dt>
+              <dd className="text-text-primary">{meta.label}</dd>
+            </div>
+            <div className="flex items-center justify-between">
+              <dt className="text-text-muted">Priority</dt>
+              <dd className="text-text-primary capitalize">{announcement.priority}</dd>
+            </div>
+            <div className="flex items-center justify-between">
+              <dt className="text-text-muted">Published</dt>
+              <dd className="text-text-primary text-right">{formatDate(announcement.published_at || announcement.created_at)}</dd>
+            </div>
+            {announcement.expires_at && (
+              <div className="flex items-center justify-between">
+                <dt className="text-text-muted">Expires</dt>
+                <dd className="text-text-primary text-right">{formatDate(announcement.expires_at)}</dd>
               </div>
             )}
-
-            <div className="mt-6 pt-5 border-t border-[#1E3447] flex items-center justify-between gap-3 flex-wrap">
-              <AnnouncementReactions announcementId={announcement.id} reactions={announcement.reactions} size="md" />
-
-              <div className="flex items-center gap-1 flex-shrink-0">
-                <button
-                  onClick={handleBookmark}
-                  disabled={isBookmarking}
-                  title={announcement.is_bookmarked ? 'Remove from saved' : 'Save'}
-                  className={`p-2 rounded-lg transition disabled:opacity-50 ${
-                    announcement.is_bookmarked
-                      ? 'text-[#00C8FF] bg-[#00C8FF]/10'
-                      : 'text-[#64748B] hover:text-[#00C8FF] hover:bg-white/5'
-                  }`}
-                >
-                  {announcement.is_bookmarked ? (
-                    <BookmarkSolidIcon className="h-4 w-4" />
-                  ) : (
-                    <BookmarkIcon className="h-4 w-4" />
-                  )}
-                </button>
-                <AnnouncementShareMenu announcementId={announcement.id} title={announcement.title} />
-              </div>
-            </div>
-          </div>
-
-          {/* Info panel */}
-          <div className="rounded-2xl border border-[#1E3447] bg-[#0D1722] p-5 h-fit">
-            <h3 className="text-sm font-semibold text-[#F1F5F9] mb-3">Details</h3>
-            <dl className="space-y-3 text-sm">
-              <div className="flex items-center justify-between">
-                <dt className="text-[#64748B]">Audience</dt>
-                <dd className="text-[#F1F5F9] text-right">{announcement.audience}</dd>
-              </div>
-              <div className="flex items-center justify-between">
-                <dt className="text-[#64748B]">Type</dt>
-                <dd className="text-[#F1F5F9]">{meta.label}</dd>
-              </div>
-              <div className="flex items-center justify-between">
-                <dt className="text-[#64748B]">Priority</dt>
-                <dd className="text-[#F1F5F9] capitalize">{announcement.priority}</dd>
-              </div>
-              <div className="flex items-center justify-between">
-                <dt className="text-[#64748B]">Published</dt>
-                <dd className="text-[#F1F5F9] text-right">{formatDate(announcement.published_at || announcement.created_at)}</dd>
-              </div>
-              {announcement.expires_at && (
-                <div className="flex items-center justify-between">
-                  <dt className="text-[#64748B]">Expires</dt>
-                  <dd className="text-[#F1F5F9] text-right">{formatDate(announcement.expires_at)}</dd>
-                </div>
-              )}
-            </dl>
-          </div>
+          </dl>
         </div>
       </div>
     </div>

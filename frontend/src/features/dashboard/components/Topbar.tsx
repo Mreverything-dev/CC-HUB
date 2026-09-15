@@ -49,9 +49,6 @@ export function Topbar({
   const { user } = useAuthStore();
   const { unreadCount, toggleWidget } = useChat();
 
-  // On mobile / tablet (< 1024px), the messages button takes the user to
-  // the full-page /chat route (Messenger-style) instead of toggling the
-  // small floating widget, which is too cramped for a phone screen.
   const handleMessagesClick = () => {
     const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
     if (isMobile) {
@@ -94,7 +91,7 @@ export function Topbar({
   };
 
   return (
-    <header className="sticky top-0 z-30 flex items-center gap-2 sm:gap-4 border-b border-border bg-bg/95 backdrop-blur-xl px-3 py-3.5 sm:px-4 lg:px-8">
+    <header className="sticky top-0 z-30 flex items-center gap-2 sm:gap-4 bg-bg/95 backdrop-blur-xl px-3 py-3.5 sm:px-4 lg:px-8 shadow-[0_4px_24px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.4)]">
       {onOpenMenu && (
         <button
           onClick={onOpenMenu}
@@ -120,33 +117,48 @@ export function Topbar({
         </div>
       )}
 
+      {/* Search */}
       <div
-        className={`relative flex-1 max-w-md hidden sm:block transition-all duration-300 ease-out ${
-          searchOpen ? 'scale-105' : 'scale-100'
+        className={`relative hidden sm:block transition-[max-width,transform] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+          searchOpen ? 'flex-1 max-w-2xl scale-[1.02]' : 'flex-1 max-w-md scale-100'
         }`}
         ref={searchRef}
       >
-        <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-muted" />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => {
-            setSearchQuery(e.target.value);
-            setSearchOpen(true);
-          }}
-          onFocus={() => setSearchOpen(true)}
-          placeholder="Search posts, people, sections..."
-          className="w-full rounded-xl border border-border bg-glass py-2 pl-9 pr-8 text-sm text-text-primary placeholder-text-muted transition focus:border-border focus:outline-none focus:ring-1 focus:ring-border"
-        />
-        {searchQuery && (
-          <button
-            onClick={() => setSearchQuery('')}
-            title="Clear search"
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary transition"
-          >
-            <XCircleIcon className="h-4 w-4" />
-          </button>
-        )}
+        <div
+          className={`relative w-full flex items-center rounded-xl border bg-glass transition-colors duration-200 ${
+            searchOpen ? 'border-border/80 bg-glass-hover' : 'border-border'
+          }`}
+        >
+          <MagnifyingGlassIcon
+            className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-text-muted transition-all duration-200 ease-out ${
+              searchOpen
+                ? 'opacity-0 -translate-x-1 pointer-events-none'
+                : 'opacity-100 translate-x-0 pointer-events-none'
+            }`}
+          />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setSearchOpen(true);
+            }}
+            onFocus={() => setSearchOpen(true)}
+            placeholder="Search posts, people, sections..."
+            className={`w-full bg-transparent py-2 text-sm text-text-primary placeholder-text-muted focus:outline-none transition-[padding] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+              searchOpen ? 'pl-4 pr-8' : 'pl-9 pr-8'
+            }`}
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              title="Clear search"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary transition"
+            >
+              <XCircleIcon className="h-4 w-4" />
+            </button>
+          )}
+        </div>
 
         {searchOpen && searchResults.hasQuery && (
           <GlobalSearchDropdown
@@ -178,7 +190,7 @@ export function Topbar({
         <button
           onClick={() => (onOpenFriends ? onOpenFriends() : navigate('/friends'))}
           title="Friends"
-          className="p-2 text-text-secondary hover:text-text-primary transition rounded-xl hover:bg-glass"
+          className="p-2 text-text-secondary hover:text-text-primary transition-all duration-200 rounded-xl hover:scale-110 active:scale-95"
         >
           <UserGroupIcon className="h-5 w-5" />
         </button>
@@ -188,11 +200,11 @@ export function Topbar({
         <button
           onClick={handleMessagesClick}
           title="Messages"
-          className="relative p-2 text-text-secondary hover:text-text-primary transition rounded-xl hover:bg-glass"
+          className="relative p-2 text-text-secondary hover:text-text-primary transition-all duration-200 rounded-xl hover:scale-110 active:scale-95"
         >
           <ChatBubbleLeftIcon className="h-5 w-5" />
           {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 bg-[#00C8FF] text-[#060B12] text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+            <span className="absolute -top-1 -right-1 bg-[#EF4444] text-white text-[10px] font-bold min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center leading-none">
               {unreadCount > 9 ? '9+' : unreadCount}
             </span>
           )}

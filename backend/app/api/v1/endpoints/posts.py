@@ -235,6 +235,20 @@ async def share_post(
     return await service.share_post(post_id, str(current_user.id))
 
 # ============================================
+# UNSHARE POST (un-repost)
+# ============================================
+
+@router.delete("/{post_id}/share")
+async def unshare_post(
+    post_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Remove a share (un-repost) - the inverse of POST /posts/{post_id}/share."""
+    service = PostService(db)
+    return await service.unshare_post(post_id, str(current_user.id))
+
+# ============================================
 # LIKE / UNLIKE POST (✅ FIXED for polymorphic likes)
 # ============================================
 

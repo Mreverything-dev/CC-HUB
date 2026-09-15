@@ -69,15 +69,15 @@ export function AnnouncementCategorySidebar({
                 onClick={() => onFilterChange(value)}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium transition ${
                   isActive
-                    ? 'bg-[#00C8FF]/15 text-[#00C8FF]'
+                    ? 'bg-text-primary/10 text-text-primary'
                     : 'text-text-secondary hover:text-text-primary hover:bg-glass'
                 }`}
               >
-                <Icon className={`h-4 w-4 flex-shrink-0 ${isActive ? 'text-[#00C8FF]' : ''}`} />
+                <Icon className={`h-4 w-4 flex-shrink-0 ${isActive ? 'text-text-primary' : ''}`} />
                 <span className="flex-1 text-left truncate">{label}</span>
                 <span
                   className={`text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[20px] text-center flex-shrink-0 ${
-                    isActive ? 'bg-[#00C8FF] text-[#060B12]' : 'bg-glass text-text-muted'
+                    isActive ? 'bg-text-primary text-bg' : 'bg-glass text-text-muted'
                   }`}
                 >
                   {count}
@@ -91,7 +91,7 @@ export function AnnouncementCategorySidebar({
       {/* Popular Announcements */}
       <div className="rounded-2xl border border-border bg-glass backdrop-blur-xl p-4">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary mb-3">
-          <FireIcon className="h-4 w-4 text-[#00C8FF]" />
+          <FireIcon className="h-4 w-4 text-text-primary" />
           Popular Announcements
         </h3>
         {popular.length === 0 ? (
@@ -119,10 +119,10 @@ export function AnnouncementCategorySidebar({
       </div>
 
       {/* Stay Updated */}
-      <div className="rounded-2xl border border-[#00C8FF]/20 bg-glass backdrop-blur-xl p-4">
+      <div className="rounded-2xl border border-border bg-glass backdrop-blur-xl p-4">
         <div className="flex items-center gap-2 mb-2">
-          <div className="h-8 w-8 rounded-xl bg-[#00C8FF]/10 border border-[#00C8FF]/25 flex items-center justify-center flex-shrink-0">
-            <BellAlertIcon className="h-4 w-4 text-[#00C8FF]" />
+          <div className="h-8 w-8 rounded-xl bg-glass border border-border flex items-center justify-center flex-shrink-0">
+            <BellAlertIcon className="h-4 w-4 text-text-primary" />
           </div>
           <h3 className="text-sm font-semibold text-text-primary">Stay Updated</h3>
         </div>
@@ -131,7 +131,7 @@ export function AnnouncementCategorySidebar({
         </p>
         <button
           onClick={() => toast('Announcement notifications are coming soon')}
-          className="w-full py-2 text-sm font-semibold bg-gradient-to-br from-[#00C8FF] to-[#0090CC] text-[#060B12] rounded-xl hover:opacity-90 transition"
+          className="w-full py-2 text-sm font-semibold border border-border bg-glass text-text-primary rounded-xl hover:bg-glass-hover transition"
         >
           Turn On Notifications
         </button>

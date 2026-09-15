@@ -15,6 +15,7 @@ export default function NotificationBell({ onNavigateFriends }: NotificationBell
   const {
     notifications,
     unreadNotifications,
+    isLoadingNotifications,
     markNotificationRead,
     markAllNotificationsRead,
   } = useFriends();
@@ -43,12 +44,12 @@ export default function NotificationBell({ onNavigateFriends }: NotificationBell
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 text-text-secondary hover:text-[#00C8FF] transition rounded-xl hover:bg-glass"
+        className="relative p-2 text-text-secondary hover:text-text-primary transition-all duration-200 rounded-xl hover:scale-110 active:scale-95"
         title="Notifications"
       >
         <BellIcon className="h-5 w-5" />
         {unreadNotifications > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 bg-[#00C8FF] text-[#060B12] text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+          <span className="absolute -top-1 -right-1 bg-[#EF4444] text-white text-[10px] font-bold min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center leading-none">
             {unreadNotifications > 9 ? '9+' : unreadNotifications}
           </span>
         )}
@@ -64,7 +65,7 @@ export default function NotificationBell({ onNavigateFriends }: NotificationBell
               {unreadNotifications > 0 && (
                 <button
                   onClick={() => markAllNotificationsRead()}
-                  className="text-xs text-[#00C8FF] hover:text-[#00E0FF] font-medium transition"
+                  className="text-xs text-text-primary hover:underline font-medium transition"
                 >
                   Mark all read
                 </button>
@@ -72,7 +73,20 @@ export default function NotificationBell({ onNavigateFriends }: NotificationBell
             </div>
 
             <div className="max-h-96 overflow-y-auto themed-scrollbar">
-              {notifications.length === 0 ? (
+              {isLoadingNotifications ? (
+                <div className="p-3 space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-start gap-2.5 animate-pulse">
+                      <div className="h-8 w-8 rounded-full bg-glass flex-shrink-0" />
+                      <div className="flex-1 min-w-0 space-y-2">
+                        <div className="h-3 rounded bg-glass w-3/4" />
+                        <div className="h-3 rounded bg-glass w-1/2" />
+                        <div className="h-2 rounded bg-glass w-1/4" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : notifications.length === 0 ? (
                 <p className="text-sm text-text-muted text-center py-8">No notifications yet.</p>
               ) : (
                 notifications.map((n) => {
@@ -83,7 +97,7 @@ export default function NotificationBell({ onNavigateFriends }: NotificationBell
                       key={n.id}
                       onClick={() => handleNotificationClick(n.id, n.is_read, n.type, n.data)}
                       className={`w-full text-left px-4 py-3 border-b border-border hover:bg-glass transition ${
-                        !n.is_read ? 'bg-[#00C8FF]/[0.06]' : ''
+                        !n.is_read ? 'bg-text-primary/[0.04]' : ''
                       }`}
                     >
                       <div className="flex items-start gap-2.5">
@@ -106,7 +120,7 @@ export default function NotificationBell({ onNavigateFriends }: NotificationBell
                             )}
                           </div>
                           {!n.is_read && (
-                            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-[#00C8FF] border-2 border-bg" />
+                            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-text-primary border-2 border-bg" />
                           )}
                         </div>
                         <div className="flex-1 min-w-0">

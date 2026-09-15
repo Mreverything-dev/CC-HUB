@@ -31,10 +31,11 @@ import { GoogleProvider } from './app/providers/GoogleProvider';
 import TermsPage from '@/features/legal/pages/TermsPage';
 import { LoadingScreen } from '@/components/ui/LoadingScreen/LoadingScreen';
 import { useLoadingStore } from '@/app/store/useLoadingStore';
-
+import { useAuthStore } from '@/features/auth/store/auth.store';
 
 function App() {
   const { isLoading, message } = useLoadingStore();
+  const { isAuthenticated } = useAuthStore();
 
   return (
   <GoogleProvider>
@@ -196,8 +197,8 @@ function App() {
             <Route path="/dashboard" element={<Navigate to="/student/dashboard" replace />} />
             <Route path="*" element={<Navigate to="/login" replace />} />
           </Routes>
-          <ChatWidget />
-          <LiveStreamStage />
+          {isAuthenticated && <ChatWidget />}
+          {isAuthenticated && <LiveStreamStage />}
         </BrowserRouter>
       </SocketProvider>
     </QueryProvider>
