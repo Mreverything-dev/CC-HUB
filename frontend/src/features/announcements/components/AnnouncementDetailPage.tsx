@@ -20,8 +20,6 @@ export default function AnnouncementDetailPage() {
   const { toggleBookmark, reactToAnnouncement } = useAnnouncements();
   const { user } = useAuthStore();
 
-  const dashboardPath =
-    user?.role === 'admin' ? '/admin/dashboard' : user?.role === 'professor' ? '/professor/dashboard' : '/student/dashboard';
   const goBack = () => navigate(-1);
 
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);

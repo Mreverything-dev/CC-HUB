@@ -69,8 +69,6 @@ export function RichTextEditor({
     document.execCommand('insertText', false, text);
   };
 
-  const isEmpty = !value || value === '<br>' || value === '<div><br></div>';
-
   return (
     <div className={className}>
       {/* Toolbar */}
