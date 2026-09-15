@@ -11,6 +11,9 @@ import {
 } from './usePostRoom';
 import toast from 'react-hot-toast';
 
+// ✅ Add FeedFilter type
+export type FeedFilter = 'all' | 'following' | 'section' | 'video';
+
 export function useFeed() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -18,6 +21,8 @@ export function useFeed() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  // ✅ Add filter state
+  const [filter, setFilter] = useState<FeedFilter>('all');
   const { isAuthenticated, user } = useAuthStore();
 
   // ✅ Helper: Deduplicate posts by ID
@@ -33,7 +38,30 @@ export function useFeed() {
     return unique;
   }, []);
 
-  const fetchFeed = useCallback(async (pageNum: number = 1) => {
+  // ✅ Helper: Apply filter to posts
+  const applyFilter = useCallback((items: Post[], currentFilter: FeedFilter): Post[] => {
+    switch (currentFilter) {
+      case 'video':
+        // Filter posts with video media
+        return items.filter(post => 
+          post.media_urls?.some(url => 
+            url.match(/\.(mp4|webm|mov|avi|mkv)$/i) || url.includes('video')
+          )
+        );
+      case 'section':
+        // Filter posts from user's section
+        // This uses the section visibility or section_id
+        return items.filter(post => post.visibility === 'section');
+      case 'following':
+        // Filter posts from friends (following)
+        return items.filter(post => post.visibility === 'friends');
+      case 'all':
+      default:
+        return items;
+    }
+  }, []);
+
+  const fetchFeed = useCallback(async (pageNum: number = 1, currentFilter?: FeedFilter) => {
     if (!isAuthenticated) return;
 
     setIsLoading(true);
@@ -41,15 +69,19 @@ export function useFeed() {
       const response = await postService.getFeed(pageNum, 20);
       const { items, total: feedTotal } = response.data;
       
-      // ✅ Deduplicate items before setting state
+      // Deduplicate items
       const uniqueItems = deduplicatePosts(items);
       
+      // Apply filter if needed
+      const filteredItems = currentFilter 
+        ? applyFilter(uniqueItems, currentFilter)
+        : uniqueItems;
+      
       if (pageNum === 1) {
-        setPosts(uniqueItems);
+        setPosts(filteredItems);
       } else {
         setPosts((prev) => {
-          // ✅ Merge and deduplicate when loading more
-          const merged = [...prev, ...uniqueItems];
+          const merged = [...prev, ...filteredItems];
           return deduplicatePosts(merged);
         });
       }
@@ -61,7 +93,14 @@ export function useFeed() {
     } finally {
       setIsLoading(false);
     }
-  }, [isAuthenticated, deduplicatePosts]);
+  }, [isAuthenticated, deduplicatePosts, applyFilter]);
+
+  // ✅ Handle filter change
+  const handleFilterChange = useCallback((newFilter: FeedFilter) => {
+    setFilter(newFilter);
+    setPage(1);
+    fetchFeed(1, newFilter);
+  }, [fetchFeed]);
 
   // ✅ Updated: Accept object with content, media_urls, and visibility
   const createPost = async (data: { content: string; media_urls?: string[]; visibility?: string }) => {
@@ -74,7 +113,7 @@ export function useFeed() {
         visibility: data.visibility || 'public'
       });
       toast.success('Post created successfully!');
-      await fetchFeed(1);
+      await fetchFeed(1, filter);
     } catch (error) {
       console.error('Error creating post:', error);
       toast.error('Failed to create post');
@@ -86,7 +125,6 @@ export function useFeed() {
   const toggleLike = async (postId: string) => {
     try {
       await postService.likePost(postId);
-      // ✅ Update local state with deduplication
       setPosts((prev) => {
         const updated = prev.map((post) =>
           post.id === postId
@@ -143,7 +181,6 @@ export function useFeed() {
       });
     } catch (error) {
       console.error('Error reacting to post:', error);
-      // Roll back to the pre-optimistic state on failure.
       if (previous) {
         setPosts((prev) => prev.map((post) => (post.id === postId ? previous : post)));
       }
@@ -181,15 +218,15 @@ export function useFeed() {
     if (hasMore && !isLoading) {
       const nextPage = page + 1;
       setPage(nextPage);
-      fetchFeed(nextPage);
+      fetchFeed(nextPage, filter);
     }
   };
 
   useEffect(() => {
-    fetchFeed(1);
+    fetchFeed(1, filter);
   }, [fetchFeed]);
 
-  // Real-time updates for every post currently rendered in this feed
+  // Real-time updates
   const joinedRoomsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     const currentIds = new Set(posts.map((p) => p.id));
@@ -251,7 +288,6 @@ export function useFeed() {
     };
   }, [user?.id, deduplicatePosts]);
 
-  // Leave every currently-joined room if the dashboard itself unmounts.
   useEffect(() => {
     return () => {
       joinedRoomsRef.current.forEach((id) => socketService.leavePostRoom(id));
@@ -265,12 +301,14 @@ export function useFeed() {
     isPosting,
     hasMore,
     total,
+    filter,
+    setFilter: handleFilterChange,
     createPost,
     toggleLike,
     reactToPost,
     deletePost,
     editPost,
     loadMore,
-    refreshFeed: () => fetchFeed(1),
+    refreshFeed: () => fetchFeed(1, filter),
   };
 }

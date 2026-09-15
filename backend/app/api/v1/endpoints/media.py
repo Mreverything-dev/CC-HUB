@@ -9,23 +9,26 @@ from typing import List
 
 router = APIRouter()
 
-# Allowed file types
-ALLOWED_TYPES = [
-    # image/svg+xml intentionally excluded: SVGs can embed <script> and the
-    # storage bucket is public-read with no way to force
-    # X-Content-Type-Options: nosniff, making SVG upload a stored-XSS vector.
+# Categorized Allowed File Types
+VIDEO_TYPES = {
+    'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo'
+}
+
+IMAGE_AND_DOC_TYPES = {
     'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-    'video/mp4', 'video/webm', 'video/quicktime', 'video/x-msvideo',
-    # Generic file attachments (chat "send a file" support)
     'application/pdf', 'application/msword', 'text/plain', 'application/zip',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/vnd.ms-excel',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'application/vnd.ms-powerpoint',
     'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-]
+}
 
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+ALLOWED_TYPES = list(VIDEO_TYPES | IMAGE_AND_DOC_TYPES)
+
+# File Size Limits
+MAX_IMAGE_FILE_SIZE = 10 * 1024 * 1024   # 10MB limit for images & docs
+MAX_VIDEO_FILE_SIZE = 500 * 1024 * 1024  # 500MB limit for videos
 
 # ============================================
 # UPLOAD MEDIA
@@ -47,12 +50,31 @@ async def upload_media(
             detail="No files provided"
         )
     
-    # Validate files
+    # Validate file types and size limits
     for file in files:
         if file.content_type not in ALLOWED_TYPES:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"File type '{file.content_type}' not allowed. Allowed: {', '.join(ALLOWED_TYPES)}"
+            )
+        
+        # Determine maximum allowed size based on file category
+        if file.content_type in VIDEO_TYPES:
+            max_limit = MAX_VIDEO_FILE_SIZE
+            limit_label = "500MB"
+        else:
+            max_limit = MAX_IMAGE_FILE_SIZE
+            limit_label = "10MB"
+
+        # Check file size safely using file descriptor offset (low RAM usage)
+        file.file.seek(0, 2)
+        file_size = file.file.tell()
+        file.file.seek(0)  # Reset cursor for downstream MinIO processing
+
+        if file_size > max_limit:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"File '{file.filename}' exceeds the {limit_label} limit for {file.content_type}."
             )
     
     try:

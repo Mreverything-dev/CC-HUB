@@ -322,19 +322,21 @@ export function Register() {
 
               {/* Invitation Code (Professor Only) */}
               {formData.role === 'professor' && (
-                <div className="relative border border-[#00C8FF]/20 bg-[#00C8FF]/5 rounded-xl p-4">
-                  <div className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-[#00C8FF] z-10">
-                    <Shield className="h-6 w-7" />
+                <div className="border border-[#00C8FF]/20 bg-[#00C8FF]/5 rounded-xl p-4">
+                  <div className="relative">
+                    <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#00C8FF] z-10">
+                      <Shield className="h-5 w-5" />
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Invitation Code"
+                      value={formData.invitation_code}
+                      onChange={(e) => setFormData({...formData, invitation_code: e.target.value.toUpperCase()})}
+                      required
+                      disabled={isLoading || isGoogleLoading || success}
+                      className="w-full rounded-xl border border-[#00C8FF]/30 bg-[#0A111A]/90 px-4 py-3.5 pl-12 text-[#F1F5F9] placeholder-[#64748B] uppercase tracking-wider font-mono backdrop-blur-sm transition-all duration-200 focus:border-[#00C8FF] focus:outline-none focus:ring-1 focus:ring-[#00C8FF] disabled:cursor-not-allowed disabled:opacity-50"
+                    />
                   </div>
-                  <input
-                    type="text"
-                    placeholder="Invitation Code"
-                    value={formData.invitation_code}
-                    onChange={(e) => setFormData({...formData, invitation_code: e.target.value.toUpperCase()})}
-                    required
-                    disabled={isLoading || isGoogleLoading || success}
-                    className="w-full rounded-xl border border-[#00C8FF]/30 bg-bg px-4 py-3.5 pl-12 text-text-primary placeholder-text-muted uppercase tracking-wider font-mono transition-all duration-200 focus:border-[#00C8FF] focus:outline-none focus:ring-1 focus:ring-[#00C8FF] disabled:cursor-not-allowed disabled:opacity-50"
-                  />
                   <p className="mt-2 text-xs text-text-muted">
                     Contact administrator to get an invitation code
                   </p>
@@ -465,6 +467,7 @@ export function Register() {
                 </button>
               </div>
 
+              {/* Google sign-up consent message */}
               <p className="text-center text-[11px] text-text-muted">
                 By continuing with Google, you agree to our{' '}
                 <Link to="/terms" className="text-[#00C8FF] hover:text-[#00E0FF] transition-colors">

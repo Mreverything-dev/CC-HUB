@@ -30,15 +30,7 @@ import ChatPanel from '@/features/chat/components/ChatPanel';
 import { TeachingAssignment } from '@/types/section.types';
 import { useMinimumLoading } from '@/features/dashboard/hooks/useMinimumLoading';
 import { useFriendStore } from '@/features/friends/store/friend.store';
-
-// Professor feed filters — walang "Professor" filter dahil professor mismo siya
-type FeedFilter = 'all' | 'friends' | 'videos';
-
-const FEED_FILTERS: { id: FeedFilter; label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: 'friends', label: 'Friends' },
-  { id: 'videos', label: 'Videos' },
-];
+import { FeedTabs, FeedFilter } from '@/features/dashboard/components/FeedTabs';
 
 const VIDEO_EXT_RE = /\.(mp4|webm|mov|avi|mkv|m4v)(\?|$)/i;
 
@@ -243,22 +235,7 @@ export default function ProfessorDashboard() {
                   />
 
                   {/* Feed filter tabs */}
-                  <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-1 px-1">
-                    {FEED_FILTERS.map((f) => (
-                      <button
-                        key={f.id}
-                        type="button"
-                        onClick={() => handleFilterChange(f.id)}
-                        className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition whitespace-nowrap ${
-                          feedFilter === f.id
-                            ? 'bg-text-primary text-bg'
-                            : 'bg-glass border border-border text-text-secondary hover:text-text-primary hover:bg-glass-hover'
-                        }`}
-                      >
-                        {f.label}
-                      </button>
-                    ))}
-                  </div>
+                  <FeedTabs active={feedFilter} onChange={handleFilterChange} hideFriends />
 
                   <CreatePost onCreatePost={handleCreatePost} isLoading={isPosting} dark avatarUrl={avatarUrl} />
 
