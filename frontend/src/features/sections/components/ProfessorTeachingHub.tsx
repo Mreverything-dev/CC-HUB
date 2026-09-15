@@ -27,8 +27,6 @@ import EditTeachingAssignmentModal from './EditTeachingAssignmentModal';
 import StudentRecordModal, { StudentRecordTarget } from './StudentRecordModal';
 
 interface ProfessorTeachingHubProps {
-  /** Opens the existing SectionDashboard view for this section (roster,
-   * mayor/officer, announcements/chat shortcuts). */
   onManageSection: (sectionId: string) => void;
 }
 
@@ -56,9 +54,6 @@ function memberFullName(member: SectionMember): string {
   return member.user_username || 'Student';
 }
 
-/** Single-session duration in hours (e.g. 14:30-17:30 -> 3) - a
- * presentational derivation for the "N Hours" badges/stats below, not a
- * new backend concept, just arithmetic over the existing schedule fields. */
 function subjectHours(ta: TeachingAssignment): number {
   if (!ta.schedule_start || !ta.schedule_end) return 0;
   const [sh, sm] = ta.schedule_start.split(':').map(Number);
@@ -72,11 +67,9 @@ function sumHours(subjects: TeachingAssignment[]): number {
   return Math.round(subjects.reduce((sum, ta) => sum + subjectHours(ta), 0) * 10) / 10;
 }
 
-// Cosmetic-only rotation for subject icon badges - not a subject "type"
-// system, just visual variety so a section's subject list doesn't read as
-// one flat monochrome block.
+// Cosmetic-only rotation for subject icon badges
 const SUBJECT_ACCENTS = [
-  { bg: 'bg-[#00C8FF]/12', text: 'text-[#00C8FF]', ring: 'border-[#00C8FF]/25' },
+  { bg: 'bg-text-primary/10', text: 'text-text-primary', ring: 'border-border' },
   { bg: 'bg-[#8B5CF6]/12', text: 'text-[#8B5CF6]', ring: 'border-[#8B5CF6]/25' },
   { bg: 'bg-[#22C55E]/12', text: 'text-[#22C55E]', ring: 'border-[#22C55E]/25' },
   { bg: 'bg-[#F59E0B]/12', text: 'text-[#F59E0B]', ring: 'border-[#F59E0B]/25' },
@@ -94,7 +87,7 @@ function StatChip({
   accent: string;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-[#1E3447] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl px-4 py-3">
+    <div className="flex items-center gap-3 rounded-2xl border border-border bg-glass backdrop-blur-xl px-4 py-3">
       <div
         className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl"
         style={{ backgroundColor: `${accent}1A`, color: accent }}
@@ -102,19 +95,13 @@ function StatChip({
         <Icon className="h-[18px] w-[18px]" />
       </div>
       <div className="min-w-0">
-        <p className="text-lg font-bold text-[#F1F5F9] leading-tight">{value}</p>
-        <p className="text-xs text-[#94A3B8] truncate">{label}</p>
+        <p className="text-lg font-bold text-text-primary leading-tight">{value}</p>
+        <p className="text-xs text-text-secondary truncate">{label}</p>
       </div>
     </div>
   );
 }
 
-/**
- * The professor's main "Sections" landing page - lists everything they
- * teach (grouped by section, subjects + schedule) plus a search across
- * students in those sections. Subjects are managed inline per section card;
- * joining/creating sections are the only section-level actions here.
- */
 export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeachingHubProps) {
   const { sections, isLoading: sectionsLoading, deleteSection } = useSections();
   const { mine, isLoading: assignmentsLoading } = useTeachingAssignments();
@@ -138,10 +125,6 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  // Single document-level listener rather than a ref per card - any number
-  // of section cards can each have their own menu without wiring up a ref
-  // map, closing whichever one is open the moment a click lands outside
-  // every element marked data-section-menu.
   useEffect(() => {
     if (!openMenuFor) return;
     const handler = (e: MouseEvent) => {
@@ -171,10 +154,6 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
     return Array.from(map.values());
   }, [mine, sections]);
 
-  // Present/absent count for each subject's most recent Meethub session -
-  // a lightweight aggregate over the same persisted attendance rows the
-  // student record modal reads, fetched once per subject the professor
-  // teaches (not blocking the rest of the page while it loads).
   const [subjectSummaries, setSubjectSummaries] = useState<
     Record<string, { present: number; absent: number; total: number }>
   >({});
@@ -226,9 +205,6 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
   const totalStudents = useMemo(() => groups.reduce((sum, g) => sum + g.memberCount, 0), [groups]);
   const totalHours = useMemo(() => sumHours(groups.flatMap((g) => g.subjects)), [groups]);
 
-  // Every student across the professor's own sections (already backend-scoped
-  // via useSections()) - search is purely client-side over data already on
-  // hand, so it can never reach a section this professor doesn't teach.
   const searchPool = useMemo<SearchResult[]>(() => {
     const pool: SearchResult[] = [];
     for (const section of sections) {
@@ -281,13 +257,13 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
   return (
     <div className="max-w-7xl mx-auto">
       {/* Header */}
-      <div className="mb-5 rounded-2xl border border-[rgba(0,200,245,0.18)] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-5 sm:p-6 flex items-center gap-4">
-        <div className="flex h-11 w-11 sm:h-12 sm:w-12 flex-shrink-0 items-center justify-center rounded-2xl border border-[#00C8FF]/30 bg-[#00C8FF]/10 shadow-[0_0_20px_rgba(0,200,245,0.15)]">
-          <AcademicCapIcon className="h-5 w-5 sm:h-6 sm:w-6 text-[#00C8FF]" />
+      <div className="mb-5 rounded-2xl border border-border bg-glass backdrop-blur-xl p-5 sm:p-6 flex items-center gap-4">
+        <div className="flex h-11 w-11 sm:h-12 sm:w-12 flex-shrink-0 items-center justify-center rounded-2xl border border-border bg-glass">
+          <AcademicCapIcon className="h-5 w-5 sm:h-6 sm:w-6 text-text-primary" />
         </div>
         <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl font-bold text-[#F1F5F9]">My Teaching Assignments</h1>
-          <p className="text-[#94A3B8] mt-0.5 text-sm">Manage your sections, subjects, schedules, and students.</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-text-primary">My Teaching Assignments</h1>
+          <p className="text-text-secondary mt-0.5 text-sm">Manage your sections, subjects, schedules, and students.</p>
         </div>
       </div>
 
@@ -307,19 +283,19 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
           {isLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {[0, 1, 2].map((i) => (
-                <div key={i} className="h-52 rounded-2xl bg-[#0D1722] animate-pulse" />
+                <div key={i} className="h-52 rounded-2xl bg-glass animate-pulse" />
               ))}
             </div>
           ) : groups.length === 0 ? (
-            <div className="rounded-2xl border border-[#1E3447] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl py-16 px-6 text-center">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-[#00C8FF]/20 bg-[#00C8FF]/10">
-                <BookOpenIcon className="h-7 w-7 text-[#00C8FF]" />
+            <div className="rounded-2xl border border-border bg-glass backdrop-blur-xl py-16 px-6 text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-glass">
+                <BookOpenIcon className="h-7 w-7 text-text-primary" />
               </div>
-              <p className="text-[#F1F5F9] font-medium mt-4">You're not teaching any sections yet.</p>
-              <p className="text-[#64748B] text-sm mt-1">Join a section you already advise, or start a new one below.</p>
+              <p className="text-text-primary font-medium mt-4">You're not teaching any sections yet.</p>
+              <p className="text-text-muted text-sm mt-1">Join a section you already advise, or start a new one below.</p>
               <button
                 onClick={() => setShowJoin(true)}
-                className="mt-5 px-5 py-2.5 text-sm font-semibold bg-gradient-to-br from-[#00C8FF] to-[#0090CC] text-[#060B12] rounded-xl hover:opacity-90 transition"
+                className="mt-5 px-5 py-2.5 text-sm font-semibold border border-border bg-glass text-text-primary rounded-xl hover:bg-glass-hover transition"
               >
                 Join a Section
               </button>
@@ -332,19 +308,19 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
                 return (
                   <div
                     key={group.sectionId}
-                    className="flex flex-col rounded-2xl border border-[#1E3447] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-4 transition-all duration-200 hover:border-[#00C8FF]/35 hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(0,200,255,0.07)]"
+                    className="flex flex-col rounded-2xl border border-border bg-glass backdrop-blur-xl p-4 transition-all duration-200 hover:border-text-primary/30 hover:-translate-y-0.5 hover:shadow-md"
                   >
                     <div className="flex items-start justify-between gap-2 mb-3">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="text-base font-bold text-[#F1F5F9] truncate">{group.sectionName}</h3>
+                          <h3 className="text-base font-bold text-text-primary truncate">{group.sectionName}</h3>
                           {group.yearLevel && (
-                            <span className="flex-shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[#00C8FF] bg-[#00C8FF]/10 border border-[#00C8FF]/25 rounded-full px-2 py-0.5">
+                            <span className="flex-shrink-0 text-[10px] font-semibold uppercase tracking-wide text-text-secondary bg-glass border border-border rounded-full px-2 py-0.5">
                               Year {group.yearLevel}
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-[#64748B] mt-0.5">
+                        <p className="text-xs text-text-muted mt-0.5">
                           {group.subjects.length} {group.subjects.length === 1 ? 'Subject' : 'Subjects'}
                           {' • '}
                           {group.memberCount} {group.memberCount === 1 ? 'Student' : 'Students'}
@@ -355,7 +331,7 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
                         <button
                           onClick={() => onManageSection(group.sectionId)}
                           title="Manage Section"
-                          className="p-2 text-[#00C8FF] bg-[#00C8FF]/10 border border-[#00C8FF]/25 hover:bg-[#00C8FF]/20 rounded-xl transition"
+                          className="p-2 text-text-primary bg-glass border border-border hover:bg-glass-hover rounded-xl transition"
                         >
                           <Cog6ToothIcon className="h-4 w-4" />
                         </button>
@@ -365,21 +341,21 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
                             title="More options"
                             className={`p-2 rounded-xl border transition ${
                               menuOpen
-                                ? 'text-[#F1F5F9] bg-white/10 border-[#1E3447]'
-                                : 'text-[#64748B] border-transparent hover:text-[#F1F5F9] hover:bg-white/5'
+                                ? 'text-text-primary bg-glass border-border'
+                                : 'text-text-muted border-transparent hover:text-text-primary hover:bg-glass'
                             }`}
                           >
                             <EllipsisVerticalIcon className="h-4 w-4" />
                           </button>
                           {menuOpen && (
-                            <div className="absolute right-0 top-full mt-1 w-48 rounded-xl border border-[#1E3447] bg-[#111E2B] shadow-xl z-20 overflow-hidden">
+                            <div className="absolute right-0 top-full mt-1 w-48 rounded-xl border border-border bg-bg shadow-xl z-20 overflow-hidden">
                               <button
                                 onClick={() => {
                                   const full = sections.find((s) => s.id === group.sectionId);
                                   if (full) setEditSectionTarget(full);
                                   setOpenMenuFor(null);
                                 }}
-                                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-medium text-[#94A3B8] hover:text-[#00C8FF] hover:bg-white/5 transition"
+                                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-glass transition"
                               >
                                 <PencilSquareIcon className="h-4 w-4" />
                                 Edit Section Details
@@ -389,7 +365,7 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
                                   setAddSubjectFor(group);
                                   setOpenMenuFor(null);
                                 }}
-                                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-medium text-[#94A3B8] hover:text-[#00C8FF] hover:bg-white/5 transition"
+                                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-glass transition"
                               >
                                 <PlusIcon className="h-4 w-4" />
                                 Add Subject
@@ -400,7 +376,7 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
                                   setOpenMenuFor(null);
                                 }}
                                 disabled={group.subjects.length === 0}
-                                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-medium text-[#94A3B8] hover:text-[#00C8FF] hover:bg-white/5 transition disabled:opacity-40 disabled:pointer-events-none"
+                                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-glass transition disabled:opacity-40 disabled:pointer-events-none"
                               >
                                 <PencilSquareIcon className="h-4 w-4" />
                                 Edit Subjects
@@ -423,7 +399,7 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
 
                     <div className="space-y-2 flex-1">
                       {group.subjects.length === 0 ? (
-                        <p className="text-xs text-[#64748B] text-center py-4">No subjects added yet.</p>
+                        <p className="text-xs text-text-muted text-center py-4">No subjects added yet.</p>
                       ) : (
                         group.subjects.map((ta, i) => {
                           const accent = SUBJECT_ACCENTS[i % SUBJECT_ACCENTS.length];
@@ -431,7 +407,7 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
                           return (
                             <div
                               key={ta.id}
-                              className="flex items-center justify-between gap-2 p-2.5 rounded-xl border border-[#1E3447] bg-[#0A111A] hover:border-[#00C8FF]/30 transition"
+                              className="flex items-center justify-between gap-2 p-2.5 rounded-xl border border-border bg-bg hover:border-text-primary/30 transition"
                             >
                               <div className="flex items-center gap-2.5 min-w-0">
                                 <div
@@ -440,20 +416,20 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
                                   <BookOpenIcon className={`h-4 w-4 ${accent.text}`} />
                                 </div>
                                 <div className="min-w-0">
-                                  <p className="text-sm font-semibold text-[#F1F5F9] truncate">
+                                  <p className="text-sm font-semibold text-text-primary truncate">
                                     {ta.subject}
                                     {ta.subject_code && (
-                                      <span className="ml-1.5 text-xs font-medium text-[#64748B]">({ta.subject_code})</span>
+                                      <span className="ml-1.5 text-xs font-medium text-text-muted">({ta.subject_code})</span>
                                     )}
                                   </p>
                                   {ta.schedule_days.length > 0 ? (
-                                    <p className="text-xs text-[#64748B] mt-0.5 truncate">
+                                    <p className="text-xs text-text-muted mt-0.5 truncate">
                                       {ta.schedule_days.join(', ')} • {ta.schedule_start?.slice(0, 5)}–{ta.schedule_end?.slice(0, 5)}
                                       {ta.room ? ` • ${ta.room}` : ''}
                                     </p>
                                   ) : (
                                     ta.status === 'inactive' && (
-                                      <span className="inline-block mt-1 text-[10px] font-semibold uppercase tracking-wide text-[#64748B] bg-white/5 border border-[#1E3447] rounded-full px-2 py-0.5">
+                                      <span className="inline-block mt-1 text-[10px] font-semibold uppercase tracking-wide text-text-muted bg-glass border border-border rounded-full px-2 py-0.5">
                                         Inactive
                                       </span>
                                     )
@@ -463,21 +439,21 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
                               <div className="flex items-center gap-1 flex-shrink-0">
                                 {subjectSummaries[ta.id] && subjectSummaries[ta.id].total > 0 && (
                                   <span
-                                    className="hidden sm:inline text-[10px] font-medium text-[#94A3B8] bg-white/5 border border-[#1E3447] rounded-full px-2 py-0.5"
+                                    className="hidden sm:inline text-[10px] font-medium text-text-secondary bg-glass border border-border rounded-full px-2 py-0.5"
                                     title="Present / Total in the most recent session"
                                   >
                                     {subjectSummaries[ta.id].present}/{subjectSummaries[ta.id].total} present
                                   </span>
                                 )}
                                 {hours > 0 && (
-                                  <span className="hidden sm:inline text-[10px] font-medium text-[#94A3B8] bg-white/5 border border-[#1E3447] rounded-full px-2 py-0.5">
+                                  <span className="hidden sm:inline text-[10px] font-medium text-text-secondary bg-glass border border-border rounded-full px-2 py-0.5">
                                     {hours}h
                                   </span>
                                 )}
                                 <button
                                   onClick={() => setEditTarget(ta)}
                                   title="Edit Subject"
-                                  className="p-1.5 text-[#64748B] hover:text-[#00C8FF] hover:bg-white/5 rounded-lg transition"
+                                  className="p-1.5 text-text-muted hover:text-text-primary hover:bg-glass rounded-lg transition"
                                 >
                                   <PencilSquareIcon className="h-3.5 w-3.5" />
                                 </button>
@@ -490,14 +466,14 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
 
                     <button
                       onClick={() => setAddSubjectFor(group)}
-                      className="w-full mt-3 flex items-center justify-center gap-1.5 py-2 text-sm font-medium text-[#00C8FF] hover:bg-white/5 rounded-xl transition"
+                      className="w-full mt-3 flex items-center justify-center gap-1.5 py-2 text-sm font-medium text-text-primary hover:bg-glass rounded-xl transition"
                     >
                       <PlusIcon className="h-4 w-4" />
                       Add Subject
                     </button>
 
                     {(group.memberCount > 0 || sectionHours > 0) && (
-                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-[#1E3447] text-[11px] text-[#64748B]">
+                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-border text-[11px] text-text-muted">
                         <span className="flex items-center gap-1">
                           <AcademicCapIcon className="h-3.5 w-3.5" />
                           {group.memberCount} {group.memberCount === 1 ? 'Student' : 'Students'}
@@ -512,16 +488,15 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
                 );
               })}
 
-              {/* Create New Section tile - visually distinct, ends the grid */}
               <button
                 onClick={() => setShowCreate(true)}
-                className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-[#1E3447] bg-[rgba(15,28,40,0.4)] backdrop-blur-xl p-4 min-h-[13rem] text-center hover:border-[#00C8FF]/40 hover:bg-[#00C8FF]/[0.04] transition-all duration-200"
+                className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-glass backdrop-blur-xl p-4 min-h-[13rem] text-center hover:border-text-primary/40 hover:bg-glass-hover transition-all duration-200"
               >
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#00C8FF]/25 bg-[#00C8FF]/10">
-                  <PlusIcon className="h-6 w-6 text-[#00C8FF]" />
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-border bg-glass">
+                  <PlusIcon className="h-6 w-6 text-text-primary" />
                 </div>
-                <p className="text-sm font-semibold text-[#F1F5F9]">Create New Section</p>
-                <p className="text-xs text-[#64748B] max-w-[16rem]">
+                <p className="text-sm font-semibold text-text-primary">Create New Section</p>
+                <p className="text-xs text-text-muted max-w-[16rem]">
                   Start a new section and add subjects for your students.
                 </p>
               </button>
@@ -531,14 +506,14 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
           <div className="flex flex-col sm:flex-row gap-3 mt-4">
             <button
               onClick={() => setShowJoin(true)}
-              className="flex-1 flex items-center justify-center gap-1.5 py-3 text-sm font-semibold rounded-2xl border border-[#1E3447] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl text-[#94A3B8] hover:text-[#00C8FF] hover:border-[#00C8FF]/40 transition"
+              className="flex-1 flex items-center justify-center gap-1.5 py-3 text-sm font-semibold rounded-2xl border border-border bg-glass backdrop-blur-xl text-text-secondary hover:text-text-primary hover:border-text-primary/40 transition"
             >
               <PlusIcon className="h-4 w-4" />
               Join Another Section
             </button>
             <button
               onClick={() => setShowCreate(true)}
-              className="flex-1 flex items-center justify-center gap-1.5 py-3 text-sm font-semibold rounded-2xl bg-gradient-to-br from-[#00C8FF] to-[#0090CC] text-[#060B12] hover:opacity-90 transition shadow-[0_4px_20px_rgba(0,200,255,0.15)]"
+              className="flex-1 flex items-center justify-center gap-1.5 py-3 text-sm font-semibold rounded-2xl border border-border bg-glass text-text-primary hover:bg-glass-hover transition"
             >
               <PlusIcon className="h-4 w-4" />
               Create Section
@@ -548,25 +523,25 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
 
         {/* Sidebar - student directory */}
         <div className="space-y-4 xl:sticky xl:top-24 xl:self-start">
-          <div className="rounded-2xl border border-[#1E3447] bg-[rgba(15,28,40,0.75)] backdrop-blur-xl p-4">
-            <h3 className="font-semibold text-[#F1F5F9] flex items-center gap-2 mb-3">
-              <UserGroupIcon className="h-4 w-4 text-[#00C8FF]" />
+          <div className="rounded-2xl border border-border bg-glass backdrop-blur-xl p-4">
+            <h3 className="font-semibold text-text-primary flex items-center gap-2 mb-3">
+              <UserGroupIcon className="h-4 w-4 text-text-primary" />
               Student Directory
             </h3>
 
             <div className="relative">
-              <MagnifyingGlassIcon className="h-4 w-4 text-[#64748B] absolute left-3 top-1/2 -translate-y-1/2" />
+              <MagnifyingGlassIcon className="h-4 w-4 text-text-muted absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 placeholder="Search by name, username, or email..."
-                className="w-full pl-9 pr-8 py-2 rounded-xl border border-[#1E3447] bg-[#0A111A] text-sm text-[#F1F5F9] placeholder-[#64748B] focus:outline-none focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition"
+                className="w-full pl-9 pr-8 py-2 rounded-xl border border-border bg-bg text-sm text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-border focus:border-border transition"
               />
               {searchInput && (
                 <button
                   onClick={() => setSearchInput('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#F1F5F9] transition"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary transition"
                 >
                   <XCircleIcon className="h-4 w-4" />
                 </button>
@@ -575,26 +550,26 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
 
             <div className="mt-3 space-y-1.5 max-h-96 overflow-y-auto themed-scrollbar">
               {!search ? (
-                <p className="text-xs text-[#64748B] text-center py-6">Type to search your students.</p>
+                <p className="text-xs text-text-muted text-center py-6">Type to search your students.</p>
               ) : sectionsLoading ? (
                 <div className="space-y-2">
                   {[0, 1].map((i) => (
-                    <div key={i} className="h-14 rounded-xl bg-[#0A111A] animate-pulse" />
+                    <div key={i} className="h-14 rounded-xl bg-glass animate-pulse" />
                   ))}
                 </div>
               ) : searchResults.length === 0 ? (
-                <p className="text-xs text-[#64748B] text-center py-6">No students found.</p>
+                <p className="text-xs text-text-muted text-center py-6">No students found.</p>
               ) : (
                 searchResults.map(({ member, section }) => (
                   <button
                     key={`${section.id}-${member.id}`}
                     onClick={() => openStudentRecord(member, section)}
-                    className="w-full flex items-center gap-2.5 p-2 rounded-xl hover:bg-white/5 transition text-left"
+                    className="w-full flex items-center gap-2.5 p-2 rounded-xl hover:bg-glass transition text-left"
                   >
                     <Avatar src={member.user_avatar} name={memberFullName(member)} size="sm" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-[#F1F5F9] truncate">{memberFullName(member)}</p>
-                      <p className="text-xs text-[#64748B] truncate">
+                      <p className="text-sm font-medium text-text-primary truncate">{memberFullName(member)}</p>
+                      <p className="text-xs text-text-muted truncate">
                         {memberRoleLabel(member)} • {section.name}
                         {section.year_level ? ` • Year ${section.year_level}` : ''}
                       </p>
@@ -633,8 +608,8 @@ export default function ProfessorTeachingHub({ onManageSection }: ProfessorTeach
           title="Delete Section"
           message={
             <>
-              Permanently delete <span className="font-semibold text-[#F1F5F9]">{deleteTarget.sectionName}</span>?
-              This removes the section for <span className="font-semibold text-[#F1F5F9]">everyone</span> -
+              Permanently delete <span className="font-semibold text-text-primary">{deleteTarget.sectionName}</span>?
+              This removes the section for <span className="font-semibold text-text-primary">everyone</span> -
               all students, the Mayor and Officer, every professor's teaching assignments in it, and its
               group chat. This cannot be undone.
             </>

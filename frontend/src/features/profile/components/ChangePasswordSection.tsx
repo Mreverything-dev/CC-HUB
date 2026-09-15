@@ -80,14 +80,14 @@ export function ChangePasswordSection() {
   };
 
   return (
-    <div className="rounded-2xl border border-[#1E3447] bg-[#0D1722] p-6">
+    <div className="rounded-2xl border border-border bg-glass p-6">
       <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-[#00C8FF]/30 bg-[#00C8FF]/10">
-          <ShieldCheck className="h-5 w-5 text-[#00C8FF]" />
+        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-border bg-glass">
+          <ShieldCheck className="h-5 w-5 text-text-secondary" />
         </div>
         <div>
-          <h3 className="font-semibold text-[#F1F5F9]">Change Password</h3>
-          <p className="text-xs text-[#64748B]">Update your account password securely.</p>
+          <h3 className="font-semibold text-text-primary">Change Password</h3>
+          <p className="text-xs text-text-muted">Update your account password securely.</p>
         </div>
       </div>
 
@@ -100,7 +100,7 @@ export function ChangePasswordSection() {
             <button
               type="button"
               onClick={() => setConfirmationMessage(null)}
-              className="mt-3 text-xs font-medium text-[#00C8FF] hover:underline"
+              className="mt-3 text-xs font-medium text-text-primary hover:underline"
             >
               Start over
             </button>
@@ -143,7 +143,7 @@ export function ChangePasswordSection() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-semibold bg-gradient-to-br from-[#00C8FF] to-[#0090CC] text-[#060B12] rounded-xl hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-semibold border border-border bg-glass text-text-primary rounded-xl hover:bg-glass-hover transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
             {isSubmitting ? 'Sending confirmation...' : 'Change Password'}
@@ -177,7 +177,7 @@ function PasswordField({
 }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-[#94A3B8] mb-1.5">{label}</label>
+      <label className="block text-sm font-medium text-text-secondary mb-1.5">{label}</label>
       <div className="relative">
         <input
           type={show ? 'text' : 'password'}
@@ -186,15 +186,15 @@ function PasswordField({
           autoComplete={autoComplete}
           disabled={disabled}
           className={`w-full pl-4 pr-11 py-3 rounded-xl border ${
-            error ? 'border-[#EF4444]/60' : 'border-[#1E3447]'
-          } bg-[#0A111A] text-sm text-[#F1F5F9] placeholder-[#64748B] focus:outline-none focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition disabled:opacity-50`}
+            error ? 'border-[#EF4444]/60' : 'border-border'
+          } bg-bg text-sm text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-border focus:border-border transition disabled:opacity-50`}
         />
         <button
           type="button"
           onClick={onToggleShow}
           disabled={disabled}
           aria-label={show ? 'Hide password' : 'Show password'}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#00C8FF] transition disabled:opacity-50"
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary transition disabled:opacity-50"
         >
           {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
         </button>
@@ -202,7 +202,7 @@ function PasswordField({
       {error ? (
         <p className="text-xs text-[#EF4444] mt-1">{error}</p>
       ) : hint ? (
-        <p className="text-xs text-[#64748B] mt-1">{hint}</p>
+        <p className="text-xs text-text-muted mt-1">{hint}</p>
       ) : null}
     </div>
   );

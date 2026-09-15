@@ -7,8 +7,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { FcGoogle } from 'react-icons/fc';
 import { Mail, AlertCircle, Lock, Eye, EyeOff, Clock } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import heroImage from '@/assets/images/backgrounds/img-bg.png';
-import heroImageLight from '@/assets/images/backgrounds/img-bg-light.png';
 import { useTheme } from '@/contexts/ThemeContext';
 import { LogoIcon } from '@/components/ui/Logo/Logo';
 import { useGoogleLogin } from '@react-oauth/google';
@@ -44,6 +42,7 @@ export function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const isLight = theme === 'light';
   const { register, handleSubmit, formState: { errors } } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
@@ -61,7 +60,6 @@ export function Login() {
     if (cooldownSeconds > 0) return;
     try {
       await login(data);
-      // ✅ Global loading screen is handled inside useAuth().login()
     } catch (error: any) {
       if (error?.response?.status === 429) {
         const retryAfter = Number(error.response?.headers?.['retry-after']);
@@ -90,21 +88,18 @@ export function Login() {
 
         const data = await response.json();
 
-                if (response.ok) {
+        if (response.ok) {
           setAuth(data.user, data.access_token, data.refresh_token);
-          
+
           if (data.is_new_user) {
             toast.success('🎉 Welcome! Your account has been created with Google.');
           } else {
             toast.success(`👋 Welcome back, ${data.user.username}!`);
           }
-          
-          // ✅ Show global loading screen before navigating
+
           showGlobalLoading('Signing you in...');
-          
-          // Small delay so the loading screen is actually visible
           await new Promise((resolve) => setTimeout(resolve, 300));
-          
+
           const role = data.user.role;
           if (role === 'admin') {
             navigate('/admin/dashboard');
@@ -113,19 +108,17 @@ export function Login() {
           } else {
             navigate('/student/dashboard');
           }
-          
-          // Keep loading visible briefly after navigation
+
           setTimeout(() => {
             hideGlobalLoading();
           }, 1200);
         } else {
-
           toast.error(data.detail || 'Google login failed');
         }
       } catch (error) {
         console.error('Google login error:', error);
         toast.error('Failed to connect to Google. Please try again.');
-        hideGlobalLoading();  // ✅ make sure we don't get stuck
+        hideGlobalLoading();
       } finally {
         setIsGoogleLoading(false);
       }
@@ -139,20 +132,14 @@ export function Login() {
     setShowPassword(!showPassword);
   };
 
+  // Light-mode specific colors
+  const heroText = isLight ? 'text-slate-900' : 'text-white';
+  const heroSubText = isLight ? 'text-slate-600' : 'text-white/90';
+  const heroShadow = isLight ? '' : '[text-shadow:0_2px_16px_rgba(0,0,0,0.6)]';
+  const heroSubShadow = isLight ? '' : '[text-shadow:0_1px_8px_rgba(0,0,0,0.6)]';
+
   return (
     <div className="relative min-h-screen w-full overflow-hidden bg-bg text-text-primary">
-      {/* CCS building hero image, full-page background */}
-      <div className="absolute inset-0 z-0">
-        <img 
-          src={theme === 'light' ? heroImageLight : heroImage} 
-          alt="" 
-          className="h-full w-full object-cover" 
-        />
-      </div>
-      {/* Theme-aware overlay - lighter in light mode */}
-      <div className="pointer-events-none absolute inset-0 z-0 bg-bg/30 dark:bg-bg/60" />
-      {/* Vignette */}
-      <div className="pointer-events-none absolute inset-0 z-0 bg-gradient-to-r from-bg/50 via-transparent to-bg/70" />
       {/* Subtle cyan/blue futuristic glow */}
       <div className="pointer-events-none absolute -top-40 left-1/4 h-96 w-96 rounded-full bg-[#00C8FF]/10 blur-[120px] z-0" />
       <div className="pointer-events-none absolute bottom-0 right-0 h-96 w-96 rounded-full bg-[#3B82F6]/10 blur-[120px] z-0" />
@@ -167,21 +154,21 @@ export function Login() {
         <div className="hidden flex-col lg:flex">
           <div className="flex items-center gap-3">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-[#00C8FF]/40 bg-[#00C8FF]/10 shadow-[0_0_20px_rgba(0,200,245,0.18)] backdrop-blur-sm">
-              <LogoIcon size="sm" background="dark" />
+              <LogoIcon size="sm" background={isLight ? 'light' : 'dark'} />
             </div>
             <div>
-              <h2 className="text-2xl font-bold tracking-tight text-white">CCS HUB</h2>
-              <p className="text-xs font-medium tracking-wider text-white/80">
+              <h2 className={`text-2xl font-bold tracking-tight ${heroText}`}>CCS HUB</h2>
+              <p className={`text-xs font-medium tracking-wider ${heroSubText}`}>
                 COLLEGE OF COMPUTER STUDIES
               </p>
             </div>
           </div>
 
-          <p className="mt-10 max-w-md text-3xl font-semibold leading-tight text-white [text-shadow:0_2px_16px_rgba(0,0,0,0.6)]">
+          <p className={`mt-10 max-w-md text-3xl font-semibold leading-tight ${heroText} ${heroShadow}`}>
             Connect. Collaborate.{' '}
             <span className="text-[#00C8FF]">Code the future.</span>
           </p>
-          <p className="mt-4 max-w-sm text-sm text-white/90 [text-shadow:0_1px_8px_rgba(0,0,0,0.6)]">
+          <p className={`mt-4 max-w-sm text-sm ${heroSubText} ${heroSubShadow}`}>
             One hub for announcements, sections, chat, and live sessions across
             the whole College of Computer Studies.
           </p>
@@ -189,12 +176,12 @@ export function Login() {
 
         {/* Right column — auth card */}
         <div className="flex w-full items-center justify-center">
-          <div className="w-full max-w-md rounded-3xl border border-border bg-glass p-6 backdrop-blur-xl shadow-2xl md:p-8">
+          <div className="w-full max-w-md rounded-3xl border border-border bg-bg p-6 shadow-2xl md:p-8">
             {/* Header */}
             <div className="mb-6">
               <div className="flex items-center gap-2 lg:hidden">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#00C8FF]/40 bg-[#00C8FF]/10">
-                  <LogoIcon size="sm" background="dark" />
+                  <LogoIcon size="sm" background={isLight ? 'light' : 'dark'} />
                 </div>
                 <div>
                   <h2 className="text-lg font-bold tracking-tight text-text-primary">CCS HUB</h2>
@@ -238,7 +225,7 @@ export function Login() {
 
               {/* Email Input */}
               <div className="relative">
-                <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#00C8FF] z-10">
+                <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted z-10">
                   <Mail className="h-5 w-5" />
                 </div>
                 <input
@@ -248,13 +235,13 @@ export function Login() {
                   {...register('email')}
                   autoComplete="username"
                   disabled={isLoading || isGoogleLoading}
-                  className="w-full rounded-xl border border-border bg-bg/90 px-4 py-3.5 pl-12 text-text-primary placeholder-text-muted backdrop-blur-sm transition-all duration-200 focus:border-[#00C8FF] focus:outline-none focus:ring-1 focus:ring-[#00C8FF] focus:shadow-[0_0_16px_rgba(0,200,245,0.2)] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="w-full rounded-xl border border-border bg-bg px-4 py-3.5 pl-12 text-text-primary placeholder-text-muted transition-all duration-200 focus:border-[#00C8FF] focus:outline-none focus:ring-1 focus:ring-[#00C8FF] disabled:cursor-not-allowed disabled:opacity-50"
                 />
               </div>
 
               {/* Password Input */}
               <div className="relative">
-                <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#00C8FF] z-10">
+                <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted z-10">
                   <Lock className="h-5 w-5" />
                 </div>
                 <input
@@ -264,7 +251,7 @@ export function Login() {
                   {...register('password')}
                   autoComplete="current-password"
                   disabled={isLoading || isGoogleLoading}
-                  className="w-full rounded-xl border border-border bg-bg/90 px-4 py-3.5 pl-12 pr-12 text-text-primary placeholder-text-muted backdrop-blur-sm transition-all duration-200 focus:border-[#00C8FF] focus:outline-none focus:ring-1 focus:ring-[#00C8FF] focus:shadow-[0_0_16px_rgba(0,200,245,0.2)] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="w-full rounded-xl border border-border bg-bg px-4 py-3.5 pl-12 pr-12 text-text-primary placeholder-text-muted transition-all duration-200 focus:border-[#00C8FF] focus:outline-none focus:ring-1 focus:ring-[#00C8FF] disabled:cursor-not-allowed disabled:opacity-50"
                 />
                 <button
                   type="button"
@@ -304,7 +291,7 @@ export function Login() {
               <button
                 type="submit"
                 disabled={isLoading || isGoogleLoading || cooldownSeconds > 0}
-                className="relative w-full overflow-hidden rounded-xl bg-gradient-to-br from-[#00C8FF] to-[#3B82F6] px-4 py-3.5 font-semibold text-[#060B12] transition-all duration-200 hover:opacity-90 hover:shadow-[0_0_24px_rgba(0,200,245,0.3)] focus:outline-none focus:ring-2 focus:ring-[#00C8FF]/60 focus:ring-offset-2 focus:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-50"
+                className="relative w-full overflow-hidden rounded-xl bg-[#00C8FF] px-4 py-3.5 font-semibold text-white transition-all duration-200 hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-[#00C8FF]/60 focus:ring-offset-2 focus:ring-offset-bg disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isLoading ? (
                   <span className="flex items-center justify-center gap-2">
@@ -333,7 +320,7 @@ export function Login() {
                   type="button"
                   onClick={() => loginWithGoogle()}
                   disabled={isLoading || isGoogleLoading}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-border bg-bg/90 px-4 py-3 backdrop-blur-sm transition-all duration-200 hover:border-[#00C8FF]/50 hover:bg-glass disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-border bg-bg px-4 py-3 transition-all duration-200 hover:border-[#00C8FF]/50 hover:bg-glass disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isGoogleLoading ? (
                     <svg className="h-5 w-5 animate-spin text-[#00C8FF]" viewBox="0 0 24 24">

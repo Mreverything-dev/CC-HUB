@@ -13,7 +13,7 @@ export function SectionWidget({ section, isLoading, onGoToSection }: SectionWidg
   return (
     <div className="rounded-2xl bg-glass backdrop-blur-xl p-4 sm:p-5 shadow-md shadow-black/5 transition hover:shadow-lg hover:shadow-black/10">
       <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary mb-3">
-        <UsersIcon className="h-4 w-4 text-[#00C8FF]" />
+        <UsersIcon className="h-4 w-4 text-text-primary" />
         Your Section
       </h3>
 
@@ -74,7 +74,7 @@ export function SectionWidget({ section, isLoading, onGoToSection }: SectionWidg
 
           <button
             onClick={onGoToSection}
-            className="w-full mt-3 text-sm font-medium text-center py-2 rounded-xl bg-[#00C8FF]/10 text-[#00C8FF] hover:bg-[#00C8FF]/20 transition"
+            className="w-full mt-3 text-sm font-medium text-center py-2 rounded-xl bg-glass border border-border text-text-primary hover:bg-glass-hover transition"
           >
             Go to Section
           </button>

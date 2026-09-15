@@ -10,7 +10,7 @@ import { CATEGORY_META } from '../constants';
 import { useAnnouncements } from '../hooks/useAnnouncements';
 import { Avatar } from '@/features/dashboard/components/Avatar';
 import { RoleBadge } from '@/features/dashboard/components/RoleBadge';
-import { AnnouncementReactions } from './AnnouncementReactions';
+import { PostReactions } from '@/features/posts/components/PostReactions';
 import { AnnouncementShareMenu } from './AnnouncementShareMenu';
 
 interface AnnouncementCardProps {
@@ -28,10 +28,16 @@ export function AnnouncementCard({
 }: AnnouncementCardProps) {
   const { user } = useAuthStore();
   const navigate = useNavigate();
-  const { toggleBookmark } = useAnnouncements();
+  const { toggleBookmark, reactToAnnouncement } = useAnnouncements();
   const [menuOpen, setMenuOpen] = useState(false);
   const [isBookmarking, setIsBookmarking] = useState(false);
+  const [localReactions, setLocalReactions] = useState(announcement.reactions);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Sync from props when the parent updates (after server response)
+  useEffect(() => {
+    setLocalReactions(announcement.reactions);
+  }, [announcement.reactions]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -52,7 +58,7 @@ export function AnnouncementCard({
 
   const badge = isImportant
     ? { label: 'Important', color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/30' }
-    : { label: meta.label, color: meta.color, bg: meta.bg, border: meta.border };
+    : { label: meta.label, color: 'text-text-secondary', bg: 'bg-glass', border: 'border-border' };
 
   const authorName =
     announcement.created_by_username ||
@@ -60,6 +66,14 @@ export function AnnouncementCard({
 
   const isGlobalAudience = !announcement.target_sections || announcement.target_sections.length === 0;
   const VisibilityIcon = isGlobalAudience ? GlobeAltIcon : UserGroupIcon;
+
+  // Convert reactions array to breakdown + myReaction (same format as PostReactions)
+  const reactionBreakdown = localReactions.reduce<Record<string, number>>((acc, r) => {
+    if (r.reaction) acc[r.reaction] = (acc[r.reaction] || 0) + 1;
+    return acc;
+  }, {});
+  const myReaction = localReactions.find((r) => r.user_id === user?.id)?.reaction ?? null;
+  const reactionsCount = localReactions.length;
 
   const goToDetail = () => navigate(`/announcements/${announcement.id}`);
 
@@ -87,7 +101,7 @@ export function AnnouncementCard({
       role="button"
       tabIndex={0}
       aria-label={`View announcement: ${announcement.title}`}
-      className="group rounded-2xl border border-border bg-glass backdrop-blur-xl hover:border-[#00C8FF]/40 hover:shadow-[0_0_24px_rgba(0,200,255,0.06)] transition-all cursor-pointer p-4 sm:p-5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00C8FF]/60"
+      className="group rounded-2xl border border-border bg-glass backdrop-blur-xl hover:border-text-primary/30 hover:shadow-md transition-all cursor-pointer p-4 sm:p-5 focus:outline-none focus-visible:ring-2 focus-visible:ring-text-primary/40"
     >
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -148,7 +162,7 @@ export function AnnouncementCard({
                         setMenuOpen(false);
                         onEdit(announcement.id);
                       }}
-                      className="w-full text-left px-3 py-2 text-xs font-medium text-[#00C8FF] hover:bg-[#00C8FF]/10 transition"
+                      className="w-full text-left px-3 py-2 text-xs font-medium text-text-primary hover:bg-glass transition"
                     >
                       Edit
                     </button>
@@ -173,7 +187,7 @@ export function AnnouncementCard({
         <div className={`flex-shrink-0 h-7 w-7 rounded-lg flex items-center justify-center border ${meta.border} ${meta.bg}`}>
           <Icon className={`h-3.5 w-3.5 ${meta.color}`} />
         </div>
-        <h3 className="text-base font-semibold text-text-primary group-hover:text-[#00C8FF] transition-colors truncate min-w-0">
+        <h3 className="text-base font-semibold text-text-primary group-hover:text-text-primary transition-colors truncate min-w-0">
           {announcement.title}
         </h3>
       </div>
@@ -188,8 +202,61 @@ export function AnnouncementCard({
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-border flex-wrap">
-        <AnnouncementReactions announcementId={announcement.id} reactions={announcement.reactions} size="sm" />
+      {/* Reaction summary — katulad ng PostCard */}
+      {reactionsCount > 0 && (
+        <div className="flex items-center gap-2 mt-3 pt-3" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center -space-x-1.5">
+            {Object.entries(reactionBreakdown)
+              .sort(([, a], [, b]) => b - a)
+              .slice(0, 3)
+              .map(([emoji], i) => (
+                <span
+                  key={`summary-${emoji}`}
+                  className="flex items-center justify-center h-6 w-6"
+                  style={{ zIndex: 3 - i }}
+                >
+                  <span className="text-[16px]">{emoji}</span>
+                </span>
+              ))}
+          </div>
+          <span className="text-sm text-text-secondary font-medium">{reactionsCount}</span>
+        </div>
+      )}
+
+      {/* Actions — Like (with picker) + Bookmark + Share */}
+      <div
+        className="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-border flex-wrap"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <PostReactions
+          breakdown={reactionBreakdown}
+          myReaction={myReaction}
+          onReact={(reaction) => {
+            if (!user) return;
+
+            // Optimistic update — toggle or set reaction
+            setLocalReactions((prev) => {
+              const existingIdx = prev.findIndex((r) => r.user_id === user.id);
+              if (existingIdx !== -1) {
+                if (prev[existingIdx].reaction === reaction) {
+                  // Same emoji → remove
+                  return prev.filter((r) => r.user_id !== user.id);
+                }
+                // Different emoji → replace
+                const updated = [...prev];
+                updated[existingIdx] = { ...updated[existingIdx], reaction };
+                return updated;
+              }
+              // New reaction
+              return [...prev, { user_id: user.id, reaction }];
+            });
+
+            reactToAnnouncement({ id: announcement.id, reaction });
+          }}
+          size="sm"
+          label="Like"
+          alwaysShowLike
+        />
 
         <div className="flex items-center gap-1 flex-shrink-0">
           <button
@@ -198,8 +265,8 @@ export function AnnouncementCard({
             title={announcement.is_bookmarked ? 'Remove from saved' : 'Save'}
             className={`p-1.5 rounded-lg transition disabled:opacity-50 ${
               announcement.is_bookmarked
-                ? 'text-[#00C8FF] bg-[#00C8FF]/10'
-                : 'text-text-muted hover:text-[#00C8FF] hover:bg-glass'
+                ? 'text-text-primary bg-text-primary/10'
+                : 'text-text-muted hover:text-text-primary hover:bg-glass'
             }`}
           >
             {announcement.is_bookmarked ? (

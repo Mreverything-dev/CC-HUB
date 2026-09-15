@@ -52,10 +52,10 @@ export function EventCardList({ events = SAMPLE_EVENTS }: EventCardListProps) {
     <div className="rounded-2xl bg-glass backdrop-blur-xl p-4 sm:p-5 shadow-md shadow-black/5 transition hover:shadow-lg hover:shadow-black/10">
       <div className="flex items-center justify-between mb-3">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
-          <SparklesIcon className="h-4 w-4 text-[#00C8FF]" />
+          <SparklesIcon className="h-4 w-4 text-text-primary" />
           Upcoming Events
         </h3>
-        <button className="text-xs text-[#00C8FF] hover:text-[#00E0FF] hover:underline">View all</button>
+        <button className="text-xs text-text-primary hover:underline">View all</button>
       </div>
 
       {showSkeleton ? (
@@ -81,7 +81,7 @@ export function EventCardList({ events = SAMPLE_EVENTS }: EventCardListProps) {
               className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-glass transition"
             >
               <div className="flex-shrink-0 w-11 h-11 rounded-xl border border-border bg-bg flex flex-col items-center justify-center">
-                <span className="text-[9px] font-semibold text-[#00C8FF] leading-none">{event.month}</span>
+                <span className="text-[9px] font-semibold text-text-secondary leading-none">{event.month}</span>
                 <span className="text-sm font-bold text-text-primary leading-none mt-0.5">{event.day}</span>
               </div>
               <div className="min-w-0 flex-1">

@@ -17,7 +17,7 @@ export function LiveStreamsWidget({ liveStreams, upcomingStreams, isLoading }: L
     <div className="rounded-2xl bg-glass backdrop-blur-xl p-4 sm:p-5 shadow-md shadow-black/5">
       <div className="flex items-center justify-between mb-3">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
-          <VideoCameraIcon className="h-4 w-4 text-[#00C8FF]" />
+          <VideoCameraIcon className="h-4 w-4 text-text-primary" />
           Live Streams
         </h3>
       </div>
@@ -73,7 +73,7 @@ export function LiveStreamsWidget({ liveStreams, upcomingStreams, isLoading }: L
 
       <button
         onClick={() => navigate('/livestreams')}
-        className="w-full mt-3 pt-3 border-t border-border text-sm font-medium text-[#00C8FF] hover:text-[#00E0FF] transition"
+        className="w-full mt-3 pt-3 border-t border-border text-sm font-medium text-text-primary hover:opacity-80 transition"
       >
         View all
       </button>

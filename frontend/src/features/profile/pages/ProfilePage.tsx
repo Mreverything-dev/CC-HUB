@@ -8,6 +8,8 @@ import { profileService } from '@/services/api/profile.service';
 import { mediaService } from '@/services/api/media.service';
 import { postService, Post } from '@/services/api/post.service';
 import { sectionApi } from '@/services/api/section.service';
+import PostDetailModal from '@/features/posts/components/PostDetailModal';
+import { PostContentBody } from '@/features/posts/components/PostContentBody';
 import { PostCard } from '@/features/posts/components/PostCard';
 import { useFriends } from '@/features/friends/hooks/useFriends';
 import { useChat } from '@/features/chat/hooks/useChat';
@@ -19,7 +21,8 @@ import { Topbar } from '@/features/dashboard/components/Topbar';
 import { ChangePasswordSection } from '@/features/profile/components/ChangePasswordSection';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { formatDate } from '@/lib/formatters';
-import { extractGiphyGifUrl } from '@/lib/giphy';
+import { extractYouTubeId } from '@/lib/youtube';
+import { useSavedPosts } from '@/features/posts/hooks/useSavedPosts';
 import toast from 'react-hot-toast';
 import {
   PencilIcon,
@@ -46,6 +49,10 @@ import {
   PhotoIcon,
   FilmIcon,
 } from '@heroicons/react/24/outline';
+import {
+  HeartIcon as HeartIconSolid,
+  ChatBubbleLeftIcon as ChatBubbleLeftIconSolid,
+} from '@heroicons/react/24/solid';
 
 const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
 
@@ -72,8 +79,8 @@ function StatPill({ label, value, onClick }: { label: string; value: number; onC
       disabled={!onClick}
       className={`text-center ${onClick ? 'cursor-pointer hover:opacity-80' : 'cursor-default'} transition`}
     >
-      <p className="text-lg font-bold text-text-primary">{value}</p>
-      <p className="text-xs text-text-muted">{label}</p>
+      <p className="text-lg font-bold text-white">{value}</p>
+      <p className="text-xs text-white/70">{label}</p>
     </button>
   );
 }
@@ -103,20 +110,24 @@ export default function ProfilePage() {
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isUploadingCover, setIsUploadingCover] = useState(false);
   const [formData, setFormData] = useState<any>({});
-  const [activeTab, setActiveTab] = useState<'posts' | 'shares' | 'info' | 'security'>('posts');
+  const [activeTab, setActiveTab] = useState<'posts' | 'shares' | 'info' | 'security' | 'saved'>('posts');
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [postsLoading, setPostsLoading] = useState(false);
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [shares, setShares] = useState<Post[]>([]);
   const [sharesLoading, setSharesLoading] = useState(false);
   const [sectionName, setSectionName] = useState<string | null>(null);
   const [showActionMenu, setShowActionMenu] = useState(false);
   const [sidebarAvatarUrl, setSidebarAvatarUrl] = useState<string | null>(null);
+  const { savedPosts } = useSavedPosts();
 
-  // GIF URL states
+  // GIF picker states
   const [showGifUrlInput, setShowGifUrlInput] = useState(false);
-  const [gifUrl, setGifUrl] = useState('');
   const [isSavingGif, setIsSavingGif] = useState(false);
+  const [gifSearch, setGifSearch] = useState('');
+  const [gifResults, setGifResults] = useState<{ id: string; url: string; preview: string }[]>([]);
+  const [gifSearchLoading, setGifSearchLoading] = useState(false);
 
   // Avatar menu (Image / Video / GIF)
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
@@ -138,9 +149,7 @@ export default function ProfilePage() {
     if (!showAvatarMenu) return;
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      // Ignore clicks inside the menu (which is portaled to document.body)
       if (target.closest('[data-avatar-menu]')) return;
-      // Ignore clicks on the trigger button
       if (avatarMenuRef.current && avatarMenuRef.current.contains(target)) return;
       setShowAvatarMenu(false);
     };
@@ -205,6 +214,41 @@ export default function ProfilePage() {
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
   }, [lightboxSrc]);
+
+  // Fetch trending or search GIFs from Giphy
+  useEffect(() => {
+    if (!showGifUrlInput) return;
+    const apiKey = import.meta.env.VITE_GIPHY_API_KEY;
+    if (!apiKey) return;
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setGifSearchLoading(true);
+      try {
+        const endpoint = gifSearch.trim()
+          ? `https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${encodeURIComponent(gifSearch.trim())}&limit=24&rating=pg-13`
+          : `https://api.giphy.com/v1/gifs/trending?api_key=${apiKey}&limit=24&rating=pg-13`;
+        const res = await fetch(endpoint, { signal: controller.signal });
+        const data = await res.json();
+        setGifResults(
+          (data.data || []).map((g: any) => ({
+            id: g.id,
+            url: g.images?.original?.url || g.images?.fixed_height?.url,
+            preview: g.images?.fixed_height_small?.url || g.images?.fixed_height?.url || g.images?.original?.url,
+          }))
+        );
+      } catch (err: any) {
+        if (err.name !== 'AbortError') console.error('Giphy fetch error:', err);
+      } finally {
+        setGifSearchLoading(false);
+      }
+    }, 400);
+
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [gifSearch, showGifUrlInput]);
 
   const fetchPosts = async () => {
     if (!profile) return;
@@ -425,36 +469,28 @@ export default function ProfilePage() {
     }
   };
 
-  const handleSaveGifAvatar = async () => {
-    if (!profile || !gifUrl.trim()) return;
-
-    const directGifUrl = extractGiphyGifUrl(gifUrl.trim());
-    if (!directGifUrl) {
-      toast.error('Invalid Giphy URL. Example: https://giphy.com/gifs/IcGkqdUmYLFGE');
-      return;
-    }
-
+  const handleSelectGif = async (gifUrl: string) => {
+    if (!profile) return;
     setIsSavingGif(true);
     try {
       const hasProfile = !!profile.profile;
-
       if (profile.role === 'student') {
         hasProfile
-          ? await profileService.updateStudentProfile({ avatar_url: directGifUrl })
-          : await profileService.createStudentProfile({ user_id: profile.user_id, avatar_url: directGifUrl });
+          ? await profileService.updateStudentProfile({ avatar_url: gifUrl })
+          : await profileService.createStudentProfile({ user_id: profile.user_id, avatar_url: gifUrl });
       } else if (profile.role === 'professor') {
         hasProfile
-          ? await profileService.updateProfessorProfile({ avatar_url: directGifUrl })
-          : await profileService.createProfessorProfile({ user_id: profile.user_id, avatar_url: directGifUrl });
+          ? await profileService.updateProfessorProfile({ avatar_url: gifUrl })
+          : await profileService.createProfessorProfile({ user_id: profile.user_id, avatar_url: gifUrl });
       } else if (profile.role === 'admin') {
         hasProfile
-          ? await profileService.updateAdminProfile({ avatar_url: directGifUrl })
-          : await profileService.createAdminProfile({ user_id: profile.user_id, avatar_url: directGifUrl });
+          ? await profileService.updateAdminProfile({ avatar_url: gifUrl })
+          : await profileService.createAdminProfile({ user_id: profile.user_id, avatar_url: gifUrl });
       }
-
       toast.success('Avatar updated with GIF!');
       setShowGifUrlInput(false);
-      setGifUrl('');
+      setGifSearch('');
+      setGifResults([]);
       await fetchProfile();
     } catch (error: any) {
       console.error('Error saving GIF avatar:', error);
@@ -756,7 +792,7 @@ export default function ProfilePage() {
           onOpenFriends={() => handleSidebarNavigate('friends')}
         />
 
-        <main className="relative flex-1 max-w-6xl w-full mx-auto px-4 py-6 lg:px-8">
+        <main className="relative flex-1 max-w-7xl w-full mx-auto px-4 py-6 lg:px-8">
         {!isOwnProfile && (
           <button
             onClick={() => navigate(-1)}
@@ -768,7 +804,8 @@ export default function ProfilePage() {
         )}
 
         <div className="relative rounded-2xl border border-border shadow-[0_0_40px_rgba(0,200,255,0.05)]">
-          <div className="relative h-[260px] sm:h-[300px] lg:h-[320px] rounded-2xl overflow-hidden">
+          {/* Cover — desktop lang */}
+          <div className="relative hidden sm:block h-[300px] lg:h-[320px] rounded-2xl overflow-hidden">
             <div
               className={`absolute inset-0 z-0 ${coverUrl ? 'cursor-zoom-in' : ''}`}
               onClick={() => coverUrl && setLightboxSrc(coverUrl)}
@@ -779,133 +816,134 @@ export default function ProfilePage() {
                 <div className="absolute inset-0 bg-gradient-to-br from-[#00C8FF]/25 via-bg to-[#3B82F6]/25" />
               )}
             </div>
-
             <div className="pointer-events-none absolute inset-0 z-10 bg-gradient-to-t from-black/95 via-black/65 to-transparent" />
+          </div>
 
-            <div className="absolute inset-x-0 bottom-0 z-20 px-4 sm:px-6 lg:px-8 pb-3 sm:pb-4">
-              <div className="flex items-end gap-3 sm:gap-4 min-w-0">
-                <div className="relative flex-shrink-0">
-                  <div
-                    className={`h-16 w-16 sm:h-20 sm:w-20 lg:h-24 lg:w-24 rounded-full ring-4 ring-bg bg-gradient-to-br from-[#00C8FF] to-[#3B82F6] flex items-center justify-center text-2xl font-bold text-[#060B12] overflow-hidden ${
-                      profile?.profile?.avatar_url ? 'cursor-zoom-in' : ''
+          {/* Avatar + name + stats — mobile at desktop */}
+          <div className="relative p-4 sm:absolute sm:inset-x-0 sm:bottom-0 sm:z-20 sm:px-6 lg:px-8 sm:pb-4">
+            <div className="flex items-center gap-4 min-w-0">
+              <div className="relative flex-shrink-0">
+                <div
+                  className={`h-20 w-20 sm:h-20 sm:w-20 lg:h-24 lg:w-24 rounded-full ring-4 ring-bg bg-gradient-to-br from-[#00C8FF] to-[#3B82F6] flex items-center justify-center text-2xl font-bold text-[#060B12] overflow-hidden ${
+                    profile?.profile?.avatar_url ? 'cursor-zoom-in' : ''
+                  }`}
+                  onClick={() => profile?.profile?.avatar_url && setLightboxSrc(profile.profile.avatar_url)}
+                >
+                  {profile?.profile?.avatar_url ? (
+                    <img src={profile.profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    profile?.username?.charAt(0).toUpperCase() || 'U'
+                  )}
+                </div>
+                {isOnline !== null && (
+                  <span
+                    title={isOnline ? 'Online' : 'Offline'}
+                    className={`absolute bottom-1 right-1 h-3.5 w-3.5 rounded-full ring-4 ring-bg ${
+                      isOnline ? 'bg-[#22C55E]' : 'bg-text-muted'
                     }`}
-                    onClick={() => profile?.profile?.avatar_url && setLightboxSrc(profile.profile.avatar_url)}
-                  >
-                    {profile?.profile?.avatar_url ? (
-                      <img src={profile.profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
-                    ) : (
-                      profile?.username?.charAt(0).toUpperCase() || 'U'
-                    )}
-                  </div>
-                  {isOnline !== null && (
-                    <span
-                      title={isOnline ? 'Online' : 'Offline'}
-                      className={`absolute bottom-1 right-1 h-3.5 w-3.5 rounded-full ring-4 ring-bg ${
-                        isOnline ? 'bg-[#22C55E]' : 'bg-text-muted'
-                      }`}
-                    />
-                  )}
-                  {isOwnProfile && (
-                    <>
-                      <input
-                        ref={avatarInputRef}
-                        type="file"
-                        accept={ALLOWED_AVATAR_TYPES.join(',')}
-                        onChange={handleAvatarChange}
-                        className="hidden"
-                      />
-                      <div className="relative" ref={avatarMenuRef}>
-                        <button
-                          type="button"
-                          onClick={() => setShowAvatarMenu((v) => !v)}
-                          disabled={isUploadingAvatar}
-                          title="Change avatar"
-                          className="absolute -bottom-0.5 -right-0.5 w-6 h-6 rounded-full bg-bg shadow-md border border-border flex items-center justify-center hover:bg-border transition disabled:opacity-50"
-                        >
-                          {isUploadingAvatar ? (
-                            <span className="animate-spin h-3 w-3 rounded-full border-2 border-border border-t-[#00C8FF]" />
-                          ) : (
-                            <CameraIcon className="h-3 w-3 text-text-secondary" />
-                          )}
-                        </button>
-                        {showAvatarMenu && avatarMenuRef.current && createPortal(
-                          <div
-                            data-avatar-menu
-                            className="fixed w-48 rounded-xl border border-border bg-bg shadow-xl py-1 z-[100]"
-                            style={{
-                              top: avatarMenuRef.current.getBoundingClientRect().bottom + 8,
-                              left: avatarMenuRef.current.getBoundingClientRect().left,
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setShowAvatarMenu(false);
-                                avatarInputRef.current?.click();
-                              }}
-                              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-text-secondary hover:bg-glass hover:text-text-primary transition"
-                            >
-                              <PhotoIcon className="h-4 w-4" />
-                              Upload Image
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setShowAvatarMenu(false);
-                                toast('Video upload coming soon');
-                              }}
-                              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-text-secondary hover:bg-glass hover:text-text-primary transition opacity-50 cursor-not-allowed"
-                            >
-                              <FilmIcon className="h-4 w-4" />
-                              Upload Video
-                              <span className="ml-auto text-[9px] uppercase tracking-wide border border-border rounded px-1">Soon</span>
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setShowAvatarMenu(false);
-                                setShowGifUrlInput(true);
-                              }}
-                              className="flex items-center gap-2 w-full px-3 py-2 text-sm text-text-secondary hover:bg-glass hover:text-text-primary transition"
-                            >
-                              <span className="text-[10px] font-bold border border-border rounded px-1">GIF</span>
-                              Use GIF URL
-                            </button>
-                          </div>,
-                          document.body
-                        )}
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                <div className="flex-1 min-w-0 pb-0.5">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-white truncate">{displayName}</h1>
-                    <RoleBadge role={profile?.role || 'student'} />
-                  </div>
-                  <p className="text-xs sm:text-sm text-white/80 mt-0.5">@{profile?.username}</p>
-                  {(programLabel || sectionName) && (
-                    <p className="hidden sm:flex items-center gap-1.5 text-xs sm:text-sm text-white/90 mt-1">
-                      <AcademicCapIcon className="h-3.5 w-3.5 flex-shrink-0" />
-                      {[programLabel, sectionName].filter(Boolean).join(' • ')}
-                    </p>
-                  )}
-                  {bio && (
-                    <p className="hidden sm:block text-xs sm:text-sm text-white/80 mt-1 max-w-xl line-clamp-2">
-                      {bio}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-5 mt-2.5 sm:mt-3 pt-2.5 sm:pt-3 border-t border-white/10">
-                <StatPill label="Posts" value={posts.length} />
+                  />
+                )}
                 {isOwnProfile && (
-                  <StatPill label="Friends" value={friends.length} onClick={() => handleSidebarNavigate('friends')} />
+                  <>
+                    <input
+                      ref={avatarInputRef}
+                      type="file"
+                      accept={ALLOWED_AVATAR_TYPES.join(',')}
+                      onChange={handleAvatarChange}
+                      className="hidden"
+                    />
+                    <div className="relative" ref={avatarMenuRef}>
+                      <button
+                        type="button"
+                        onClick={() => setShowAvatarMenu((v) => !v)}
+                        disabled={isUploadingAvatar}
+                        title="Change avatar"
+                        className="absolute -bottom-0.5 -right-0.5 w-6 h-6 rounded-full bg-bg shadow-md border border-border flex items-center justify-center hover:bg-border transition disabled:opacity-50"
+                      >
+                        {isUploadingAvatar ? (
+                          <span className="animate-spin h-3 w-3 rounded-full border-2 border-border border-t-[#00C8FF]" />
+                        ) : (
+                          <CameraIcon className="h-3 w-3 text-text-secondary" />
+                        )}
+                      </button>
+
+                      {showAvatarMenu && avatarMenuRef.current && createPortal(
+                        <div
+                          data-avatar-menu
+                          className="fixed w-48 rounded-xl border border-border bg-bg shadow-xl py-1 z-[100]"
+                          style={{
+                            top: avatarMenuRef.current.getBoundingClientRect().bottom + 8,
+                            left: avatarMenuRef.current.getBoundingClientRect().left,
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowAvatarMenu(false);
+                              avatarInputRef.current?.click();
+                            }}
+                            className="flex items-center gap-2 w-full px-3 py-2 text-sm text-text-secondary hover:bg-glass hover:text-text-primary transition"
+                          >
+                            <PhotoIcon className="h-4 w-4" />
+                            Upload Image
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowAvatarMenu(false);
+                              toast('Video upload coming soon');
+                            }}
+                            className="flex items-center gap-2 w-full px-3 py-2 text-sm text-text-secondary hover:bg-glass hover:text-text-primary transition opacity-50 cursor-not-allowed"
+                          >
+                            <FilmIcon className="h-4 w-4" />
+                            Upload Video
+                            <span className="ml-auto text-[9px] uppercase tracking-wide border border-border rounded px-1">Soon</span>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowAvatarMenu(false);
+                              setShowGifUrlInput(true);
+                            }}
+                            className="flex items-center gap-2 w-full px-3 py-2 text-sm text-text-secondary hover:bg-glass hover:text-text-primary transition"
+                          >
+                            <span className="text-[10px] font-bold border border-border rounded px-1">GIF</span>
+                            Use GIF URL
+                          </button>
+                        </div>,
+                        document.body
+                      )}
+                    </div>
+                  </>
                 )}
               </div>
+
+              <div className="flex-1 min-w-0 pb-0.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-text-primary sm:text-white truncate">{displayName}</h1>
+                  <RoleBadge role={profile?.role || 'student'} />
+                </div>
+                <p className="text-xs sm:text-sm text-text-muted sm:text-white/80 mt-0.5">@{profile?.username}</p>
+                {(programLabel || sectionName) && (
+                  <p className="flex items-center gap-1.5 text-xs sm:text-sm text-text-secondary sm:text-white/90 mt-1">
+                    <AcademicCapIcon className="h-3.5 w-3.5 flex-shrink-0" />
+                    {[programLabel, sectionName].filter(Boolean).join(' • ')}
+                  </p>
+                )}
+                {bio && (
+                  <p className="text-xs sm:text-sm text-text-secondary sm:text-white/80 mt-1 max-w-xl line-clamp-2">
+                    {bio}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-5 mt-3 pt-3 border-t border-border sm:border-white/10">
+              <StatPill label="Posts" value={posts.length} />
+              {isOwnProfile && (
+                <StatPill label="Friends" value={friends.length} onClick={() => handleSidebarNavigate('friends')} />
+              )}
             </div>
           </div>
 
@@ -1118,7 +1156,7 @@ export default function ProfilePage() {
         )}
 
         {isOwnProfile && completion < 100 && (
-          <div className="mt-4 rounded-2xl border border-[#00C8FF]/20 bg-glass p-4 flex items-center gap-4">
+          <div className="mt-4 rounded-2xl border border-border bg-glass p-4 flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="relative h-12 w-12 flex-shrink-0">
               <svg viewBox="0 0 36 36" className="h-12 w-12 -rotate-90">
                 <circle cx="18" cy="18" r="16" fill="none" stroke="rgb(var(--color-border))" strokeWidth="3" />
@@ -1127,13 +1165,13 @@ export default function ProfilePage() {
                   cy="18"
                   r="16"
                   fill="none"
-                  stroke="#00C8FF"
+                  stroke="rgb(var(--color-text-primary))"
                   strokeWidth="3"
                   strokeLinecap="round"
                   strokeDasharray={`${(completion / 100) * 100.5} 100.5`}
                 />
               </svg>
-              <span className="absolute inset-0 flex items-center justify-center text-[11px] font-bold text-[#00C8FF]">
+              <span className="absolute inset-0 flex items-center justify-center text-[11px] font-bold text-text-primary">
                 {completion}%
               </span>
             </div>
@@ -1149,7 +1187,7 @@ export default function ProfilePage() {
                 setIsEditing(true);
                 setActiveTab('info');
               }}
-              className="flex-shrink-0 px-4 py-2 text-sm font-semibold border border-[#00C8FF]/30 bg-[#00C8FF]/10 text-[#00C8FF] rounded-xl hover:bg-[#00C8FF]/20 transition"
+              className="w-full sm:w-auto sm:flex-shrink-0 px-4 py-2 text-sm font-semibold border border-border bg-glass text-text-primary rounded-xl hover:bg-glass-hover transition"
             >
               Complete Profile
             </button>
@@ -1158,11 +1196,12 @@ export default function ProfilePage() {
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-5 mt-5">
           <div className="xl:col-span-2 min-w-0">
-            <div className="flex items-center gap-1 border-b border-border mb-4">
+            <div className="flex items-center gap-1 border-b border-border mb-4 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
               {(
                 [
                   ['posts', 'Posts'],
                   ['shares', 'Shares'],
+                  isOwnProfile ? ['saved', 'Saved'] : null,
                   ['info', 'About'],
                   isOwnProfile ? ['security', 'Security'] : null,
                 ].filter(Boolean) as [typeof activeTab, string][]
@@ -1172,7 +1211,7 @@ export default function ProfilePage() {
                   onClick={() => setActiveTab(id)}
                   className={`px-4 py-2.5 text-sm font-medium transition border-b-2 -mb-px ${
                     activeTab === id
-                      ? 'text-[#00C8FF] border-[#00C8FF]'
+                      ? 'text-text-primary border-text-primary'
                       : 'text-text-muted border-transparent hover:text-text-primary'
                   }`}
                 >
@@ -1210,6 +1249,26 @@ export default function ProfilePage() {
                     />
                   ))
                 )
+              ) : activeTab === 'saved' ? (
+                savedPosts.length === 0 ? (
+                  <div className="rounded-2xl border border-border bg-glass p-10 text-center">
+                    <p className="text-text-secondary">
+                      You haven't saved any posts yet. Click the "Save" button on a post to save it.
+                    </p>
+                  </div>
+                ) : (
+                  savedPosts.map((post) => (
+                    <PostCard
+                      key={post.id}
+                      {...post}
+                      onLike={handlePostLike}
+                      onReact={handlePostReact}
+                      onDelete={handlePostDelete}
+                      onEdit={handlePostEdit}
+                      dark
+                    />
+                  ))
+                )
               ) : postsLoading ? (
                 <div className="rounded-2xl border border-border bg-glass p-10 text-center">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00C8FF] mx-auto"></div>
@@ -1221,17 +1280,52 @@ export default function ProfilePage() {
                   </p>
                 </div>
               ) : (
-                posts.map((post) => (
-                  <PostCard
-                    key={post.id}
-                    {...post}
-                    onLike={handlePostLike}
-                    onReact={handlePostReact}
-                    onDelete={handlePostDelete}
-                    onEdit={handlePostEdit}
-                    dark
-                  />
-                ))
+                <div className="grid grid-cols-3 gap-2">
+                  {posts.map((post) => {
+                    const ytId = extractYouTubeId(post.content);
+                    const thumb = post.media_urls?.[0] ?? (ytId ? `https://img.youtube.com/vi/${ytId}/maxresdefault.jpg` : null);
+                    return (
+                      <button
+                        key={post.id}
+                        type="button"
+                        onClick={() => setSelectedPostId(post.id)}
+                        className="relative aspect-square overflow-hidden bg-glass border border-border group cursor-pointer"
+                      >
+                        {thumb ? (
+                          <img
+                            src={thumb}
+                            alt=""
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                            onError={(e) => {
+                              const img = e.currentTarget;
+                              if (img.src.includes('maxresdefault')) {
+                                img.src = img.src.replace('maxresdefault', 'hqdefault');
+                              }
+                            }}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center p-2 overflow-hidden">
+                            <PostContentBody
+                              content={post.content || 'No preview'}
+                              className="text-[9px] leading-tight text-text-primary text-center line-clamp-6 [&_*]:!text-text-primary"
+                            />
+                          </div>
+                        )}
+                        <div className="pointer-events-none absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4 text-white text-sm font-semibold">
+                          <span className="flex items-center gap-1">
+                            <HeartIconSolid className="h-4 w-4" />
+                            {post.reactions_count ?? post.likes_count ?? 0}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <ChatBubbleLeftIconSolid className="h-4 w-4" />
+                            {post.comments_count ?? 0}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               )}
             </div>
           </div>
@@ -1359,6 +1453,22 @@ export default function ProfilePage() {
         />
       )}
 
+      {selectedPostId && (() => {
+        const initialPost = posts.find((p) => p.id === selectedPostId) ?? null;
+        return (
+          <PostDetailModal
+            postId={selectedPostId}
+            initialPost={initialPost}
+            onClose={() => setSelectedPostId(null)}
+            onDelete={(id: string) => {
+              handlePostDelete(id);
+              setSelectedPostId(null);
+            }}
+            onEdit={handlePostEdit}
+          />
+        );
+      })()}
+
       {lightboxSrc && (
         <div
           className="fixed inset-0 z-[80] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4"
@@ -1384,66 +1494,94 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* GIF URL Modal */}
+      {/* GIF Picker Modal */}
       {showGifUrlInput && (
         <div
           className="fixed inset-0 z-[80] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
           onClick={() => !isSavingGif && setShowGifUrlInput(false)}
           role="dialog"
           aria-modal="true"
-          aria-label="Set GIF avatar"
+          aria-label="Choose a GIF avatar"
         >
           <div
-            className="bg-bg border border-border rounded-2xl shadow-2xl w-full max-w-md p-5"
+            className="bg-bg border border-border rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-base font-semibold text-text-primary mb-1">
-              Use a Giphy GIF
-            </h3>
-            <p className="text-sm text-text-secondary mb-4">
-              Paste a Giphy link (e.g. https://giphy.com/gifs/IcGkqdUmYLFGE)
-            </p>
-
-            <input
-              type="text"
-              value={gifUrl}
-              onChange={(e) => setGifUrl(e.target.value)}
-              placeholder="https://giphy.com/gifs/..."
-              autoFocus
-              className="w-full px-3 py-2 rounded-xl border border-border bg-bg text-sm text-text-primary placeholder-text-muted focus:ring-2 focus:ring-[#00C8FF] focus:border-[#00C8FF] focus:outline-none transition"
-            />
-
-            {/* Preview */}
-            {gifUrl.trim() && extractGiphyGifUrl(gifUrl.trim()) && (
-              <div className="mt-3 flex justify-center">
-                <img
-                  src={extractGiphyGifUrl(gifUrl.trim())!}
-                  alt="GIF preview"
-                  className="h-24 w-24 rounded-full object-cover border-4 border-border"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none';
-                  }}
-                />
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
+              <div>
+                <h3 className="text-base font-semibold text-text-primary">Choose a GIF</h3>
+                <p className="text-xs text-text-muted">Search Giphy or pick from trending</p>
               </div>
-            )}
-
-            <div className="flex items-center gap-3 mt-5">
               <button
-                onClick={() => {
-                  setShowGifUrlInput(false);
-                  setGifUrl('');
-                }}
+                onClick={() => !isSavingGif && setShowGifUrlInput(false)}
                 disabled={isSavingGif}
-                className="flex-1 px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-glass rounded-xl transition disabled:opacity-50"
+                aria-label="Close"
+                className="p-1.5 rounded-xl text-text-muted hover:text-text-primary hover:bg-glass transition disabled:opacity-50"
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Search bar */}
+            <div className="px-5 py-3 border-b border-border flex-shrink-0">
+              <input
+                type="text"
+                value={gifSearch}
+                onChange={(e) => setGifSearch(e.target.value)}
+                placeholder="Search Giphy..."
+                autoFocus
+                disabled={isSavingGif}
+                className="w-full px-4 py-2.5 rounded-xl border border-border bg-bg text-sm text-text-primary placeholder-text-muted focus:ring-1 focus:ring-[#00C8FF] focus:border-[#00C8FF] focus:outline-none transition disabled:opacity-50"
+              />
+            </div>
+
+            {/* Grid */}
+            <div className="flex-1 overflow-y-auto themed-scrollbar p-5">
+              {gifSearchLoading ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-3">
+                  <div className="animate-spin h-6 w-6 rounded-full border-2 border-border border-t-[#00C8FF]" />
+                  <p className="text-xs text-text-muted">Loading GIFs...</p>
+                </div>
+              ) : gifResults.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-sm text-text-secondary">
+                    {gifSearch.trim() ? 'No GIFs found.' : 'No trending GIFs available.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  {gifResults.map((gif) => (
+                    <button
+                      key={gif.id}
+                      type="button"
+                      onClick={() => handleSelectGif(gif.url)}
+                      disabled={isSavingGif}
+                      className="relative aspect-square overflow-hidden rounded-lg border border-border bg-glass hover:border-[#00C8FF] transition disabled:opacity-50"
+                    >
+                      <img src={gif.preview} alt="" className="w-full h-full object-cover" loading="lazy" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between px-5 py-3 border-t border-border flex-shrink-0">
+              <a
+                href="https://giphy.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-text-muted hover:text-[#00C8FF] transition-colors"
+              >
+                Powered by GIPHY
+              </a>
+              <button
+                onClick={() => !isSavingGif && setShowGifUrlInput(false)}
+                disabled={isSavingGif}
+                className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-glass rounded-xl transition disabled:opacity-50"
               >
                 Cancel
-              </button>
-              <button
-                onClick={handleSaveGifAvatar}
-                disabled={isSavingGif || !gifUrl.trim()}
-                className="flex-1 px-4 py-2 text-sm font-semibold bg-gradient-to-br from-[#00C8FF] to-[#3B82F6] text-[#060B12] rounded-xl hover:opacity-90 transition disabled:opacity-50"
-              >
-                {isSavingGif ? 'Saving...' : 'Save GIF'}
               </button>
             </div>
           </div>

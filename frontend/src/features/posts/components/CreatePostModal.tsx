@@ -15,6 +15,7 @@ import { useAuthStore } from '@/features/auth/store/auth.store';
 import { mediaService } from '@/services/api/media.service';
 import { RoleBadge } from '@/features/dashboard/components/RoleBadge';
 import { EmojiPicker } from './EmojiPicker';
+import { PostContentBody } from './PostContentBody';
 
 const ALLOWED_MEDIA_TYPES = [
   'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
@@ -44,6 +45,16 @@ const CODE_LANGUAGES = [
   { id: 'sql', label: 'SQL' },
   { id: 'json', label: 'JSON' },
   { id: 'bash', label: 'Bash' },
+];
+
+const COLOR_OPTIONS = [
+  { hex: 'EF4444', label: 'Red' },
+  { hex: 'F59E0B', label: 'Orange' },
+  { hex: '10B981', label: 'Green' },
+  { hex: '00C8FF', label: 'Cyan' },
+  { hex: '3B82F6', label: 'Blue' },
+  { hex: '8B5CF6', label: 'Purple' },
+  { hex: 'EC4899', label: 'Pink' },
 ];
 
 interface CreatePostModalProps {
@@ -170,7 +181,6 @@ export default function CreatePostModal({ onClose, onCreatePost, isLoading = fal
     });
   };
 
-  // ✅ ITO YUNG NAWALA — idinagdag natin
   const handleEmojiSelect = (emoji: string) => {
     setContent((prev) => (prev.length >= MAX_CONTENT_LENGTH ? prev : `${prev}${emoji}`));
     textareaRef.current?.focus();
@@ -221,6 +231,22 @@ export default function CreatePostModal({ onClose, onCreatePost, isLoading = fal
     if (count <= 1) return 'grid-cols-1';
     return 'grid-cols-2';
   };
+
+  // Detect active formatting on the current selection (for toolbar highlight)
+  const getActiveFormats = () => {
+    const el = textareaRef.current;
+    if (!el) return { bold: false, italic: false, strike: false, code: false };
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const selected = content.slice(start, end);
+    const bold = selected.startsWith('**') && selected.endsWith('**') && selected.length >= 4;
+    const strike = selected.startsWith('~~') && selected.endsWith('~~') && selected.length >= 4;
+    const italic = !bold && !strike && selected.startsWith('*') && selected.endsWith('*') && selected.length >= 2;
+    const code = selected.startsWith('`') && selected.endsWith('`') && selected.length >= 2;
+    return { bold, italic, strike, code };
+  };
+
+  const activeFormats = getActiveFormats();
 
   return (
     <div
@@ -303,7 +329,7 @@ export default function CreatePostModal({ onClose, onCreatePost, isLoading = fal
                             <p className="text-sm text-text-primary">{opt.label}</p>
                             <p className="text-xs text-text-muted">{opt.description}</p>
                           </div>
-                          {visibility === opt.id && <CheckIcon className="h-4 w-4 text-[#00C8FF] flex-shrink-0 mt-0.5" />}
+                          {visibility === opt.id && <CheckIcon className="h-4 w-4 text-text-primary flex-shrink-0 mt-0.5" />}
                         </button>
                       ))}
                     </div>
@@ -321,7 +347,7 @@ export default function CreatePostModal({ onClose, onCreatePost, isLoading = fal
               onDragLeave={() => setIsDragging(false)}
               onDrop={handleDrop}
               className={`rounded-xl border transition ${
-                isDragging ? 'border-[#00C8FF] bg-[#00C8FF]/5' : 'border-transparent'
+                isDragging ? 'border-text-primary bg-text-primary/5' : 'border-transparent'
               }`}
             >
               {/* Formatting toolbar */}
@@ -330,7 +356,11 @@ export default function CreatePostModal({ onClose, onCreatePost, isLoading = fal
                   type="button"
                   onClick={() => wrapSelection('**')}
                   title="Bold"
-                  className="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-glass-hover transition text-sm font-bold"
+                  className={`p-1.5 rounded-lg transition text-sm font-bold ${
+                    activeFormats.bold
+                      ? 'bg-text-primary/10 text-text-primary'
+                      : 'text-text-secondary hover:text-text-primary hover:bg-glass-hover'
+                  }`}
                 >
                   B
                 </button>
@@ -338,7 +368,11 @@ export default function CreatePostModal({ onClose, onCreatePost, isLoading = fal
                   type="button"
                   onClick={() => wrapSelection('*')}
                   title="Italic"
-                  className="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-glass-hover transition text-sm italic"
+                  className={`p-1.5 rounded-lg transition text-sm italic ${
+                    activeFormats.italic
+                      ? 'bg-text-primary/10 text-text-primary'
+                      : 'text-text-secondary hover:text-text-primary hover:bg-glass-hover'
+                  }`}
                 >
                   I
                 </button>
@@ -346,7 +380,11 @@ export default function CreatePostModal({ onClose, onCreatePost, isLoading = fal
                   type="button"
                   onClick={() => wrapSelection('~~')}
                   title="Strikethrough"
-                  className="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-glass-hover transition text-sm line-through"
+                  className={`p-1.5 rounded-lg transition text-sm line-through ${
+                    activeFormats.strike
+                      ? 'bg-text-primary/10 text-text-primary'
+                      : 'text-text-secondary hover:text-text-primary hover:bg-glass-hover'
+                  }`}
                 >
                   S
                 </button>
@@ -354,22 +392,18 @@ export default function CreatePostModal({ onClose, onCreatePost, isLoading = fal
                   type="button"
                   onClick={() => wrapSelection('`')}
                   title="Inline code"
-                  className="p-1.5 rounded-lg text-text-secondary hover:text-text-primary hover:bg-glass-hover transition text-xs font-mono"
+                  className={`p-1.5 rounded-lg transition text-xs font-mono ${
+                    activeFormats.code
+                      ? 'bg-text-primary/10 text-text-primary'
+                      : 'text-text-secondary hover:text-text-primary hover:bg-glass-hover'
+                  }`}
                 >
                   {'</>'}
                 </button>
 
                 {/* Color picker */}
                 <div className="flex items-center gap-0.5 ml-1 pl-1 border-l border-border/50">
-                  {[
-                    { hex: 'EF4444', label: 'Red' },
-                    { hex: 'F59E0B', label: 'Orange' },
-                    { hex: '10B981', label: 'Green' },
-                    { hex: '00C8FF', label: 'Cyan' },
-                    { hex: '3B82F6', label: 'Blue' },
-                    { hex: '8B5CF6', label: 'Purple' },
-                    { hex: 'EC4899', label: 'Pink' },
-                  ].map((c) => (
+                  {COLOR_OPTIONS.map((c) => (
                     <button
                       key={c.hex}
                       type="button"
@@ -391,11 +425,23 @@ export default function CreatePostModal({ onClose, onCreatePost, isLoading = fal
                 className="w-full p-0 bg-transparent text-sm text-text-primary placeholder-text-muted focus:outline-none resize-none transition"
               />
             </div>
+
+            {/* Character count */}
             <div className="flex items-center justify-end mt-1">
               <span className={`text-[11px] ${content.length >= MAX_CONTENT_LENGTH ? 'text-[#EF4444]' : 'text-text-muted'}`}>
                 {content.length} / {MAX_CONTENT_LENGTH}
               </span>
             </div>
+
+            {/* Live preview (YouTube lang) */}
+            {content.trim() && /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)[\w-]{11}/.test(content) && (
+              <div className="mt-3 rounded-xl border border-border bg-bg p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-text-muted mb-2">
+                  Preview
+                </p>
+                <PostContentBody content={content} className="text-text-primary" />
+              </div>
+            )}
 
             {uploadError && (
               <div className="mt-2 p-2.5 rounded-xl bg-[#EF4444]/10 border border-[#EF4444]/30 text-[#EF4444] text-sm">
@@ -508,20 +554,13 @@ export default function CreatePostModal({ onClose, onCreatePost, isLoading = fal
                     type="button"
                     onClick={handleAddCodeSnippet}
                     disabled={!codeDraft.trim()}
-                    className="px-3 py-1.5 text-sm font-semibold bg-gradient-to-br from-[#00C8FF] to-[#3B82F6] text-[#060B12] rounded-lg hover:opacity-90 transition disabled:opacity-50"
+                    className="px-3 py-1.5 text-sm font-semibold bg-text-primary text-bg rounded-lg hover:opacity-90 transition disabled:opacity-50"
                   >
                     Add to Post
                   </button>
                 </div>
               </div>
             )}
-
-            {/* Actions preview */}
-            <div className="flex items-center gap-4 mt-3 pt-3 border-t border-border text-text-muted text-xs">
-              <span>♡ Like</span>
-              <span>◌ Comment</span>
-              <span>↗ Share</span>
-            </div>
           </div>
 
           {/* Attachment buttons */}
@@ -570,7 +609,7 @@ export default function CreatePostModal({ onClose, onCreatePost, isLoading = fal
           <button
             onClick={handleSubmit}
             disabled={!hasContent || isBusy}
-            className="px-5 py-2 text-sm font-semibold bg-gradient-to-br from-[#00C8FF] to-[#3B82F6] text-[#060B12] rounded-xl hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-5 py-2 text-sm font-semibold bg-text-primary text-bg rounded-xl hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {isUploading ? 'Uploading...' : isLoading ? 'Posting...' : 'Post'}
           </button>

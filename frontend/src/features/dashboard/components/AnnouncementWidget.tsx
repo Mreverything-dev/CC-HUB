@@ -17,10 +17,10 @@ export function AnnouncementWidget({ announcements, isLoading, onViewAll }: Anno
     <div className="rounded-2xl bg-glass backdrop-blur-xl p-4 sm:p-5 shadow-md shadow-black/5 transition hover:shadow-lg hover:shadow-black/10">
       <div className="flex items-center justify-between mb-3">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
-          <MegaphoneIcon className="h-4 w-4 text-[#00C8FF]" />
+          <MegaphoneIcon className="h-4 w-4 text-text-primary" />
           Latest News
         </h3>
-        <button onClick={onViewAll} className="text-xs text-[#00C8FF] hover:text-[#00E0FF] hover:underline">
+        <button onClick={onViewAll} className="text-xs text-text-primary hover:underline">
           View all
         </button>
       </div>

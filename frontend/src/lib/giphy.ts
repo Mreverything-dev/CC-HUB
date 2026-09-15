@@ -6,8 +6,10 @@
  *   - https://giphy.com/gifs/{slug}-{id}
  *   - https://giphy.com/gifs/{id}
  *   - https://media.giphy.com/media/{id}/giphy.gif
+ *   - https://mediaN.giphy.com/media/{id}/giphy.gif  (N = 0-9)
  *   - https://i.giphy.com/media/{id}/giphy.gif
  *   - https://media.giphy.com/media/v1.Y2lkPT.../{id}/giphy.gif
+ *   - https://mediaN.giphy.com/media/v1.Y2lkPT.../{id}/giphy.gif
  *   - https://gph.is/{id}
  * Returns null if no Giphy URL is found.
  */
@@ -21,11 +23,13 @@ export function extractGiphyId(text: string): string | null {
     // Page URL: https://giphy.com/gifs/confused-nick-young-lkdH8FmImcGoylv3t3
     new RegExp(`giphy\\.com\\/gifs\\/(?:[a-z0-9-]+-)?(${ID})`, 'i'),
     // Direct media URL (old): https://media.giphy.com/media/{id}/giphy.gif
-    new RegExp(`media\\.giphy\\.com\\/media\\/(${ID})\\/`, 'i'),
+    // Also matches media1..media9
+    new RegExp(`media\\d?\\.giphy\\.com\\/media\\/(${ID})\\/`, 'i'),
     // i.giphy.com: https://i.giphy.com/media/{id}/giphy.gif
     new RegExp(`i\\.giphy\\.com\\/media\\/(${ID})\\/`, 'i'),
     // New media URL: https://media.giphy.com/media/v1.Y2lkPT.../{id}/giphy.gif
-    new RegExp(`media\\.giphy\\.com\\/media\\/[^/]+\\/(${ID})\\/`, 'i'),
+    // Also matches media1..media9
+    new RegExp(`media\\d?\\.giphy\\.com\\/media\\/[^/]+\\/(${ID})\\/`, 'i'),
     // Short URL: https://gph.is/{id} (rare)
     new RegExp(`gph\\.is\\/(${ID})`, 'i'),
   ];
@@ -62,7 +66,7 @@ export function stripGiphyUrl(text: string): string {
   if (!text) return text;
   return text
     .replace(/https?:\/\/(?:www\.)?giphy\.com\/gifs\/[^\s]+/gi, '')
-    .replace(/https?:\/\/media\.giphy\.com\/media\/[^\s]+/gi, '')
+    .replace(/https?:\/\/media\d?\.giphy\.com\/media\/[^\s]+/gi, '')
     .replace(/https?:\/\/i\.giphy\.com\/media\/[^\s]+/gi, '')
     .replace(/https?:\/\/gph\.is\/[^\s]+/gi, '')
     .trim();

@@ -234,7 +234,7 @@ export default function ProfessorDashboard() {
             <div className="flex flex-col xl:flex-row gap-6 items-start w-full">
               {/* Center - Feed */}
               <div className="w-full xl:flex-1 min-w-0">
-                <div className="max-w-2xl mx-auto space-y-5">
+                <div className="max-w-lg mx-auto space-y-5">
                   <ClassReminderCard
                     scheduleLabel="Today's Teaching"
                     entries={todayEntries}
@@ -249,22 +249,15 @@ export default function ProfessorDashboard() {
                         key={f.id}
                         type="button"
                         onClick={() => handleFilterChange(f.id)}
-                        className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition whitespace-nowrap ${
+                        className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition whitespace-nowrap ${
                           feedFilter === f.id
-                            ? 'bg-[#00C8FF] text-[#060B12]'
+                            ? 'bg-text-primary text-bg'
                             : 'bg-glass border border-border text-text-secondary hover:text-text-primary hover:bg-glass-hover'
                         }`}
                       >
                         {f.label}
                       </button>
                     ))}
-                    <button
-                      type="button"
-                      onClick={() => handleSectionChange('announcements')}
-                      className="flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition whitespace-nowrap bg-glass border border-border text-text-secondary hover:text-text-primary hover:bg-glass-hover"
-                    >
-                      Announcements
-                    </button>
                   </div>
 
                   <CreatePost onCreatePost={handleCreatePost} isLoading={isPosting} dark avatarUrl={avatarUrl} />

@@ -13,11 +13,11 @@ import { Avatar } from '@/features/dashboard/components/Avatar';
 import { RoleBadge } from '@/features/dashboard/components/RoleBadge';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { EmojiPicker } from './EmojiPicker';
+import { GifPickerModal } from './GifPickerModal';
 import { PostContentBody } from './PostContentBody';
 import { PostReactions } from './PostReactions';
 import { ImageGrid } from './ImageGrid';
 import { extractYouTubeId } from '@/lib/youtube';
-import { YouTubeEmbed } from '@/components/ui/YouTubeEmbed';
 import { extractGiphyGifUrl } from '@/lib/giphy';
 import { usePostRoom } from '../hooks/usePostRoom';
 import { Comment } from '@/types/comment.types';
@@ -30,19 +30,27 @@ import {
   PhotoIcon,
   PaperAirplaneIcon,
   ChatBubbleLeftIcon,
-  ArrowUpTrayIcon,
+  ArrowPathRoundedSquareIcon,
+  GlobeAltIcon,
+  UsersIcon,
+  AcademicCapIcon,
+  LockClosedIcon,
 } from '@heroicons/react/24/outline';
 
-// Keep in sync with backend ALLOWED_TYPES (images only for comment attachments)
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
 
-// "Latest comments" preview size before the "View all comments" expander -
-// top-level comments only; a visible comment's own replies are always shown
-// in full underneath it, never separately truncated.
 const INITIAL_VISIBLE_COMMENTS = 3;
 
 interface PostDetailModalProps {
   postId: string;
+  initialPost?: {
+    reaction_breakdown?: Record<string, number>;
+    my_reaction?: string | null;
+    likes_count?: number;
+    comments_count?: number;
+    shares_count?: number;
+    is_shared_by_current_user?: boolean;
+  } | null;
   onClose: () => void;
   onDelete: (postId: string) => void;
   onEdit: (postId: string, content: string) => void;
@@ -50,16 +58,21 @@ interface PostDetailModalProps {
 
 export default function PostDetailModal({
   postId,
+  initialPost,
   onClose,
   onDelete,
   onEdit,
 }: PostDetailModalProps) {
   const { user } = useAuthStore();
   const navigate = useNavigate();
-  const [reactionBreakdown, setReactionBreakdown] = useState<Record<string, number>>({});
-  const [myReaction, setMyReaction] = useState<string | null>(null);
-  const [shareCount, setShareCount] = useState(0);
-  const [isShared, setIsShared] = useState(false);
+  const [reactionBreakdown, setReactionBreakdown] = useState<Record<string, number>>(
+    initialPost?.reaction_breakdown ?? {}
+  );
+  const [myReaction, setMyReaction] = useState<string | null>(
+    initialPost?.my_reaction ?? null
+  );
+  const [shareCount, setShareCount] = useState(initialPost?.shares_count ?? 0);
+  const [isShared, setIsShared] = useState(initialPost?.is_shared_by_current_user ?? false);
   const [isSharing, setIsSharing] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
@@ -80,6 +93,9 @@ export default function PostDetailModal({
   const [commentImageFile, setCommentImageFile] = useState<File | null>(null);
   const [commentImagePreview, setCommentImagePreview] = useState<string | null>(null);
   const [isUploadingCommentImage, setIsUploadingCommentImage] = useState(false);
+  const [showGifPicker, setShowGifPicker] = useState(false);
+  const [commentGifUrl, setCommentGifUrl] = useState<string | null>(null);
+  const gifButtonRef = useRef<HTMLButtonElement>(null);
 
   const postMenuRef = useRef<HTMLDivElement>(null);
   const commentImageInputRef = useRef<HTMLInputElement>(null);
@@ -102,10 +118,6 @@ export default function PostDetailModal({
     fetchComments();
   }, [postId]);
 
-  // Real-time updates while this modal is open - joins post_{postId}'s room
-  // (see usePostRoom) so reactions/comments/shares made by OTHER connected
-  // users appear here without a manual refresh, and this user's own actions
-  // in another tab/device stay in sync too.
   usePostRoom(postId, {
     onReactionUpdated: (data) => {
       setReactionBreakdown(data.reaction_breakdown);
@@ -164,8 +176,6 @@ export default function PostDetailModal({
     const previousBreakdown = reactionBreakdown;
     const previousMyReaction = myReaction;
     const nextReaction = myReaction === reaction ? null : reaction;
-    // Optimistic update, corrected by the server response below (and kept
-    // in sync afterward by post:reaction_updated via usePostRoom).
     setReactionBreakdown((prev) => {
       const next = { ...prev };
       if (previousMyReaction) next[previousMyReaction] = Math.max(0, (next[previousMyReaction] || 1) - 1);
@@ -185,19 +195,22 @@ export default function PostDetailModal({
   };
 
   const handleShare = async () => {
-    if (isShared) {
-      toast('You already shared this post');
-      return;
-    }
     setIsSharing(true);
     try {
-      const response = await postService.sharePost(postId);
-      setShareCount(response.data.shares_count);
-      setIsShared(true);
-      toast.success('Post shared!');
+      if (isShared) {
+        const response = await postService.unsharePost(postId);
+        setShareCount(response.data.shares_count);
+        setIsShared(false);
+        toast.success('Repost removed');
+      } else {
+        const response = await postService.sharePost(postId);
+        setShareCount(response.data.shares_count);
+        setIsShared(true);
+        toast.success('Reposted!');
+      }
     } catch (error) {
-      console.error('Error sharing post:', error);
-      toast.error('Failed to share post');
+      console.error('Error toggling repost:', error);
+      toast.error(isShared ? 'Failed to remove repost' : 'Failed to repost');
     } finally {
       setIsSharing(false);
     }
@@ -241,7 +254,7 @@ export default function PostDetailModal({
   };
 
   const handleAddComment = async () => {
-    if (!newComment.trim() && !commentImageFile) return;
+    if (!newComment.trim() && !commentImageFile && !commentGifUrl) return;
     setIsPostingComment(true);
     try {
       let uploadedImageUrl: string | undefined;
@@ -259,13 +272,19 @@ export default function PostDetailModal({
         setIsUploadingCommentImage(false);
       }
 
+      // Isama yung GIF URL sa content (para ma-render as GIF sa comment list)
+      const finalContent = commentGifUrl
+        ? (newComment.trim() ? `${newComment.trim()} ${commentGifUrl}` : commentGifUrl)
+        : newComment.trim();
+
       const response = await commentService.createComment(postId, {
-        content: newComment.trim(),
+        content: finalContent,
         image_url: uploadedImageUrl,
         parent_id: replyingTo?.id ?? null,
       });
       setComments((prev) => (prev.some((c) => c.id === response.data.id) ? prev : [response.data, ...prev]));
       setNewComment('');
+      setCommentGifUrl(null);
       setReplyingTo(null);
       removeCommentImage();
       refetch();
@@ -340,77 +359,90 @@ export default function PostDetailModal({
   });
   const visibleTopLevel = showAllComments ? topLevelComments : topLevelComments.slice(0, INITIAL_VISIBLE_COMMENTS);
 
-  // Mirrors the nested-reply rendering already used for livestream chat
-  // (LiveStreamStage.tsx's renderComment) - same ml-10 indentation for a
-  // reply, and Reply is only offered on top-level comments (no reply-to-a-
-  // reply threading, matching that existing pattern).
   const renderCommentNode = (comment: Comment, isReply: boolean) => (
-    <div key={comment.id} className={`flex items-start gap-2 ${isReply ? 'ml-9 sm:ml-10 mt-2' : ''}`}>
+    <div
+      key={comment.id}
+      className={`flex items-start gap-2.5 ${isReply ? 'ml-9 sm:ml-10 mt-3' : ''}`}
+      style={{ animation: 'commentFadeIn 0.25s ease-out forwards' }}
+    >
       <button onClick={() => navigate(`/profile/${comment.user_id}`)} className="flex-shrink-0">
         <Avatar src={comment.avatar_url} name={comment.username} size="sm" />
       </button>
       <div className="flex-1 min-w-0">
-        <div className="bg-glass border border-border rounded-2xl px-3 py-2">
+        {/* Row 1: username + time */}
+        <div className="flex items-baseline gap-2 flex-wrap">
           <button
             onClick={() => navigate(`/profile/${comment.user_id}`)}
-            className="text-sm font-medium text-text-primary hover:text-[#00C8FF] transition"
+            className="text-sm font-semibold text-text-primary hover:underline transition"
           >
             {comment.username}
           </button>
-          {editingCommentId === comment.id ? (
-            <div className="mt-1.5 space-y-1.5">
-              <textarea
-                value={editingCommentContent}
-                onChange={(e) => setEditingCommentContent(e.target.value)}
-                rows={2}
-                className="w-full p-2 rounded-lg border border-border bg-bg text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition resize-none"
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleSaveEditComment(comment.id)}
-                  className="px-3 py-1 text-xs font-semibold bg-[#00C8FF] text-[#060B12] rounded-lg hover:opacity-90 transition"
-                >
-                  Save
-                </button>
-                <button
-                  onClick={() => setEditingCommentId(null)}
-                  className="px-3 py-1 text-xs font-medium text-text-secondary hover:text-text-primary transition"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : (
-            <>
-              {comment.content && (() => {
-                const giphyGifUrl = extractGiphyGifUrl(comment.content);
-                const displayText = giphyGifUrl
-                  ? comment.content.replace(/https?:\/\/\S+/g, '').trim()
-                  : comment.content;
-                return (
-                  <>
-                    {displayText && (
-                      <p className="text-sm text-text-primary whitespace-pre-wrap break-words">{displayText}</p>
-                    )}
-                    {giphyGifUrl && (
-                      <img
-                        src={giphyGifUrl}
-                        alt="GIF"
-                        className="mt-1.5 rounded-xl max-w-full max-h-64 object-contain"
-                        loading="lazy"
-                      />
-                    )}
-                  </>
-                );
-              })()}
-              {comment.image_url && (
-                <img src={comment.image_url} alt="" className="mt-1.5 rounded-xl max-w-full max-h-56 object-cover" />
-              )}
-            </>
-          )}
+          <span className="text-xs text-text-muted">
+            {formatRelativeTime(comment.created_at)}
+          </span>
         </div>
-        <div className="flex items-center gap-3 mt-1 px-1 text-xs text-text-muted flex-wrap">
-          <span>{formatRelativeTime(comment.created_at)}</span>
+
+        {/* Row 2: content (or editor) */}
+        {editingCommentId === comment.id ? (
+          <div className="mt-1.5 space-y-1.5">
+            <textarea
+              value={editingCommentContent}
+              onChange={(e) => setEditingCommentContent(e.target.value)}
+              rows={2}
+              className="w-full p-2 rounded-lg border border-border bg-bg text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-border focus:border-border transition resize-none"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleSaveEditComment(comment.id)}
+                className="px-3 py-1 text-xs font-semibold bg-text-primary text-bg rounded-lg hover:opacity-90 transition"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => setEditingCommentId(null)}
+                className="px-3 py-1 text-xs font-medium text-text-secondary hover:text-text-primary transition"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {comment.content && (() => {
+              const giphyGifUrl = extractGiphyGifUrl(comment.content);
+              // Direct GIF URL mula sa picker (media*.giphy.com/...*.gif)
+              const directGifMatch = comment.content.match(/https?:\/\/media\d?\.giphy\.com\/\S+\.gif/gi);
+              const directGifUrl = directGifMatch?.[0] ?? null;
+              const finalGifUrl = giphyGifUrl ?? directGifUrl;
+              const displayText = finalGifUrl
+                ? comment.content.replace(/https?:\/\/\S+/g, '').trim()
+                : comment.content;
+              return (
+                <>
+                  {displayText && (
+                    <p className="text-sm text-text-primary whitespace-pre-wrap break-words mt-0.5">
+                      {displayText}
+                    </p>
+                  )}
+                  {finalGifUrl && (
+                    <img
+                      src={finalGifUrl}
+                      alt="GIF"
+                      className="mt-1.5 rounded-xl max-w-full max-h-64 object-contain"
+                      loading="lazy"
+                    />
+                  )}
+                </>
+              );
+            })()}
+            {comment.image_url && (
+              <img src={comment.image_url} alt="" className="mt-1.5 rounded-xl max-w-full max-h-56 object-cover" />
+            )}
+          </>
+        )}
+
+        {/* Row 3: actions */}
+        <div className="flex items-center gap-3 mt-1.5 text-xs text-text-muted flex-wrap">
           <PostReactions
             breakdown={comment.reaction_breakdown || {}}
             myReaction={comment.my_reaction ?? null}
@@ -420,7 +452,7 @@ export default function PostDetailModal({
           {!isReply && (
             <button
               onClick={() => handleReplyClick(comment)}
-              className="flex items-center gap-1 hover:text-[#00C8FF] transition font-medium"
+              className="hover:text-text-primary hover:underline transition font-medium"
             >
               Reply
             </button>
@@ -429,7 +461,7 @@ export default function PostDetailModal({
             <>
               <button
                 onClick={() => handleStartEditComment(comment)}
-                className="flex items-center gap-1 hover:text-[#00C8FF] transition"
+                className="flex items-center gap-1 hover:text-text-primary hover:underline transition"
               >
                 <PencilIcon className="h-3 w-3" /> Edit
               </button>
@@ -446,23 +478,30 @@ export default function PostDetailModal({
         {!isReply &&
           (repliesByParent.get(comment.id) || [])
             .slice()
-            .reverse() // comments arrive newest-first; a reply thread reads naturally oldest-first
+            .reverse()
             .map((reply) => renderCommentNode(reply, true))}
       </div>
     </div>
   );
 
   const visibilityLabels: Record<string, string> = {
-    public: '🌍 Public',
-    friends: '👥 Friends',
-    section: '📚 Section',
-    private: '🔒 Private',
+    public: 'Public',
+    friends: 'Friends',
+    section: 'Section',
+    private: 'Private',
+  };
+
+  const visibilityIcons: Record<string, React.ComponentType<{ className?: string }>> = {
+    public: GlobeAltIcon,
+    friends: UsersIcon,
+    section: AcademicCapIcon,
+    private: LockClosedIcon,
   };
 
   if (isLoading || !post) {
     return (
       <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00C8FF]" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-text-primary" />
       </div>
     );
   }
@@ -472,22 +511,24 @@ export default function PostDetailModal({
   return (
     <div
       className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4 z-50"
+      style={{ animation: 'modalBackdropIn 0.2s ease-out forwards' }}
     >
       <div
         className="bg-bg w-full sm:max-w-2xl sm:rounded-2xl border border-border shadow-2xl h-full sm:h-auto sm:max-h-[90vh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
+        style={{ animation: 'modalContentIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards' }}
       >
         {/* Header */}
         <div className="sticky top-0 bg-bg border-b border-border p-4 flex items-start justify-between flex-shrink-0 z-10">
           <div className="flex items-center gap-3 min-w-0">
             <button onClick={() => navigate(`/profile/${post.user_id}`)} className="flex-shrink-0">
-              <Avatar src={post.avatar_url} name={post.username} size="md" />
+              <Avatar src={post.avatar_url} name={post.username} size="lg" />
             </button>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <button
                   onClick={() => navigate(`/profile/${post.user_id}`)}
-                  className="font-medium text-text-primary hover:text-[#00C8FF] transition truncate"
+                  className="font-medium text-text-primary hover:underline transition truncate"
                 >
                   {post.username}
                 </button>
@@ -496,7 +537,13 @@ export default function PostDetailModal({
               <div className="flex items-center gap-2 text-xs text-text-muted mt-0.5">
                 <span>{formatRelativeTime(post.created_at)}</span>
                 <span>•</span>
-                <span>{visibilityLabels[post.visibility] || post.visibility}</span>
+                <span className="flex items-center gap-1">
+                  {(() => {
+                    const VisibilityIcon = visibilityIcons[post.visibility] || GlobeAltIcon;
+                    return <VisibilityIcon className="h-3.5 w-3.5" />;
+                  })()}
+                  {visibilityLabels[post.visibility] || post.visibility}
+                </span>
               </div>
             </div>
           </div>
@@ -518,7 +565,7 @@ export default function PostDetailModal({
                         setShowPostMenu(false);
                         setIsEditing(true);
                       }}
-                      className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-medium text-[#00C8FF] hover:bg-[#00C8FF]/10 transition"
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-sm font-medium text-text-primary hover:bg-glass transition"
                     >
                       <PencilIcon className="h-4 w-4" />
                       Edit Post
@@ -556,13 +603,13 @@ export default function PostDetailModal({
                 <textarea
                   value={editContent}
                   onChange={(e) => setEditContent(e.target.value)}
-                  className="w-full p-3 rounded-xl border border-border bg-glass text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition resize-none"
+                  className="w-full p-3 rounded-xl border border-border bg-glass text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-border focus:border-border transition resize-none"
                   rows={6}
                 />
                 <div className="flex gap-2">
                   <button
                     onClick={handleEdit}
-                    className="px-4 py-2 text-sm font-semibold bg-[#00C8FF] text-[#060B12] rounded-xl hover:opacity-90 transition"
+                    className="px-4 py-2 text-sm font-semibold bg-text-primary text-bg rounded-xl hover:opacity-90 transition"
                   >
                     Save
                   </button>
@@ -579,27 +626,22 @@ export default function PostDetailModal({
               </div>
             ) : (
               <>
-                <PostContentBody content={post.content} className="text-text-primary" />
+                <PostContentBody
+                  content={post.content}
+                  className="text-text-primary"
+                  textOnly={
+                    (!post.media_urls || post.media_urls.length === 0) &&
+                    !extractYouTubeId(post.content) &&
+                    !extractGiphyGifUrl(post.content)
+                  }
+                />
 
-                {/* YouTube embed — if the post's content contains a YouTube link */}
-                {(() => {
-                  const youtubeId = extractYouTubeId(post.content);
-                  if (!youtubeId) return null;
-                  return (
-                    <div className="mt-3">
-                      <YouTubeEmbed videoId={youtubeId} className="w-full" />
-                    </div>
-                  );
-                })()}
-
-                {/* Media grid — images/videos attached to the post */}
+                {/* Media grid */}
                 {post.media_urls && post.media_urls.length > 0 && (
                   <div className="mt-3">
                     <ImageGrid
                       images={post.media_urls}
                       onImageClick={(index) => {
-                        // Open lightbox — for now, just open the first image
-                        // (we can add a lightbox later)
                         window.open(post.media_urls[index], '_blank');
                       }}
                     />
@@ -615,37 +657,48 @@ export default function PostDetailModal({
                 <ChatBubbleLeftIcon className="h-5 w-5" />
                 <span>{comments.length}</span>
               </div>
-              <button
-                onClick={handleShare}
-                disabled={isSharing}
-                title={isShared ? 'You already shared this post' : 'Share'}
-                className={`flex items-center gap-1.5 text-sm font-medium transition disabled:opacity-50 ${
-                  isShared ? 'text-[#22C55E]' : 'text-text-secondary hover:text-[#22C55E]'
-                }`}
-              >
-                <ArrowUpTrayIcon className="h-5 w-5" />
-                <span>{shareCount}</span>
-              </button>
+              {!isOwner && (
+                <button
+                  onClick={handleShare}
+                  disabled={isSharing}
+                  title={isShared ? 'You already reposted this' : 'Repost'}
+                  className={`flex items-center gap-1.5 text-sm font-medium transition disabled:opacity-50 ${
+                    isShared ? 'text-[#22C55E]' : 'text-text-secondary hover:text-[#22C55E]'
+                  }`}
+                >
+                  <ArrowPathRoundedSquareIcon className="h-5 w-5" />
+                  <span>{shareCount}</span>
+                </button>
+              )}
             </div>
 
             {/* Comments */}
             <div className="mt-4 pt-4 border-t border-border">
-              <h3 className="text-sm font-semibold text-text-primary mb-3">
-                Comments {comments.length > 0 && `(${comments.length})`}
-              </h3>
+              <div className="flex items-center gap-2 mb-3">
+                <h3 className="text-sm font-semibold text-text-primary">
+                  Comments {comments.length > 0 && `(${comments.length})`}
+                </h3>
+                <div className="flex-1 h-px bg-border" />
+              </div>
 
               {commentsLoading ? (
                 <div className="flex justify-center py-4">
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#00C8FF]" />
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-text-primary" />
                 </div>
               ) : comments.length === 0 ? (
-                <p className="text-sm text-text-muted text-center py-4">No comments yet. Be the first!</p>
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <div className="h-12 w-12 rounded-full bg-glass border border-border flex items-center justify-center mb-2">
+                    <ChatBubbleLeftIcon className="h-6 w-6 text-text-muted" />
+                  </div>
+                  <p className="text-sm font-medium text-text-primary">No comments yet</p>
+                  <p className="text-xs text-text-muted mt-0.5">Be the first to comment!</p>
+                </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {!showAllComments && topLevelComments.length > INITIAL_VISIBLE_COMMENTS && (
                     <button
                       onClick={() => setShowAllComments(true)}
-                      className="text-xs font-medium text-[#00C8FF] hover:text-[#00E0FF] transition"
+                      className="text-xs font-medium text-text-primary hover:underline transition"
                     >
                       View all {topLevelComments.length} comments
                     </button>
@@ -673,7 +726,7 @@ export default function PostDetailModal({
           {replyingTo && (
             <div className="flex items-center justify-between mb-2 px-3 py-1.5 rounded-lg bg-glass border border-border text-xs">
               <span className="text-text-secondary">
-                Replying to <span className="text-[#00C8FF] font-medium">@{replyingTo.username}</span>
+                Replying to <span className="text-text-primary font-medium">@{replyingTo.username}</span>
               </span>
               <button
                 onClick={() => setReplyingTo(null)}
@@ -681,6 +734,22 @@ export default function PostDetailModal({
                 className="p-0.5 text-text-muted hover:text-text-primary rounded-full hover:bg-glass-hover transition"
               >
                 <XMarkIcon className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+          {commentGifUrl && (
+            <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-xl border border-border bg-glass">
+              <img
+                src={commentGifUrl}
+                alt="GIF preview"
+                className="h-16 w-16 rounded-lg object-cover flex-shrink-0"
+              />
+              <span className="text-xs text-text-muted flex-1">GIF attached</span>
+              <button
+                onClick={() => setCommentGifUrl(null)}
+                className="p-1 text-text-muted hover:text-text-primary rounded-full hover:bg-glass-hover transition"
+              >
+                <XMarkIcon className="h-4 w-4" />
               </button>
             </div>
           )}
@@ -692,6 +761,22 @@ export default function PostDetailModal({
                 onClick={removeCommentImage}
                 disabled={isUploadingCommentImage}
                 className="p-1 text-text-muted hover:text-text-primary rounded-full hover:bg-glass-hover transition disabled:opacity-50"
+              >
+                <XMarkIcon className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+          {newComment.match(/https?:\/\/media\d?\.giphy\.com\/\S+/i) && (
+            <div className="mb-2 px-3 py-2 rounded-xl border border-border bg-glass flex items-center gap-3">
+              <img
+                src={newComment.match(/https?:\/\/media\d?\.giphy\.com\/\S+/i)![0]}
+                alt="GIF preview"
+                className="h-16 w-16 rounded-lg object-cover flex-shrink-0"
+              />
+              <span className="text-xs text-text-muted flex-1">GIF attached</span>
+              <button
+                onClick={() => setNewComment((prev) => prev.replace(/https?:\/\/media\d?\.giphy\.com\/\S+/i, '').trim())}
+                className="p-1 text-text-muted hover:text-text-primary rounded-full hover:bg-glass-hover transition"
               >
                 <XMarkIcon className="h-4 w-4" />
               </button>
@@ -709,10 +794,29 @@ export default function PostDetailModal({
               onClick={() => commentImageInputRef.current?.click()}
               disabled={isUploadingCommentImage}
               title="Attach an image"
-              className="p-1.5 text-text-muted hover:text-[#00C8FF] hover:bg-glass-hover rounded-lg transition disabled:opacity-50 flex-shrink-0"
+              className="p-1.5 text-text-muted hover:text-text-primary hover:bg-glass-hover rounded-lg transition disabled:opacity-50 flex-shrink-0"
             >
               <PhotoIcon className="h-5 w-5" />
             </button>
+            <div className="relative flex-shrink-0">
+              <button
+                ref={gifButtonRef}
+                type="button"
+                onClick={() => setShowGifPicker((v) => !v)}
+                disabled={isUploadingCommentImage}
+                title="Add a GIF"
+                className="p-2 rounded-lg text-text-muted hover:text-text-primary hover:bg-glass transition disabled:opacity-50"
+              >
+                <span className="text-[10px] font-bold border border-current rounded px-1">GIF</span>
+              </button>
+              {showGifPicker && (
+                <GifPickerModal
+                  anchorRef={gifButtonRef}
+                  onClose={() => setShowGifPicker(false)}
+                  onSelect={(gifUrl) => setCommentGifUrl(gifUrl)}
+                />
+              )}
+            </div>
             <EmojiPicker align="left" onSelect={(emoji) => setNewComment((prev) => prev + emoji)} />
             <textarea
               ref={commentInputRef}
@@ -726,12 +830,12 @@ export default function PostDetailModal({
               }}
               placeholder={replyingTo ? `Reply to @${replyingTo.username}...` : 'Write a comment...'}
               rows={1}
-              className="flex-1 px-3 py-2 rounded-xl border border-border bg-glass text-sm text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-[#00C8FF] focus:border-[#00C8FF] transition resize-none max-h-24"
+              className="flex-1 px-3 py-2 rounded-xl border border-border bg-glass text-sm text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-border focus:border-border transition resize-none max-h-24"
             />
             <button
               onClick={handleAddComment}
-              disabled={(!newComment.trim() && !commentImageFile) || isPostingComment}
-              className="p-2 bg-[#00C8FF] text-[#060B12] rounded-xl hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
+              disabled={(!newComment.trim() && !commentImageFile && !commentGifUrl) || isPostingComment}
+              className="p-2 bg-text-primary text-bg rounded-xl hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
             >
               <PaperAirplaneIcon className="h-5 w-5" />
             </button>

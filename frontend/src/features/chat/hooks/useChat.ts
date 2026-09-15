@@ -28,6 +28,7 @@ export function useChat() {
     isConnected,
     isWidgetOpen,
     typingByConversation,
+    minimizedConversationIds,
     openWidget,
     closeWidget,
     toggleWidget,
@@ -41,7 +42,10 @@ export function useChat() {
     setUnreadCount,
     resetUnreadCount,
     setLoading,
+    minimizeConversation,
+    restoreConversation,
   } = useChatStore();
+
 
   // Get conversations - only ever meaningful (and only ever valid to call)
   // once someone is actually logged in; see the isAuthenticated comment above.

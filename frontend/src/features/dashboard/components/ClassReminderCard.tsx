@@ -69,7 +69,7 @@ function useTypewriterSequence(lines: string[], speed: number = TYPE_SPEED_MS, l
 function TypingCursor() {
   return (
     <span
-      className="typing-cursor inline-block w-[2px] h-[0.85em] bg-[#00C8FF] ml-0.5 align-middle rounded-full"
+      className="typing-cursor inline-block w-[2px] h-[0.85em] bg-text-primary ml-0.5 align-middle rounded-full"
       aria-hidden="true"
     />
   );
@@ -103,11 +103,23 @@ export function ClassReminderCard({
         highlighted.secondaryMeta || '',
         formatTimeRange(highlighted.scheduleStart, highlighted.scheduleEnd),
       ]
+    : hasAnyToday
+    ? [
+        'No more classes today',
+        "You're all clear — enjoy the rest of your day! 🎉",
+        nextUpcoming
+          ? `Next: ${nextUpcoming.assignment.subject}${
+              nextUpcoming.assignment.subject_code ? ` (${nextUpcoming.assignment.subject_code})` : ''
+            } · ${nextUpcoming.dayLabel} at ${formatClockTime(nextUpcoming.assignment.schedule_start)}`
+          : '',
+        nextUpcoming?.primaryMeta || '',
+        nextUpcoming?.assignment.room || '',
+      ]
     : [
         'No classes today',
         "You're all clear — enjoy your day! 🎉",
         nextUpcoming
-          ? `${nextUpcoming.assignment.subject}${
+          ? `Next: ${nextUpcoming.assignment.subject}${
               nextUpcoming.assignment.subject_code ? ` (${nextUpcoming.assignment.subject_code})` : ''
             } · ${nextUpcoming.dayLabel} at ${formatClockTime(nextUpcoming.assignment.schedule_start)}`
           : '',
@@ -120,11 +132,11 @@ export function ClassReminderCard({
     <>
       <div
         onClick={() => hasAnyToday && setShowSchedule(true)}
-        className={`relative rounded-3xl border backdrop-blur-xl transition-all duration-200 overflow-hidden ${
+        className={`relative rounded-3xl border bg-glass backdrop-blur-xl transition-all duration-200 overflow-hidden ${
           highlighted
-            ? 'border-[#00C8FF]/40 bg-glass shadow-[0_0_40px_rgba(0,200,255,0.1)]'
-            : 'border-border bg-glass'
-        } ${hasAnyToday ? 'cursor-pointer hover:border-[#00C8FF]/50' : ''}`}
+            ? 'border-text-primary/30 shadow-md'
+            : 'border-border'
+        } ${hasAnyToday ? 'cursor-pointer hover:border-text-primary/40' : ''}`}
       >
         {coverPhoto && (
           <>
@@ -137,7 +149,7 @@ export function ClassReminderCard({
               className="pointer-events-none absolute inset-0"
               style={{
                 background:
-                  'linear-gradient(to right, rgba(13,23,34,0.38) 0%, rgba(13,23,34,0) 18%, rgba(13,23,34,0) 82%, rgba(13,23,34,0.22) 100%)',
+                  'linear-gradient(to right, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.55) 30%, rgba(0,0,0,0.55) 70%, rgba(0,0,0,0.75) 100%)',
               }}
               aria-hidden="true"
             />
@@ -148,7 +160,7 @@ export function ClassReminderCard({
           {highlighted ? (
             <div>
               <div className="flex items-center justify-between gap-3 mb-3.5">
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-[#00C8FF]/30 bg-[#00C8FF]/10 px-3.5 py-1 text-[10px] font-bold uppercase tracking-widest text-[#00C8FF]">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-glass px-3.5 py-1 text-[10px] font-bold uppercase tracking-widest text-text-primary">
                   <BookOpenIcon className="h-3.5 w-3.5" />
                   {typed[0]}
                   {typingIndex === 0 && <TypingCursor />}
@@ -161,11 +173,11 @@ export function ClassReminderCard({
               </div>
               <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
                 <div className="min-w-0">
-                  <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white truncate drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
+                  <h2 className={`text-xl sm:text-2xl font-extrabold tracking-tight truncate ${coverPhoto ? 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.7)]' : 'text-text-primary'}`}>
                     {typed[1]}
                     {typingIndex === 1 && <TypingCursor />}
                   </h2>
-                  <p className="text-sm font-medium text-white/90 mt-1 truncate drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
+                  <p className={`text-sm font-medium mt-1 truncate ${coverPhoto ? 'text-white/90 drop-shadow-[0_2px_4px_rgba(0,0,0,0.7)]' : 'text-text-secondary'}`}>
                     {typed[2]}
                     {typingIndex === 2 && <TypingCursor />}
                   </p>
@@ -177,7 +189,7 @@ export function ClassReminderCard({
                   )}
                   <div className="flex items-center gap-2 mt-3 flex-wrap">
                     <span className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-glass px-2.5 py-1 text-xs font-medium text-text-secondary">
-                      <ClockIcon className="h-3.5 w-3.5 text-[#00C8FF]" />
+                      <ClockIcon className="h-3.5 w-3.5 text-text-secondary" />
                       {typed[4]}
                       {typingIndex === 4 && <TypingCursor />}
                     </span>
@@ -195,10 +207,10 @@ export function ClassReminderCard({
                 <div
                   className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-semibold ${
                     highlighted.status === 'in-progress'
-                      ? 'bg-[#22C55E]/15 text-[#22C55E] border border-[#22C55E]/30 shadow-[0_0_16px_rgba(34,197,94,0.15)]'
+                      ? 'bg-[#22C55E]/15 text-[#22C55E] border border-[#22C55E]/30'
                       : highlighted.status === 'starting-now'
-                      ? 'bg-[#F59E0B]/15 text-[#F59E0B] border border-[#F59E0B]/30 shadow-[0_0_16px_rgba(245,158,11,0.15)]'
-                      : 'bg-[#00C8FF]/10 text-[#00C8FF] border border-[#00C8FF]/25 shadow-[0_0_16px_rgba(0,200,255,0.12)]'
+                      ? 'bg-[#F59E0B]/15 text-[#F59E0B] border border-[#F59E0B]/30'
+                      : 'bg-glass text-text-primary border border-border'
                   }`}
                 >
                   <ClockIcon className="h-4 w-4" />
@@ -209,33 +221,33 @@ export function ClassReminderCard({
           ) : (
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="min-w-0">
-                <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
+                <h2 className={`text-xl sm:text-2xl font-extrabold tracking-tight ${coverPhoto ? 'text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.7)]' : 'text-text-primary'}`}>
                   {typed[0]}
                   {typingIndex === 0 && <TypingCursor />}
                 </h2>
-                <p className="text-sm text-white/90 mt-1 drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
+                <p className={`text-sm mt-1 ${coverPhoto ? 'text-white/90 drop-shadow-[0_2px_4px_rgba(0,0,0,0.7)]' : 'text-text-secondary'}`}>
                   {typed[1]}
                   {typingIndex === 1 && <TypingCursor />}
                 </p>
                 {nextUpcoming && (
-                  <div className="mt-3 inline-flex flex-col items-start gap-1.5 rounded-xl border border-white/20 bg-black/40 backdrop-blur-sm px-3.5 py-3 max-w-full">
-                    <p className="text-xs text-white/90 flex items-start gap-2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
-                      <CalendarIcon className="h-3.5 w-3.5 text-[#00C8FF] flex-shrink-0 mt-0.5" />
+                  <div className={`mt-3 inline-flex flex-col items-start gap-1.5 rounded-xl border backdrop-blur-sm px-3.5 py-3 max-w-full ${coverPhoto ? 'border-white/20 bg-black/40' : 'border-border bg-glass'}`}>
+                    <p className={`text-xs flex items-start gap-2 ${coverPhoto ? 'text-white/90' : 'text-text-secondary'}`}>
+                      <CalendarIcon className={`h-3.5 w-3.5 flex-shrink-0 mt-0.5 ${coverPhoto ? 'text-white' : 'text-text-primary'}`} />
                       <span className="min-w-0">
-                        Next: <span className="text-[#00C8FF] font-semibold">{typed[2]}</span>
+                        Next: <span className={`font-semibold ${coverPhoto ? 'text-white' : 'text-text-primary'}`}>{typed[2]}</span>
                         {typingIndex === 2 && <TypingCursor />}
                       </span>
                     </p>
                     {nextUpcoming.primaryMeta && (
-                      <p className="text-xs text-white/90 flex items-center gap-2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
-                        <UserIcon className="h-3.5 w-3.5 text-white/70 flex-shrink-0" />
+                      <p className={`text-xs flex items-center gap-2 ${coverPhoto ? 'text-white/80' : 'text-text-secondary'}`}>
+                        <UserIcon className={`h-3.5 w-3.5 flex-shrink-0 ${coverPhoto ? 'text-white/70' : 'text-text-muted'}`} />
                         {typed[3]}
                         {typingIndex === 3 && <TypingCursor />}
                       </p>
                     )}
                     {nextUpcoming.assignment.room && (
-                      <p className="text-xs text-white/80 flex items-center gap-2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
-                        <MapPinIcon className="h-3.5 w-3.5 text-white/70 flex-shrink-0" />
+                      <p className={`text-xs flex items-center gap-2 ${coverPhoto ? 'text-white/80' : 'text-text-muted'}`}>
+                        <MapPinIcon className={`h-3.5 w-3.5 flex-shrink-0 ${coverPhoto ? 'text-white/70' : 'text-text-muted'}`} />
                         {typed[4]}
                         {typingIndex === 4 && <TypingCursor />}
                       </p>
@@ -252,7 +264,7 @@ export function ClassReminderCard({
                 <AcademicCapIcon className="h-3.5 w-3.5" />
                 {entries.length} class{entries.length > 1 ? 'es' : ''} today
               </span>
-              <span className="text-xs font-medium text-[#00C8FF]/80 hover:text-[#00C8FF] transition flex items-center gap-1">
+              <span className="text-xs font-medium text-text-primary hover:underline transition flex items-center gap-1">
                 View full schedule
                 <ChevronRightIcon className="h-3.5 w-3.5" />
               </span>
@@ -279,11 +291,11 @@ export function ClassReminderCard({
                   <div className="absolute inset-0 bg-gradient-to-b from-transparent to-bg" />
                 </div>
               )}
-              <div className={`flex items-center justify-between p-4 ${coverPhoto ? 'absolute bottom-0 left-0 right-0' : 'border-b border-border'}`}>
-                <h3 className="font-semibold text-text-primary">{scheduleLabel}</h3>
+              <div className={`flex items-center justify-between p-4 ${coverPhoto ? 'absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent' : 'border-b border-border'}`}>
+                <h3 className={`font-semibold ${coverPhoto ? 'text-white' : 'text-text-primary'}`}>{scheduleLabel}</h3>
                 <button
                   onClick={() => setShowSchedule(false)}
-                  className="p-1.5 text-text-secondary hover:text-text-primary hover:bg-glass rounded-lg transition"
+                  className={`p-1.5 rounded-lg transition ${coverPhoto ? 'text-white hover:bg-white/10' : 'text-text-secondary hover:text-text-primary hover:bg-glass'}`}
                 >
                   <XMarkIcon className="h-5 w-5" />
                 </button>
@@ -296,26 +308,26 @@ export function ClassReminderCard({
                   key={entry.id}
                   className={`p-3 rounded-xl border ${
                     entry.status === 'finished'
-                      ? 'border-border bg-bg opacity-50'
+                      ? 'border-border bg-glass opacity-70'
                       : entry.status === 'in-progress'
                       ? 'border-[#22C55E]/30 bg-[#22C55E]/5'
-                      : 'border-border bg-bg'
+                      : 'border-border bg-glass'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold text-[#00C8FF]">{formatClockTime(entry.scheduleStart)}</p>
+                      <p className="text-xs font-semibold text-text-primary">{formatClockTime(entry.scheduleStart)}</p>
                       <p className="text-sm font-semibold text-text-primary truncate mt-0.5">{entry.subject}</p>
                       <p className="text-xs text-text-secondary truncate mt-0.5">{entry.primaryMeta}</p>
-                      {entry.secondaryMeta && <p className="text-xs text-text-muted truncate">{entry.secondaryMeta}</p>}
+                      {entry.secondaryMeta && <p className="text-xs text-text-secondary truncate">{entry.secondaryMeta}</p>}
                     </div>
                     <span
                       className={`flex-shrink-0 text-[10px] font-semibold uppercase tracking-wide rounded-full px-2 py-0.5 ${
                         entry.status === 'in-progress'
                           ? 'text-[#22C55E] bg-[#22C55E]/10 border border-[#22C55E]/25'
                           : entry.status === 'finished'
-                          ? 'text-text-muted bg-glass border border-border'
-                          : 'text-[#00C8FF] bg-[#00C8FF]/10 border border-[#00C8FF]/25'
+                          ? 'text-text-secondary bg-glass border border-border'
+                          : 'text-text-primary bg-glass border border-border'
                       }`}
                     >
                       {entry.status === 'finished' ? 'Done' : entry.statusLabel}

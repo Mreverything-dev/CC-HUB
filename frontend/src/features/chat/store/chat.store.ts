@@ -12,6 +12,10 @@ interface ChatState {
   onlineUsers: string[];
   isWidgetOpen: boolean;
   typingByConversation: Record<string, string[]>;
+
+  // NEW: minimized conversations (shown as floating chat heads)
+  minimizedConversationIds: string[];
+
   openWidget: () => void;
   closeWidget: () => void;
   toggleWidget: () => void;
@@ -31,6 +35,11 @@ interface ChatState {
   setLoading: (loading: boolean) => void;
   setConnected: (connected: boolean) => void;
   setOnlineUsers: (users: string[]) => void;
+
+  // NEW: minimize/restore actions
+  minimizeConversation: (id: string) => void;
+  restoreConversation: (id: string) => void;
+  clearMinimized: () => void;
 }
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -43,6 +52,7 @@ export const useChatStore = create<ChatState>((set) => ({
   onlineUsers: [],
   isWidgetOpen: false,
   typingByConversation: {},
+  minimizedConversationIds: [],
 
   openWidget: () => set({ isWidgetOpen: true }),
   closeWidget: () => set({ isWidgetOpen: false }),
@@ -75,7 +85,8 @@ export const useChatStore = create<ChatState>((set) => ({
 
   removeConversation: (id) => set((state) => ({
     conversations: state.conversations.filter((c) => c.id !== id),
-    currentConversation: state.currentConversation?.id === id ? null : state.currentConversation
+    currentConversation: state.currentConversation?.id === id ? null : state.currentConversation,
+    minimizedConversationIds: state.minimizedConversationIds.filter((cid) => cid !== id),
   })),
 
   setMessages: (messages) => set({ messages }),
@@ -107,4 +118,19 @@ export const useChatStore = create<ChatState>((set) => ({
   setConnected: (isConnected) => set({ isConnected }),
 
   setOnlineUsers: (onlineUsers) => set({ onlineUsers }),
+
+  // NEW: minimize a conversation (add to top of stack, dedup)
+  minimizeConversation: (id) => set((state) => ({
+    minimizedConversationIds: state.minimizedConversationIds.includes(id)
+      ? state.minimizedConversationIds  // already there, keep position
+      : [id, ...state.minimizedConversationIds],  // new one on top
+  })),
+
+  // NEW: restore/remove a conversation from the stack
+  restoreConversation: (id) => set((state) => ({
+    minimizedConversationIds: state.minimizedConversationIds.filter((cid) => cid !== id),
+  })),
+
+  // NEW: clear all minimized
+  clearMinimized: () => set({ minimizedConversationIds: [] }),
 }));
