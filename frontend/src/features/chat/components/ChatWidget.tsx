@@ -1,17 +1,14 @@
 // frontend/src/features/chat/components/ChatWidget.tsx
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 import { useChat } from '../hooks/useChat';
 import { useChatStore } from '../store/chat.store';
 import { ChatList } from './ChatList';
 import { ChatWindow } from './ChatWindow';
-import { ChatHeadStack } from './ChatHeadStack';
 
 const PANEL_WIDTH = 340;
 const PANEL_HEIGHT = 460;
-const HEAD_SIZE = 56;
 const EDGE_MARGIN = 16;
-const GAP = 12;
 
 export function ChatWidget() {
   const { isAuthenticated } = useAuthStore();
@@ -20,7 +17,6 @@ export function ChatWidget() {
     openWidget,
     closeWidget,
     conversations,
-    currentConversation,
     setCurrentConversation,
   } = useChat();
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
@@ -40,8 +36,6 @@ export function ChatWidget() {
       setCurrentConversation(conversation);
     }
     openWidget();
-    // ❌ Hindi na natin inaalis sa minimized stack — para manatili yung chat head
-    // useChatStore.getState().restoreConversation(conversationId);
   };
 
   const handleMinimize = () => {
@@ -74,15 +68,12 @@ export function ChatWidget() {
 
   return (
     <>
-      {/* Floating chat heads — stack of minimized conversations */}
-      <ChatHeadStack onOpen={handleSelectConversation} />
-
-      {/* Widget panel — positioned to the LEFT of the chat heads */}
+      {/* Widget panel */}
       {isWidgetOpen && (
         <div
           className="fixed z-50 rounded-2xl border border-border shadow-[0_8px_40px_rgba(0,0,0,0.35)] overflow-hidden flex flex-col bg-bg"
           style={{
-            right: EDGE_MARGIN + HEAD_SIZE + GAP,
+            right: EDGE_MARGIN,
             bottom: EDGE_MARGIN,
             width: PANEL_WIDTH,
             height: PANEL_HEIGHT,

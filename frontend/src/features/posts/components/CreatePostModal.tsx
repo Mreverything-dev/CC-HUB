@@ -15,7 +15,6 @@ import { useAuthStore } from '@/features/auth/store/auth.store';
 import { mediaService } from '@/services/api/media.service';
 import { RoleBadge } from '@/features/dashboard/components/RoleBadge';
 import { EmojiPicker } from './EmojiPicker';
-import { PostContentBody } from './PostContentBody';
 
 const ALLOWED_MEDIA_TYPES = [
   'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
