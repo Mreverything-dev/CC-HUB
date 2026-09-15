@@ -1,22 +1,24 @@
 // frontend/src/features/dashboard/components/FeedTabs.tsx
-export type FeedFilter = 'all' | 'following' | 'section' | 'video';
+export type FeedFilter = 'all' | 'friends' | 'videos';
 
 interface FeedTabsProps {
   active: FeedFilter;
   onChange: (filter: FeedFilter) => void;
+  /** Optional: hide the "Friends" tab (e.g. on Professor dashboard where it doesn't apply). */
+  hideFriends?: boolean;
 }
 
 const TABS: { id: FeedFilter; label: string }[] = [
   { id: 'all', label: 'All Posts' },
-  { id: 'following', label: 'Friends' },
-  { id: 'section', label: 'My Section' },
-  { id: 'video', label: 'Videos' },
+  { id: 'friends', label: 'Friends' },
+  { id: 'videos', label: 'Videos' },
 ];
 
-export function FeedTabs({ active, onChange }: FeedTabsProps) {
+export function FeedTabs({ active, onChange, hideFriends = false }: FeedTabsProps) {
+  const visibleTabs = hideFriends ? TABS.filter((t) => t.id !== 'friends') : TABS;
   return (
     <div className="flex items-center gap-1 rounded-2xl border border-border bg-glass backdrop-blur-xl p-1.5">
-      {TABS.map((tab) => (
+      {visibleTabs.map((tab) => (
         <button
           key={tab.id}
           onClick={() => onChange(tab.id)}
