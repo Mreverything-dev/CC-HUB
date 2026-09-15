@@ -41,7 +41,7 @@ function App() {
   <GoogleProvider>
     <QueryProvider>
       <SocketProvider>
-        {isLoading && <LoadingScreen message={message} />}
+        {isLoading && <LoadingScreen />}
         <BrowserRouter>
           <Routes>
             {/* ============================================
