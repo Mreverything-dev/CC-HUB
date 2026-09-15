@@ -34,7 +34,7 @@ import { useLoadingStore } from '@/app/store/useLoadingStore';
 import { useAuthStore } from '@/features/auth/store/auth.store';
 
 function App() {
-  const { isLoading, message } = useLoadingStore();
+  const { isLoading } = useLoadingStore();
   const { isAuthenticated } = useAuthStore();
 
   return (
