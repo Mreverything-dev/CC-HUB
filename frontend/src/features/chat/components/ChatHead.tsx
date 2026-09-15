@@ -1,6 +1,5 @@
 // frontend/src/features/chat/components/ChatHead.tsx
 import { useAuthStore } from '@/features/auth/store/auth.store';
-import { useChat } from '../hooks/useChat';
 import type { Conversation } from '@/types/chat.types';
 
 const CHAT_HEAD_SIZE = 56;

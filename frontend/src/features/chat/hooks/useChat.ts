@@ -28,7 +28,6 @@ export function useChat() {
     isConnected,
     isWidgetOpen,
     typingByConversation,
-    minimizedConversationIds,
     openWidget,
     closeWidget,
     toggleWidget,
@@ -42,8 +41,6 @@ export function useChat() {
     setUnreadCount,
     resetUnreadCount,
     setLoading,
-    minimizeConversation,
-    restoreConversation,
   } = useChatStore();
 
 
